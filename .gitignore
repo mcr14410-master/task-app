@@ -1,0 +1,58 @@
+########################################
+# Backend (Spring Boot / Maven)
+########################################
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar
+!backend/**/src/main/**/target/
+!backend/**/src/test/**/target/
+
+# Protokolle / temporäre Dateien
+*.log
+*.tmp
+*.bak
+*.swp
+
+########################################
+# Frontend (React / Node)
+########################################
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+########################################
+# IDEs / Editoren
+########################################
+# Eclipse / Spring Tools
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings/
+.springBeans
+.sts4-cache
+
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+/build/
+
+# Visual Studio Code
+.vscode/
+
+########################################
+# Betriebssystem
+########################################
+.DS_Store
+Thumbs.db
