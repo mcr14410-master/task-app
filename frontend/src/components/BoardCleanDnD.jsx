@@ -1,7 +1,7 @@
 // src/components/BoardCleanDnD.jsx
 import React, { useEffect, useRef, useState } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
-import { useToast } from "./ui/Toasts";
+import useToast from "./ui/useToast";
 import TaskCreationModal from "./modals/TaskCreationModal";
 import TaskEditModal from "./modals/TaskEditModal";
 

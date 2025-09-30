@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useToast } from "../ui/Toasts";
+import useToast from "../ui/useToast";
 
 // Kleines Hilfsformat für Date-Inputs (YYYY-MM-DD)
 function toYMD(val) {
