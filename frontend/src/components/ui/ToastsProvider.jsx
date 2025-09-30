@@ -15,13 +15,16 @@ export default function ToastProvider({ children }) {
     return id;
   }, []);
 
-  const api = useMemo(() => ({
-    show: (type, message, opts) => add(type, message, opts),
-    info: (msg, opt) => add("info", msg, opt),
-    success: (msg, opt) => add("success", msg, opt),
-    error: (msg, opt) => add("error", msg, opt),
-    remove,
-  }), [add, remove]);
+  const api = useMemo(
+    () => ({
+      show: (type, message, opts) => add(type, message, opts),
+      info: (msg, opt) => add("info", msg, opt),
+      success: (msg, opt) => add("success", msg, opt),
+      error: (msg, opt) => add("error", msg, opt),
+      remove,
+    }),
+    [add, remove]
+  );
 
   return (
     <ToastCtx.Provider value={api}>
@@ -33,8 +36,10 @@ export default function ToastProvider({ children }) {
 
 function Icon({ type }) {
   const common = { width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", strokeWidth: 2 };
-  if (type === "success") return <svg {...common} stroke="#16a34a"><path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>;
-  if (type === "error")   return <svg {...common} stroke="#dc2626"><path d="M12 9v4m0 4h.01M10 3.5l-8.5 15h17L10 3.5z" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+  if (type === "success")
+    return <svg {...common} stroke="#16a34a"><path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+  if (type === "error")
+    return <svg {...common} stroke="#dc2626"><path d="M12 9v4m0 4h.01M10 3.5l-8.5 15h17L10 3.5z" strokeLinecap="round" strokeLinejoin="round"/></svg>;
   return <svg {...common} stroke="#2563eb"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h2v5h-2" strokeLinecap="round" strokeLinejoin="round"/></svg>;
 }
 
@@ -48,6 +53,7 @@ function ToastViewport({ toasts, onClose }) {
     <>
       <style>{`
         @keyframes toast-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes toast-progress { from { width: 100%; } to { width: 0%; } }
         .toast-enter { animation: toast-in .22s ease-out both; }
       `}</style>
       <div style={styles.viewport} aria-live="polite" aria-atomic="true">
@@ -62,7 +68,9 @@ function ToastViewport({ toasts, onClose }) {
               </div>
               <button onClick={() => onClose(t.id)} style={styles.closeBtn} aria-label="Toast schließen">×</button>
             </div>
+
             {t.message && <div style={styles.toastBody}>{t.message}</div>}
+
             {Array.isArray(t.actions) && t.actions.length > 0 && (
               <div style={styles.actions}>
                 {t.actions.map((a, i) => (
@@ -76,11 +84,28 @@ function ToastViewport({ toasts, onClose }) {
                 ))}
               </div>
             )}
+
+            {/* Progress-Bar */}
+            <div style={styles.progressTrack}>
+              <div
+                style={{
+                  ...styles.progressBar,
+                  animation: `toast-progress ${t.ttl ?? 4000}ms linear forwards`,
+                  background: barColor(t.type),
+                }}
+              />
+            </div>
           </div>
         ))}
       </div>
     </>
   );
+}
+
+function barColor(type) {
+  if (type === "success") return "#16a34a";
+  if (type === "error") return "#dc2626";
+  return "#2563eb";
 }
 
 function variantStyle(type) {
@@ -100,4 +125,6 @@ const styles = {
   actions: { display: "flex", gap: 8, marginTop: 8 },
   actionGhost: { padding: "6px 10px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff", fontSize: 12 },
   actionPrimary: { padding: "6px 10px", borderRadius: 6, border: "1px solid #2563eb", background: "#2563eb", color: "#fff", fontSize: 12 },
+  progressTrack: { marginTop: 8, height: 3, background: "#f3f4f6", borderRadius: 999 },
+  progressBar: { height: 3, width: "100%", borderRadius: 999 },
 };

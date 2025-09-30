@@ -1,4 +1,3 @@
-// src/components/BoardCleanDnD.jsx
 import React, { useEffect, useRef, useState } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import useToast from "./ui/useToast";
@@ -57,19 +56,38 @@ function pickStationLabel(rec) {
   return (rec.bezeichnung ?? rec.name ?? rec.titel ?? rec.title ?? rec.arbeitsstation ?? rec.station ?? rec.kurzname ?? null);
 }
 
+// --- Text-Match für Filter ---
+function matchesQuery(task, q) {
+  if (!q) return true;
+  const s = q.toLowerCase();
+  const fields = [
+    task?.bezeichnung,
+    task?.teilenummer,
+    task?.kunde,
+    task?.zuständig,
+    task?.["zusätzlicheInfos"],
+    task?.arbeitsstation,
+    task?.status,
+  ].filter(Boolean);
+  return fields.some((v) => String(v).toLowerCase().includes(s));
+}
+
 export default function BoardCleanDnD() {
   const [columns, setColumns] = useState({});       // { [normKey]: Task[] }
   const [labelByKey, setLabelByKey] = useState({}); // { [normKey]: Original-Label }
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
 
+  // Modals
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editTask, setEditTask] = useState(null);
 
-  const toast = useToast();
+  // Suche/Filter
+  const [query, setQuery] = useState("");
+  const [stationFilter, setStationFilter] = useState("ALL");
 
-  // pending Deletes: task.id -> { timeout, key, index, task }
-  const pendingRef = useRef(new Map());
+  const toast = useToast();
+  const pendingRef = useRef(new Map()); // id -> { timeout, key, index, task }
 
   useEffect(() => {
     let alive = true;
@@ -119,7 +137,11 @@ export default function BoardCleanDnD() {
     return () => { alive = false; pendingRef.current.forEach(({ timeout }) => clearTimeout(timeout)); };
   }, []);
 
+  // DnD – bei aktivem Textfilter deaktivieren (Indizes vs. gefilterte Listen!)
+  const textFilterActive = query.trim().length > 0;
+
   const onDragEnd = async (result) => {
+    if (textFilterActive) return; // Sicherheit
     const { source, destination } = result;
     if (!destination) return;
     if (source.droppableId === destination.droppableId && source.index === destination.index) return;
@@ -207,20 +229,19 @@ export default function BoardCleanDnD() {
     toast.success("Änderungen gespeichert.");
   };
 
-  // Delete with Undo
+  // Delete mit Undo (5s)
   const handleRequestDelete = (task) => {
     const key = normalizeStationLabel(task?.arbeitsstation ?? "Unassigned");
     const index = (columns[key] || []).findIndex((t) => t.id === task.id);
     if (index < 0) return;
 
-    // Optimistisch aus UI entfernen
+    // Optimistisch entfernen
     setColumns((prev) => {
       const draft = { ...prev };
       draft[key] = (draft[key] || []).filter((t) => t.id !== task.id);
       return draft;
     });
 
-    // Undo-Toast
     const UNDO_MS = 5000;
     const toastId = toast.show("info", `Aufgabe #${task.id} wird gelöscht …`, {
       title: "Gelöscht",
@@ -234,8 +255,6 @@ export default function BoardCleanDnD() {
             if (!pending) return;
             clearTimeout(pending.timeout);
             pendingRef.current.delete(task.id);
-
-            // Wiederherstellen an ursprünglicher Position
             setColumns((prev) => {
               const draft = { ...prev };
               const arr = [...(draft[key] || [])];
@@ -249,18 +268,16 @@ export default function BoardCleanDnD() {
       ],
     });
 
-    // Nach Ablauf wirklich löschen
     const timeout = setTimeout(async () => {
       pendingRef.current.delete(task.id);
       try {
         await deleteTaskServer(task.id);
-        // Reihenfolge in der Spalte bereinigt persistieren
         const draft = typeof structuredClone === "function" ? structuredClone(columns) : JSON.parse(JSON.stringify(columns));
         await bulkSortServer(buildSortPayload(draft, [key]));
         toast.success("Aufgabe endgültig gelöscht.");
       } catch (e) {
         console.error(e);
-        // Rollback, falls Serverlöschung fehlschlägt
+        // Rollback
         setColumns((prev) => {
           const arr = [...(prev[key] || [])];
           arr.splice(index, 0, task);
@@ -268,7 +285,6 @@ export default function BoardCleanDnD() {
         });
         toast.error("Löschen fehlgeschlagen. Wiederhergestellt.");
       } finally {
-        // sicherheitshalber
         toast.remove?.(toastId);
       }
     }, UNDO_MS);
@@ -279,21 +295,60 @@ export default function BoardCleanDnD() {
   if (loading) return <p style={{ padding: 16 }}>lade…</p>;
   if (err) return <pre style={{ whiteSpace: "pre-wrap", color: "red", padding: 16 }}>Fehler: {err}</pre>;
 
-  const stationKeys = Object.keys(labelByKey).sort((a, b) => a.localeCompare(b));
+  const allStationKeys = Object.keys(labelByKey).sort((a, b) => a.localeCompare(b));
+  const visibleStationKeys =
+    stationFilter === "ALL" ? allStationKeys : allStationKeys.filter((k) => k === stationFilter);
 
   return (
     <div style={{ padding: 16 }}>
-      {/* Action-Bar */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <h1 style={{ margin: 0 }}>Board</h1>
+      {/* kleine CSS für Fokus-Styles */}
+      <style>{`
+        .task-card:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+        .toolbar-input { padding: 8px; border-radius: 6px; border: 1px solid #d1d5db; min-width: 220px; }
+        .toolbar-select { padding: 8px; border-radius: 6px; border: 1px solid #d1d5db; }
+        .badge { font-size: 12px; color: #6b7280; }
+      `}</style>
+
+      {/* Toolbar: Suche + Station-Filter + Aktion */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
+        <h1 style={{ margin: 0, marginRight: 8 }}>Board</h1>
+
+        <input
+          className="toolbar-input"
+          type="search"
+          placeholder="Suchen (Bezeichnung, Kunde, …)"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label="Aufgaben durchsuchen"
+        />
+
+        <select
+          className="toolbar-select"
+          value={stationFilter}
+          onChange={(e) => setStationFilter(e.target.value)}
+          aria-label="Nach Arbeitsstation filtern"
+        >
+          <option value="ALL">Alle Stationen</option>
+          {allStationKeys.map((k) => (
+            <option key={k} value={k}>{labelByKey[k]}</option>
+          ))}
+        </select>
+
+        <div style={{ flex: 1 }} />
+
+        {textFilterActive && <span className="badge">DnD ist bei aktivem Textfilter deaktiviert</span>}
+
         <button onClick={() => setIsCreateOpen(true)} style={styles.btnPrimary}>+ Neue Aufgabe</button>
       </div>
 
       <DragDropContext onDragEnd={onDragEnd}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
-          {stationKeys.map((key) => {
+          {visibleStationKeys.map((key) => {
             const title = labelByKey[key];
-            const list = columns[key] || [];
+            // pro Spalte filtern
+            const listFull = columns[key] || [];
+            const list = listFull.filter((t) => matchesQuery(t, query));
+
             return (
               <Droppable droppableId={key} key={key}>
                 {(provided) => (
@@ -302,14 +357,30 @@ export default function BoardCleanDnD() {
                     {...provided.droppableProps}
                     style={{ width: "100%", background: "#f3f4f6", padding: 12, borderRadius: 8, minHeight: 60 }}
                   >
-                    <h2 style={{ margin: "0 0 8px 0" }}>{title}</h2>
+                    <h2 style={{ margin: "0 0 8px 0" }}>
+                      {title} <span className="badge">({list.length})</span>
+                    </h2>
+
                     {list.map((t, index) => (
-                      <Draggable draggableId={t.id.toString()} index={index} key={t.id}>
+                      <Draggable
+                        draggableId={t.id.toString()}
+                        index={index}
+                        key={t.id}
+                        isDragDisabled={textFilterActive}
+                      >
                         {(dProvided, snapshot) => (
                           <div
                             ref={dProvided.innerRef}
                             {...dProvided.draggableProps}
                             {...dProvided.dragHandleProps}
+                            tabIndex={0}
+                            className="task-card"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                setEditTask(t);
+                              }
+                            }}
                             onClick={() => setEditTask(t)}
                             style={{
                               background: "white",
@@ -337,8 +408,9 @@ export default function BoardCleanDnD() {
                         )}
                       </Draggable>
                     ))}
+
                     {provided.placeholder}
-                    {list.length === 0 && (<div style={{ fontSize: 12, color: "#6b7280" }}>keine Tasks</div>)}
+                    {list.length === 0 && <div style={{ fontSize: 12, color: "#6b7280" }}>keine Tasks</div>}
                   </div>
                 )}
               </Droppable>
@@ -351,16 +423,16 @@ export default function BoardCleanDnD() {
       <TaskCreationModal
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
-        stations={stationKeys.map((k) => labelByKey[k])}
+        stations={allStationKeys.map((k) => labelByKey[k])}
         onCreated={handleCreated}
       />
       <TaskEditModal
         isOpen={!!editTask}
         onClose={() => setEditTask(null)}
         task={editTask}
-        stations={stationKeys.map((k) => labelByKey[k])}
+        stations={allStationKeys.map((k) => labelByKey[k])}
         onSaved={handleSaved}
-        onRequestDelete={handleRequestDelete}  // <- Undo-Delete Fluss
+        onRequestDelete={handleRequestDelete}
       />
     </div>
   );

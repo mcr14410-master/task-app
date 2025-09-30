@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import useToast from "../ui/useToast";
 
-// Kleines Hilfsformat für Date-Inputs (YYYY-MM-DD)
 function toYMD(val) {
   if (!val) return "";
   if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
@@ -20,16 +19,22 @@ export default function TaskCreationModal({ isOpen, onClose, stations = [], onCr
   const [arbeitsstation, setArbeitsstation] = useState(stations[0] || "Unassigned");
   const [saving, setSaving] = useState(false);
   const toast = useToast();
+  const firstInputRef = useRef(null);
 
   useEffect(() => {
-    if (isOpen) {
-      setBezeichnung("");
-      setInfo("");
-      setEndDatum("");
-      setArbeitsstation(stations[0] || "Unassigned");
-      setSaving(false);
-    }
-  }, [isOpen, stations]);
+    if (!isOpen) return;
+    setBezeichnung("");
+    setInfo("");
+    setEndDatum("");
+    setArbeitsstation(stations[0] || "Unassigned");
+    setSaving(false);
+    // Fokus auf erstes Feld
+    setTimeout(() => firstInputRef.current?.focus(), 0);
+
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isOpen, stations, onClose]);
 
   if (!isOpen) return null;
 
@@ -59,7 +64,7 @@ export default function TaskCreationModal({ isOpen, onClose, stations = [], onCr
       let saved;
       try { saved = await res.json(); } catch { saved = payload; }
 
-      onCreated?.(saved);   // Board zeigt Success-Toast
+      onCreated?.(saved); // Erfolg-Toast zentral im Board
       onClose();
     } catch (err) {
       toast.error("Erstellen fehlgeschlagen.", { title: "Fehler" });
@@ -70,13 +75,14 @@ export default function TaskCreationModal({ isOpen, onClose, stations = [], onCr
   };
 
   return (
-    <div style={styles.backdrop} onClick={onClose}>
+    <div style={styles.backdrop} onClick={onClose} role="dialog" aria-modal="true">
       <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
         <h3 style={styles.title}>Neue Aufgabe</h3>
         <form onSubmit={handleSubmit} style={{ display: "grid", gap: 8 }}>
           <label style={styles.label}>
             Bezeichnung*
             <input
+              ref={firstInputRef}
               style={styles.input}
               value={bezeichnung}
               onChange={(e) => setBezeichnung(e.target.value)}
@@ -118,7 +124,7 @@ export default function TaskCreationModal({ isOpen, onClose, stations = [], onCr
           </label>
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
-            <button type="button" onClick={onClose} style={styles.btnGhost}>Abbrechen</button>
+            <button type="button" onClick={onClose} style={styles.btnGhost}>Abbrechen (Esc)</button>
             <button type="submit" disabled={saving} style={styles.btnPrimary}>
               {saving ? "Erstelle…" : "Erstellen"}
             </button>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import useToast from "../ui/useToast";
 
 function toYMD(val) {
@@ -12,14 +12,7 @@ function toYMD(val) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-export default function TaskEditModal({
-  isOpen,
-  onClose,
-  task,
-  stations = [],
-  onSaved,
-  onRequestDelete,
-}) {
+export default function TaskEditModal({ isOpen, onClose, task, stations = [], onSaved, onRequestDelete }) {
   const [bezeichnung, setBezeichnung] = useState("");
   const [info, setInfo] = useState("");
   const [endDatum, setEndDatum] = useState("");
@@ -27,6 +20,7 @@ export default function TaskEditModal({
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const toast = useToast();
+  const firstInputRef = useRef(null);
 
   useEffect(() => {
     if (isOpen && task) {
@@ -36,8 +30,13 @@ export default function TaskEditModal({
       setArbeitsstation(task?.arbeitsstation ?? stations[0] ?? "Unassigned");
       setSaving(false);
       setDeleting(false);
+      setTimeout(() => firstInputRef.current?.focus(), 0);
+
+      const onKey = (e) => { if (e.key === "Escape") onClose(); };
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
     }
-  }, [isOpen, task, stations]);
+  }, [isOpen, task, stations, onClose]);
 
   if (!isOpen || !task) return null;
 
@@ -64,8 +63,7 @@ export default function TaskEditModal({
       }
       let saved;
       try { saved = await res.json(); } catch { saved = payload; }
-
-      onSaved?.(saved); // Board zeigt Success-Toast
+      onSaved?.(saved); // Erfolg-Toast im Board
       onClose();
     } catch (err) {
       toast.error("Speichern fehlgeschlagen.", { title: "Fehler" });
@@ -75,28 +73,23 @@ export default function TaskEditModal({
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (deleting) return;
     const ok = window.confirm(`Aufgabe #${task.id} wirklich löschen?`);
     if (!ok) return;
     setDeleting(true);
-    try {
-      onRequestDelete?.(task); // Board übernimmt Undo + Server
-      onClose();
-    } finally {
-      setDeleting(false);
-    }
+    try { onRequestDelete?.(task); onClose(); } finally { setDeleting(false); }
   };
 
   return (
-    <div style={styles.backdrop} onClick={onClose}>
+    <div style={styles.backdrop} onClick={onClose} role="dialog" aria-modal="true">
       <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
         <h3 style={styles.title}>Aufgabe bearbeiten #{task.id}</h3>
-
         <form onSubmit={handleSubmit} style={{ display: "grid", gap: 8 }}>
           <label style={styles.label}>
             Bezeichnung*
             <input
+              ref={firstInputRef}
               style={styles.input}
               value={bezeichnung}
               onChange={(e) => setBezeichnung(e.target.value)}
@@ -115,43 +108,23 @@ export default function TaskEditModal({
 
           <label style={styles.label}>
             Fällig am
-            <input
-              type="date"
-              style={styles.input}
-              value={toYMD(endDatum)}
-              onChange={(e) => setEndDatum(e.target.value)}
-            />
+            <input type="date" style={styles.input} value={toYMD(endDatum)} onChange={(e) => setEndDatum(e.target.value)} />
           </label>
 
           <label style={styles.label}>
             Arbeitsstation
-            <select
-              style={styles.input}
-              value={arbeitsstation}
-              onChange={(e) => setArbeitsstation(e.target.value)}
-            >
-              {stations.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
+            <select style={styles.input} value={arbeitsstation} onChange={(e) => setArbeitsstation(e.target.value)}>
+              {stations.map((s) => (<option key={s} value={s}>{s}</option>))}
               {!stations.length && <option value="Unassigned">Unassigned</option>}
             </select>
           </label>
 
           <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 6 }}>
-            <button
-              type="button"
-              onClick={handleDelete}
-              disabled={saving || deleting}
-              style={styles.btnDanger}
-              title="Aufgabe löschen"
-            >
+            <button type="button" onClick={handleDelete} disabled={saving || deleting} style={styles.btnDanger} title="Aufgabe löschen">
               {deleting ? "Lösche…" : "Löschen"}
             </button>
-
             <div style={{ display: "flex", gap: 8 }}>
-              <button type="button" onClick={onClose} style={styles.btnGhost} disabled={saving || deleting}>
-                Abbrechen
-              </button>
+              <button type="button" onClick={onClose} style={styles.btnGhost} disabled={saving || deleting}>Abbrechen (Esc)</button>
               <button type="submit" disabled={saving || deleting} style={styles.btnPrimary}>
                 {saving ? "Speichere…" : "Speichern"}
               </button>
