@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useToast } from "../ui/Toasts";
 
 function toYMD(val) {
   if (!val) return "";
@@ -11,12 +12,21 @@ function toYMD(val) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-export default function TaskEditModal({ isOpen, onClose, task, stations = [], onSaved }) {
+export default function TaskEditModal({
+  isOpen,
+  onClose,
+  task,
+  stations = [],
+  onSaved,
+  onDeleted, // <- neu: Parent-Callback nach erfolgreichem Löschen
+}) {
   const [bezeichnung, setBezeichnung] = useState("");
   const [info, setInfo] = useState("");
   const [endDatum, setEndDatum] = useState("");
   const [arbeitsstation, setArbeitsstation] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     if (isOpen && task) {
@@ -25,6 +35,7 @@ export default function TaskEditModal({ isOpen, onClose, task, stations = [], on
       setEndDatum(toYMD(task?.endDatum));
       setArbeitsstation(task?.arbeitsstation ?? stations[0] ?? "Unassigned");
       setSaving(false);
+      setDeleting(false);
     }
   }, [isOpen, task, stations]);
 
@@ -37,7 +48,7 @@ export default function TaskEditModal({ isOpen, onClose, task, stations = [], on
       bezeichnung: bezeichnung.trim() || "(ohne Bezeichnung)",
       ["zusätzlicheInfos"]: info.trim() || null,
       endDatum: endDatum || null,
-      arbeitsstation: arbeitsstation,
+      arbeitsstation,
     };
 
     try {
@@ -52,17 +63,38 @@ export default function TaskEditModal({ isOpen, onClose, task, stations = [], on
         throw new Error(txt || `HTTP ${res.status}`);
       }
       let saved;
-      try {
-        saved = await res.json();
-      } catch {
-        saved = payload;
-      }
+      try { saved = await res.json(); } catch { saved = payload; }
       onSaved?.(saved);
+      toast.success("Aufgabe gespeichert.");
       onClose();
     } catch (err) {
-      alert("Speichern fehlgeschlagen: " + err.message);
+      toast.error("Speichern fehlgeschlagen.", { title: "Fehler" });
+      console.error(err);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (deleting) return;
+    const ok = window.confirm(`Aufgabe #${task.id} wirklich löschen?`);
+    if (!ok) return;
+
+    try {
+      setDeleting(true);
+      const res = await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
+      if (!res.ok && res.status !== 204) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(txt || `HTTP ${res.status}`);
+      }
+      // Parent kümmert sich um UI-Update + Success-Toast
+      onDeleted?.(task);
+      onClose();
+    } catch (err) {
+      console.error(err);
+      toast.error("Löschen fehlgeschlagen.", { title: "Fehler" });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -70,6 +102,7 @@ export default function TaskEditModal({ isOpen, onClose, task, stations = [], on
     <div style={styles.backdrop} onClick={onClose}>
       <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
         <h3 style={styles.title}>Aufgabe bearbeiten #{task.id}</h3>
+
         <form onSubmit={handleSubmit} style={{ display: "grid", gap: 8 }}>
           <label style={styles.label}>
             Bezeichnung*
@@ -114,13 +147,25 @@ export default function TaskEditModal({ isOpen, onClose, task, stations = [], on
             </select>
           </label>
 
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 4 }}>
-            <button type="button" onClick={onClose} style={styles.btnGhost}>
-              Abbrechen
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 6 }}>
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={saving || deleting}
+              style={styles.btnDanger}
+              title="Aufgabe löschen"
+            >
+              {deleting ? "Lösche…" : "Löschen"}
             </button>
-            <button type="submit" disabled={saving} style={styles.btnPrimary}>
-              {saving ? "Speichere…" : "Speichern"}
-            </button>
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <button type="button" onClick={onClose} style={styles.btnGhost} disabled={saving || deleting}>
+                Abbrechen
+              </button>
+              <button type="submit" disabled={saving || deleting} style={styles.btnPrimary}>
+                {saving ? "Speichere…" : "Speichern"}
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -142,4 +187,5 @@ const styles = {
   input: { padding: 8, borderRadius: 6, border: "1px solid #d1d5db" },
   btnGhost: { padding: "8px 12px", borderRadius: 6, border: "1px solid #d1d5db", background: "#fff" },
   btnPrimary: { padding: "8px 12px", borderRadius: 6, border: "1px solid #16a34a", background: "#16a34a", color: "#fff" },
+  btnDanger: { padding: "8px 12px", borderRadius: 6, border: "1px solid #dc2626", background: "#dc2626", color: "#fff" },
 };

@@ -1,5 +1,7 @@
+// src/components/BoardCleanDnD.jsx
 import React, { useEffect, useState } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+import { useToast } from "./ui/Toasts";
 import TaskCreationModal from "./modals/TaskCreationModal";
 import TaskEditModal from "./modals/TaskEditModal";
 
@@ -62,7 +64,7 @@ function pickStationLabel(rec) {
 }
 
 export default function BoardCleanDnD() {
-  const [columns, setColumns] = useState({});     // { [normKey]: Task[] }
+  const [columns, setColumns] = useState({});       // { [normKey]: Task[] }
   const [labelByKey, setLabelByKey] = useState({}); // { [normKey]: Original-Label }
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
@@ -70,6 +72,8 @@ export default function BoardCleanDnD() {
   // Modals
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editTask, setEditTask] = useState(null);
+
+  const toast = useToast();
 
   useEffect(() => {
     let alive = true;
@@ -177,8 +181,8 @@ export default function BoardCleanDnD() {
         await bulkSortServer(payload);
       }
     } catch (e) {
-      console.error("Persistenz fehlgeschlagen:", e);
-      alert("Speichern fehlgeschlagen – Änderung wird zurückgenommen.");
+      toast.error("Speichern fehlgeschlagen. Änderung zurückgenommen.");
+      console.error(e);
       setColumns(prev.columns);
       setLabelByKey(prev.labelByKey);
     }
@@ -186,24 +190,26 @@ export default function BoardCleanDnD() {
 
   // ---- Modal-Callbacks ----
 
-  // nach erfolgreichem POST aus dem CreationModal
   const handleCreated = (saved) => {
     const raw = saved?.arbeitsstation ?? "Unassigned";
     const key = normalizeStationLabel(raw);
 
     setLabelByKey((prev) => ({ ...prev, [key]: String(raw).trim() }));
+    // State + (optional) Sort persistieren
+    const prevCols =
+      typeof structuredClone === "function" ? structuredClone(columns) : JSON.parse(JSON.stringify(columns));
 
     setColumns((prev) => {
-      const list = prev[key] ? [...prev[key], saved] : [saved];
-      return { ...prev, [key]: list };
+      const next = { ...prev, [key]: (prev[key] || []).concat(saved) };
+      // Reihung speichern
+      const draft = { ...prevCols, [key]: (prevCols[key] || []).concat(saved) };
+      bulkSortServer(buildSortPayload(draft, [key])).catch(() => {});
+      return next;
     });
 
-    // Optional: Reihenfolge der betroffenen Spalte persistieren
-    const payload = buildSortPayload({ ...columns, [key]: (columns[key] || []).concat(saved) }, [key]);
-    bulkSortServer(payload).catch(() => {});
+    // Modal toasts bereits Erfolg → hier kein zweiter Toast
   };
 
-  // nach erfolgreichem PUT aus dem EditModal
   const handleSaved = (saved) => {
     const oldKey = normalizeStationLabel(editTask?.arbeitsstation ?? "Unassigned");
     const newRaw = saved?.arbeitsstation ?? "Unassigned";
@@ -211,28 +217,49 @@ export default function BoardCleanDnD() {
 
     setLabelByKey((prev) => ({ ...prev, [newKey]: String(newRaw).trim() }));
 
+    const prevCols =
+      typeof structuredClone === "function" ? structuredClone(columns) : JSON.parse(JSON.stringify(columns));
+
     setColumns((prev) => {
       const draft = { ...prev };
-      // aus alter Spalte entfernen
       draft[oldKey] = (draft[oldKey] || []).filter((t) => t.id !== saved.id);
-      // in neue Spalte einfügen (am Ende)
       draft[newKey] = (draft[newKey] || []).concat(saved);
+
+      // Reihung speichern
+      const after = { ...prevCols };
+      after[oldKey] = (after[oldKey] || []).filter((t) => t.id !== saved.id);
+      after[newKey] = (after[newKey] || []).concat(saved);
+      const keys = oldKey === newKey ? [newKey] : [oldKey, newKey];
+      bulkSortServer(buildSortPayload(after, keys)).catch(() => {});
       return draft;
     });
 
-    // Optional: Reihenfolgen persistieren
-    const nextState = { ...columns };
-    nextState[oldKey] = (nextState[oldKey] || []).filter((t) => t.id !== saved.id);
-    nextState[newKey] = (nextState[newKey] || []).concat(saved);
-    const payload = buildSortPayload(nextState, oldKey === newKey ? [newKey] : [oldKey, newKey]);
-    bulkSortServer(payload).catch(() => {});
+    // Modal macht Erfolg-Toast
+  };
+
+  const handleDeleted = (deletedTask) => {
+    const key = normalizeStationLabel(deletedTask?.arbeitsstation ?? "Unassigned");
+
+    const prevCols =
+      typeof structuredClone === "function" ? structuredClone(columns) : JSON.parse(JSON.stringify(columns));
+
+    setColumns((prev) => {
+      const draft = { ...prev };
+      draft[key] = (draft[key] || []).filter((t) => t.id !== deletedTask.id);
+      return draft;
+    });
+
+    // Reihenfolge der betroffenen Spalte persistieren
+    const nextState = { ...prevCols, [key]: (prevCols[key] || []).filter((t) => t.id !== deletedTask.id) };
+    bulkSortServer(buildSortPayload(nextState, [key])).catch(() => {});
+
+    toast.success("Aufgabe gelöscht.");
   };
 
   if (loading) return <p style={{ padding: 16 }}>lade…</p>;
   if (err) return <pre style={{ whiteSpace: "pre-wrap", color: "red", padding: 16 }}>Fehler: {err}</pre>;
 
   const stationKeys = Object.keys(labelByKey).sort((a, b) => a.localeCompare(b));
-  const stationLabels = stationKeys.map((k) => labelByKey[k]);
 
   return (
     <div style={{ padding: 16 }}>
@@ -293,11 +320,13 @@ export default function BoardCleanDnD() {
                               <strong style={{ fontSize: 13 }}>{t.bezeichnung ?? "(ohne Bezeichnung)"}</strong>
                               <span style={{ fontSize: 10, color: "#6b7280" }}>#{t.id}</span>
                             </div>
+
                             {t["zusätzlicheInfos"] && (
                               <div style={{ marginTop: 4, fontSize: 12, color: "#4b5563" }}>
                                 {t["zusätzlicheInfos"]}
                               </div>
                             )}
+
                             <div style={{ marginTop: 6, display: "flex", justifyContent: "space-between", fontSize: 11, color: "#6b7280" }}>
                               <span>{t.status ?? "—"}</span>
                               {t.endDatum && <span>{t.endDatum}</span>}
@@ -322,7 +351,7 @@ export default function BoardCleanDnD() {
       <TaskCreationModal
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
-        stations={stationLabels}
+        stations={stationKeys.map((k) => labelByKey[k])}
         onCreated={handleCreated}
       />
 
@@ -330,8 +359,9 @@ export default function BoardCleanDnD() {
         isOpen={!!editTask}
         onClose={() => setEditTask(null)}
         task={editTask}
-        stations={stationLabels}
+        stations={stationKeys.map((k) => labelByKey[k])}
         onSaved={handleSaved}
+        onDeleted={handleDeleted}   // <- neu: Delete-Callback
       />
     </div>
   );

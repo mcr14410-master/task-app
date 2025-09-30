@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useToast } from "../ui/Toasts";
 
 // Kleines Hilfsformat für Date-Inputs (YYYY-MM-DD)
 function toYMD(val) {
@@ -18,6 +19,7 @@ export default function TaskCreationModal({ isOpen, onClose, stations = [], onCr
   const [endDatum, setEndDatum] = useState("");
   const [arbeitsstation, setArbeitsstation] = useState(stations[0] || "Unassigned");
   const [saving, setSaving] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     if (isOpen) {
@@ -39,8 +41,8 @@ export default function TaskCreationModal({ isOpen, onClose, stations = [], onCr
       bezeichnung: bezeichnung.trim(),
       ["zusätzlicheInfos"]: info.trim() || null,
       endDatum: endDatum || null,
-      arbeitsstation: arbeitsstation,
-      prioritaet: 9999, // Server setzt sonst selbst; 9999 = ans Ende
+      arbeitsstation,
+      prioritaet: 9999,
     };
 
     try {
@@ -55,15 +57,13 @@ export default function TaskCreationModal({ isOpen, onClose, stations = [], onCr
         throw new Error(txt || `HTTP ${res.status}`);
       }
       let saved;
-      try {
-        saved = await res.json();
-      } catch {
-        saved = payload; // Fallback
-      }
+      try { saved = await res.json(); } catch { saved = payload; }
       onCreated?.(saved);
+      toast.success("Aufgabe erstellt.");
       onClose();
     } catch (err) {
-      alert("Erstellen fehlgeschlagen: " + err.message);
+      toast.error("Erstellen fehlgeschlagen.", { title: "Fehler" });
+      console.error(err);
     } finally {
       setSaving(false);
     }
