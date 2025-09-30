@@ -58,8 +58,8 @@ export default function TaskCreationModal({ isOpen, onClose, stations = [], onCr
       }
       let saved;
       try { saved = await res.json(); } catch { saved = payload; }
-      onCreated?.(saved);
-      toast.success("Aufgabe erstellt.");
+
+      onCreated?.(saved);   // Board zeigt Success-Toast
       onClose();
     } catch (err) {
       toast.error("Erstellen fehlgeschlagen.", { title: "Fehler" });
@@ -118,9 +118,7 @@ export default function TaskCreationModal({ isOpen, onClose, stations = [], onCr
           </label>
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 4 }}>
-            <button type="button" onClick={onClose} style={styles.btnGhost}>
-              Abbrechen
-            </button>
+            <button type="button" onClick={onClose} style={styles.btnGhost}>Abbrechen</button>
             <button type="submit" disabled={saving} style={styles.btnPrimary}>
               {saving ? "Erstelle…" : "Erstellen"}
             </button>
@@ -132,14 +130,8 @@ export default function TaskCreationModal({ isOpen, onClose, stations = [], onCr
 }
 
 const styles = {
-  backdrop: {
-    position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
-    display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50
-  },
-  modal: {
-    width: 420, maxWidth: "90vw", background: "#fff", borderRadius: 10, padding: 16,
-    boxShadow: "0 10px 30px rgba(0,0,0,0.2)"
-  },
+  backdrop: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 },
+  modal: { width: 420, maxWidth: "90vw", background: "#fff", borderRadius: 10, padding: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.2)" },
   title: { margin: "0 0 8px 0" },
   label: { display: "grid", gap: 4, fontSize: 13 },
   input: { padding: 8, borderRadius: 6, border: "1px solid #d1d5db" },

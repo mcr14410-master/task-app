@@ -18,7 +18,7 @@ export default function TaskEditModal({
   task,
   stations = [],
   onSaved,
-  onRequestDelete, // statt onDeleted: Parent soll Undo/Server übernehmen
+  onRequestDelete,
 }) {
   const [bezeichnung, setBezeichnung] = useState("");
   const [info, setInfo] = useState("");
@@ -64,8 +64,8 @@ export default function TaskEditModal({
       }
       let saved;
       try { saved = await res.json(); } catch { saved = payload; }
-      onSaved?.(saved);
-      toast.success("Aufgabe gespeichert.");
+
+      onSaved?.(saved); // Board zeigt Success-Toast
       onClose();
     } catch (err) {
       toast.error("Speichern fehlgeschlagen.", { title: "Fehler" });
@@ -81,7 +81,7 @@ export default function TaskEditModal({
     if (!ok) return;
     setDeleting(true);
     try {
-      onRequestDelete?.(task);   // Parent erledigt Undo+Server
+      onRequestDelete?.(task); // Board übernimmt Undo + Server
       onClose();
     } finally {
       setDeleting(false);
@@ -164,14 +164,8 @@ export default function TaskEditModal({
 }
 
 const styles = {
-  backdrop: {
-    position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
-    display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50
-  },
-  modal: {
-    width: 440, maxWidth: "90vw", background: "#fff", borderRadius: 10, padding: 16,
-    boxShadow: "0 10px 30px rgba(0,0,0,0.2)"
-  },
+  backdrop: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 },
+  modal: { width: 440, maxWidth: "90vw", background: "#fff", borderRadius: 10, padding: 16, boxShadow: "0 10px 30px rgba(0,0,0,0.2)" },
   title: { margin: "0 0 8px 0" },
   label: { display: "grid", gap: 4, fontSize: 13 },
   input: { padding: 8, borderRadius: 6, border: "1px solid #d1d5db" },
