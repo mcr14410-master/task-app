@@ -2,18 +2,16 @@
 import React, { useEffect, useState } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 
-// ---- Helpers ----
 function normalizeStationLabel(v) {
   const s = String(v ?? "Unassigned");
   return s
-    .replace(/\u00A0/g, " ")                 // NBSP -> Space
-    .replace(/[\u200B-\u200D\uFEFF]/g, "")   // Zero-width entfernen
+    .replace(/\u00A0/g, " ")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
     .normalize("NFKC")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-// nur beim Initial-Load sortieren
 const sortTasksInitial = (arr) =>
   [...arr].sort((a, b) => {
     const pa = Number.isFinite(a?.prioritaet) ? a.prioritaet : 999999;
@@ -22,48 +20,33 @@ const sortTasksInitial = (arr) =>
     return (a?.id ?? 0) - (b?.id ?? 0);
   });
 
-// Backend: Einzelupdate
 async function updateTaskServer(id, body) {
   const res = await fetch(`/api/tasks/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(text || `HTTP ${res.status}`);
-  }
-  try {
-    return await res.json();
-  } catch {
-    return body;
-  }
+  if (!res.ok) throw new Error((await res.text().catch(() => "")) || `HTTP ${res.status}`);
+  try { return await res.json(); } catch { return body; }
 }
 
-// Backend: Bulk-Sort
 async function bulkSortServer(payload) {
   const res = await fetch(`/api/tasks/sort`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(text || `HTTP ${res.status}`);
-  }
+  if (!res.ok) throw new Error((await res.text().catch(() => "")) || `HTTP ${res.status}`);
 }
 
-// Payload für /sort: aktuelle Reihenfolge -> prioritaet = Index
 function buildSortPayload(state, keys) {
   const payload = [];
   for (const k of keys) {
-    const list = state[k] || [];
-    list.forEach((t, idx) => payload.push({ ...t, prioritaet: idx }));
+    (state[k] || []).forEach((t, idx) => payload.push({ ...t, prioritaet: idx }));
   }
   return payload;
 }
 
-// Mögliche Feldnamen aus /api/arbeitsstationen erkennen
 function pickStationLabel(rec) {
   if (rec == null) return null;
   if (typeof rec === "string") return rec;
@@ -79,75 +62,45 @@ function pickStationLabel(rec) {
   );
 }
 
-// ---- Component ----
 export default function BoardCleanDnD() {
-  // columns: { [normKey]: Task[] }
-  const [columns, setColumns] = useState({});
-  // labelByKey: { [normKey]: Original-Label (für Titel & Backend) }
-  const [labelByKey, setLabelByKey] = useState({});
+  const [columns, setColumns] = useState({});     // { [normKey]: Task[] }
+  const [labelByKey, setLabelByKey] = useState({}); // { [normKey]: Original-Label }
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
-  const [showDebug, setShowDebug] = useState(true);
-  const [apiStations, setApiStations] = useState([]); // reine Label-Liste aus /arbeitsstationen
 
-  // Daten laden: Tasks + Stations
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        // beide Endpunkte parallel
         const [tasksRes, stationsRes] = await Promise.allSettled([
           fetch("/api/tasks", { headers: { Accept: "application/json" } }),
           fetch("/api/arbeitsstationen", { headers: { Accept: "application/json" } }),
         ]);
 
-        // Tasks lesen
         let tasks = [];
         if (tasksRes.status === "fulfilled") {
-          const text = await tasksRes.value.text();
-          try {
-            const json = JSON.parse(text);
-            tasks = Array.isArray(json)
-              ? json
-              : Array.isArray(json?.content) ? json.content
-              : Array.isArray(json?.items)   ? json.items
-              : [];
-          } catch {
-            throw new Error("Antwort von /api/tasks ist kein JSON.");
-          }
+          const txt = await tasksRes.value.text();
+          const j = JSON.parse(txt);
+          tasks = Array.isArray(j) ? j : Array.isArray(j?.content) ? j.content : Array.isArray(j?.items) ? j.items : [];
         } else {
           throw new Error(`Fehler bei /api/tasks: ${String(tasksRes.reason)}`);
         }
 
-        // Stations lesen (optional; wenn fehlschlägt, machen wir tasks-only)
         let stations = [];
         if (stationsRes.status === "fulfilled" && stationsRes.value.ok) {
           try {
-            const stText = await stationsRes.value.text();
-            const stJson = JSON.parse(stText);
-            const arr = Array.isArray(stJson)
-              ? stJson
-              : Array.isArray(stJson?.content) ? stJson.content
-              : Array.isArray(stJson?.items)   ? stJson.items
-              : [];
-            stations = arr
-              .map(pickStationLabel)
-              .filter(Boolean)
-              .map((s) => String(s));
-          } catch {
-            // ignorieren; stations bleiben []
-          }
+            const stTxt = await stationsRes.value.text();
+            const stJ = JSON.parse(stTxt);
+            const arr = Array.isArray(stJ) ? stJ : Array.isArray(stJ?.content) ? stJ.content : Array.isArray(stJ?.items) ? stJ.items : [];
+            stations = arr.map(pickStationLabel).filter(Boolean).map(String);
+          } catch { /* ignorieren */ }
         }
-        if (alive) setApiStations(stations);
 
-        // 1) labelByKey aus Stations (falls vorhanden) + aus Tasks aufbauen
         const labels = {};
-        // aus Stations
         for (const raw of stations) {
           const key = normalizeStationLabel(raw);
           if (!labels[key]) labels[key] = String(raw).trim();
         }
-        // aus Tasks
         for (const t of tasks) {
           const raw = t?.arbeitsstation ?? "Unassigned";
           const key = normalizeStationLabel(raw);
@@ -155,20 +108,14 @@ export default function BoardCleanDnD() {
         }
         if (!labels["Unassigned"]) labels["Unassigned"] = "Unassigned";
 
-        // 2) columns aus Tasks gruppieren
         const grouped = {};
         for (const t of tasks) {
           const raw = t?.arbeitsstation ?? "Unassigned";
           const key = normalizeStationLabel(raw);
           (grouped[key] ||= []).push(t);
         }
-        // initial sortieren
         for (const k of Object.keys(grouped)) grouped[k] = sortTasksInitial(grouped[k]);
-
-        // 3) Leere Spalten für jede Station aus API ergänzen
-        for (const key of Object.keys(labels)) {
-          if (!grouped[key]) grouped[key] = [];
-        }
+        for (const key of Object.keys(labels)) if (!grouped[key]) grouped[key] = [];
 
         if (alive) {
           setLabelByKey(labels);
@@ -183,7 +130,6 @@ export default function BoardCleanDnD() {
     return () => { alive = false; };
   }, []);
 
-  // DnD: Optimistic + Persistenz
   const onDragEnd = async (result) => {
     const { source, destination } = result;
     if (!destination) return;
@@ -194,9 +140,9 @@ export default function BoardCleanDnD() {
         ? structuredClone({ columns, labelByKey })
         : { columns: JSON.parse(JSON.stringify(columns)), labelByKey: { ...labelByKey } };
 
-    const fromKey = source.droppableId;            // normalisiert
-    const toKey   = destination.droppableId;       // normalisiert
-    const toLabel = labelByKey[toKey] ?? toKey;    // hübscher Name Richtung Backend
+    const fromKey = source.droppableId;
+    const toKey   = destination.droppableId;
+    const toLabel = labelByKey[toKey] ?? toKey;
 
     let updatedTask = null;
     let next = null;
@@ -236,43 +182,12 @@ export default function BoardCleanDnD() {
   };
 
   if (loading) return <p style={{ padding: 16 }}>lade…</p>;
-  if (err)
-    return (
-      <pre style={{ whiteSpace: "pre-wrap", color: "red", padding: 16 }}>
-        Fehler: {err}
-      </pre>
-    );
+  if (err) return <pre style={{ whiteSpace: "pre-wrap", color: "red", padding: 16 }}>Fehler: {err}</pre>;
 
   const stationKeys = Object.keys(labelByKey).sort((a, b) => a.localeCompare(b));
-  const debugStationsApi = apiStations.join(", ") || "—";
 
   return (
     <div style={{ padding: 16 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8, flexWrap: "wrap" }}>
-        <h1 style={{ margin: 0 }}>Board (Drag & Drop mit Persistenz)</h1>
-        <label style={{ fontSize: 12, color: "#6b7280", cursor: "pointer" }}>
-          <input
-            type="checkbox"
-            checked={showDebug}
-            onChange={() => setShowDebug((v) => !v)}
-            style={{ marginRight: 6 }}
-          />
-          Debug
-        </label>
-        {showDebug && (
-          <>
-            <div style={{ fontSize: 12, color: "#6b7280" }}>
-              Stations aus API: {debugStationsApi}
-            </div>
-            <div style={{ fontSize: 12, color: "#6b7280" }}>
-              Spalten: {stationKeys.length} →
-              {" "}
-              {stationKeys.map((k) => `${labelByKey[k]} (${(columns[k]||[]).length})`).join(" | ")}
-            </div>
-          </>
-        )}
-      </div>
-
       <DragDropContext onDragEnd={onDragEnd}>
         <div
           style={{
@@ -299,7 +214,6 @@ export default function BoardCleanDnD() {
                     }}
                   >
                     <h2 style={{ margin: "0 0 8px 0" }}>{title}</h2>
-
                     {list.map((t, index) => (
                       <Draggable draggableId={t.id.toString()} index={index} key={t.id}>
                         {(dProvided, snapshot) => (
@@ -334,7 +248,6 @@ export default function BoardCleanDnD() {
                         )}
                       </Draggable>
                     ))}
-
                     {provided.placeholder}
                     {list.length === 0 && (
                       <div style={{ fontSize: 12, color: "#6b7280" }}>keine Tasks</div>
