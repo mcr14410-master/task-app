@@ -75,7 +75,6 @@ function matchesQuery(task, q) {
 
 function formatDate(d) {
   if (!d) return null;
-  // ISO YYYY-MM-DD or ISO timestamp → human
   try {
     const dt = typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d) ? new Date(d + "T00:00:00") : new Date(d);
     if (Number.isNaN(dt.getTime())) return d;
@@ -88,8 +87,7 @@ function formatDate(d) {
 
 function dueState(endDatum) {
   if (!endDatum) return { label: null, tone: "muted" };
-  const today = new Date();
-  today.setHours(0,0,0,0);
+  const today = new Date(); today.setHours(0,0,0,0);
   const end = /^\d{4}-\d{2}-\d{2}$/.test(endDatum) ? new Date(endDatum + "T00:00:00") : new Date(endDatum);
   if (Number.isNaN(end.getTime())) return { label: endDatum, tone: "muted" };
   const diff = (end - today) / (1000 * 60 * 60 * 24);
@@ -331,7 +329,7 @@ export default function BoardCleanDnD() {
 
   return (
     <div style={{ padding: 16, background: "var(--bg)", minHeight: "100vh" }}>
-      {/* Dark Theme */}
+      {/* Dark Theme + Karten-Styling */}
       <style>{`
         :root {
           --bg: #0b1220;
@@ -349,14 +347,9 @@ export default function BoardCleanDnD() {
           --info: #38bdf8;
           --match-bg: rgba(59,130,246,0.12);
         }
-        .toolbar-input, .toolbar-select, .btn, .btn-primary {
-          transition: box-shadow .2s ease, transform .06s ease, background .2s ease, border-color .2s ease, color .2s ease;
-        }
-        .toolbar-input { padding: 8px; border-radius: 8px; border: 1px solid var(--border); min-width: 240px; background: var(--card); color: var(--text); }
+        .toolbar-input, .toolbar-select { padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); }
         .toolbar-input::placeholder { color: var(--muted); }
-        .toolbar-select { padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); }
         .btn-primary { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--brand); background: var(--brand); color: white; }
-        .btn-primary:hover { filter: brightness(1.05); }
         .col { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 8px 24px var(--shadow) }
         .col h2 { color: var(--text); }
         .badge { font-size: 12px; color: var(--muted); }
@@ -378,15 +371,15 @@ export default function BoardCleanDnD() {
         .pill.warn { border-color: var(--warn); color: var(--warn); }
         .pill.danger { border-color: var(--danger); color: var(--danger); }
         .pill.info { border-color: var(--info); color: var(--info); }
-        .meta-chip { padding: 2px 6px; border-radius: 6px; font-size: 11px; border: 1px dashed var(--border); color: var(--muted); background: transparent; }
+
+        /* Backup-ähnliche Label/Value-Aufteilung */
+        .kv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; margin-top: 8px; }
+        .kv { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+        .kv-label { width: 78px; flex: 0 0 auto; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+        .kv-value { font-size: 12px; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .title { color: var(--text); }
         .muted { color: var(--muted); }
-        .clamp {
-          display: -webkit-box;
-          -webkit-box-orient: vertical;
-          -webkit-line-clamp: 3;
-          overflow: hidden;
-        }
+        .clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
       `}</style>
 
       {/* Toolbar */}
@@ -462,17 +455,28 @@ export default function BoardCleanDnD() {
                                 ...dProvided.draggableProps.style,
                               }}
                             >
-                              {/* Title + ID */}
+                              {/* Kopfzeile: Titel + ID */}
                               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
-                                <strong className="title" style={{ fontSize: 14 }}>{t.bezeichnung ?? "(ohne Bezeichnung)"}</strong>
-                                <span className="muted" style={{ fontSize: 11 }}>#{t.id}</span>
+                                <strong className="title" style={{ fontSize: 14, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                  {t.bezeichnung ?? "(ohne Bezeichnung)"}
+                                </strong>
+                                <span className="muted" style={{ fontSize: 11, flex: "0 0 auto" }}>#{t.id}</span>
                               </div>
 
-                              {/* Meta: Kunde + Teilenummer */}
-                              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
-                                {t.kunde && <span className="meta-chip">Kunde: {t.kunde}</span>}
-                                {t.teilenummer && <span className="meta-chip">Teilenr.: {t.teilenummer}</span>}
-                                {t.zuständig && <span className="meta-chip">Zuständig: {t.zuständig}</span>}
+                              {/* Backup-ähnliche Info-Zeilen */}
+                              <div className="kv-grid">
+                                {t.kunde && (
+                                  <div className="kv"><span className="kv-label">Kunde</span><span className="kv-value" title={t.kunde}>{t.kunde}</span></div>
+                                )}
+                                {t.teilenummer && (
+                                  <div className="kv"><span className="kv-label">Teilenr.</span><span className="kv-value" title={t.teilenummer}>{t.teilenummer}</span></div>
+                                )}
+                                {t.zuständig && (
+                                  <div className="kv"><span className="kv-label">Zuständig</span><span className="kv-value" title={t.zuständig}>{t.zuständig}</span></div>
+                                )}
+                                {(t.aufwandStunden ?? 0) > 0 && (
+                                  <div className="kv"><span className="kv-label">Aufwand</span><span className="kv-value">{t.aufwandStunden} h</span></div>
+                                )}
                               </div>
 
                               {/* Zusatzinfos */}
@@ -482,7 +486,7 @@ export default function BoardCleanDnD() {
                                 </div>
                               )}
 
-                              {/* Footer: Status + Due */}
+                              {/* Footer: Status & Fälligkeit */}
                               <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                 <span className={`pill ${tone}`} title={`Status: ${t.status ?? "-"}`}>
                                   {t.status ?? "—"}
