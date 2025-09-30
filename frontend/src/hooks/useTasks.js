@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { taskService } from "@/services/api";
+import { taskService } from "@/services/api"; // falls Alias @ nicht existiert, siehe Hinweis unten
+import toast from "react-hot-toast";
 
 export function useTasks() {
   const [tasks, setTasks] = useState([]);
@@ -13,6 +14,7 @@ export function useTasks() {
       setTasks(data);
     } catch (err) {
       console.error("Fehler beim Laden der Aufgaben:", err);
+      toast.error("Fehler beim Laden der Aufgaben");
     } finally {
       setLoading(false);
     }
@@ -23,8 +25,10 @@ export function useTasks() {
     try {
       const newTask = await taskService.create(task);
       setTasks((prev) => [...prev, newTask]);
+      toast.success("Aufgabe erstellt ✅");
     } catch (err) {
       console.error("Fehler beim Erstellen:", err);
+      toast.error("Erstellen fehlgeschlagen ❌");
     }
   };
 
@@ -33,8 +37,10 @@ export function useTasks() {
     try {
       const saved = await taskService.update(id, updatedTask);
       setTasks((prev) => prev.map((t) => (t.id === id ? saved : t)));
+      toast.success("Aufgabe gespeichert 💾");
     } catch (err) {
       console.error("Fehler beim Aktualisieren:", err);
+      toast.error("Speichern fehlgeschlagen ❌");
     }
   };
 
@@ -43,12 +49,13 @@ export function useTasks() {
     try {
       await taskService.remove(id);
       setTasks((prev) => prev.filter((t) => t.id !== id));
+      toast.success("Aufgabe gelöscht 🗑️");
     } catch (err) {
       console.error("Fehler beim Löschen:", err);
+      toast.error("Löschen fehlgeschlagen ❌");
     }
   };
 
-  // ---- Initial laden ----
   useEffect(() => {
     fetchTasks();
   }, []);
