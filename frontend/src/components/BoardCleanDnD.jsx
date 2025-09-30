@@ -1,6 +1,7 @@
-// src/components/BoardCleanDnD.jsx
 import React, { useEffect, useState } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+import TaskCreationModal from "./modals/TaskCreationModal";
+import TaskEditModal from "./modals/TaskEditModal";
 
 function normalizeStationLabel(v) {
   const s = String(v ?? "Unassigned");
@@ -41,9 +42,7 @@ async function bulkSortServer(payload) {
 
 function buildSortPayload(state, keys) {
   const payload = [];
-  for (const k of keys) {
-    (state[k] || []).forEach((t, idx) => payload.push({ ...t, prioritaet: idx }));
-  }
+  for (const k of keys) (state[k] || []).forEach((t, idx) => payload.push({ ...t, prioritaet: idx }));
   return payload;
 }
 
@@ -67,6 +66,10 @@ export default function BoardCleanDnD() {
   const [labelByKey, setLabelByKey] = useState({}); // { [normKey]: Original-Label }
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
+
+  // Modals
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editTask, setEditTask] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -181,13 +184,66 @@ export default function BoardCleanDnD() {
     }
   };
 
+  // ---- Modal-Callbacks ----
+
+  // nach erfolgreichem POST aus dem CreationModal
+  const handleCreated = (saved) => {
+    const raw = saved?.arbeitsstation ?? "Unassigned";
+    const key = normalizeStationLabel(raw);
+
+    setLabelByKey((prev) => ({ ...prev, [key]: String(raw).trim() }));
+
+    setColumns((prev) => {
+      const list = prev[key] ? [...prev[key], saved] : [saved];
+      return { ...prev, [key]: list };
+    });
+
+    // Optional: Reihenfolge der betroffenen Spalte persistieren
+    const payload = buildSortPayload({ ...columns, [key]: (columns[key] || []).concat(saved) }, [key]);
+    bulkSortServer(payload).catch(() => {});
+  };
+
+  // nach erfolgreichem PUT aus dem EditModal
+  const handleSaved = (saved) => {
+    const oldKey = normalizeStationLabel(editTask?.arbeitsstation ?? "Unassigned");
+    const newRaw = saved?.arbeitsstation ?? "Unassigned";
+    const newKey = normalizeStationLabel(newRaw);
+
+    setLabelByKey((prev) => ({ ...prev, [newKey]: String(newRaw).trim() }));
+
+    setColumns((prev) => {
+      const draft = { ...prev };
+      // aus alter Spalte entfernen
+      draft[oldKey] = (draft[oldKey] || []).filter((t) => t.id !== saved.id);
+      // in neue Spalte einfügen (am Ende)
+      draft[newKey] = (draft[newKey] || []).concat(saved);
+      return draft;
+    });
+
+    // Optional: Reihenfolgen persistieren
+    const nextState = { ...columns };
+    nextState[oldKey] = (nextState[oldKey] || []).filter((t) => t.id !== saved.id);
+    nextState[newKey] = (nextState[newKey] || []).concat(saved);
+    const payload = buildSortPayload(nextState, oldKey === newKey ? [newKey] : [oldKey, newKey]);
+    bulkSortServer(payload).catch(() => {});
+  };
+
   if (loading) return <p style={{ padding: 16 }}>lade…</p>;
   if (err) return <pre style={{ whiteSpace: "pre-wrap", color: "red", padding: 16 }}>Fehler: {err}</pre>;
 
   const stationKeys = Object.keys(labelByKey).sort((a, b) => a.localeCompare(b));
+  const stationLabels = stationKeys.map((k) => labelByKey[k]);
 
   return (
     <div style={{ padding: 16 }}>
+      {/* Action-Bar */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+        <h1 style={{ margin: 0 }}>Board</h1>
+        <button onClick={() => setIsCreateOpen(true)} style={styles.btnPrimary}>
+          + Neue Aufgabe
+        </button>
+      </div>
+
       <DragDropContext onDragEnd={onDragEnd}>
         <div
           style={{
@@ -221,6 +277,7 @@ export default function BoardCleanDnD() {
                             ref={dProvided.innerRef}
                             {...dProvided.draggableProps}
                             {...dProvided.dragHandleProps}
+                            onClick={() => setEditTask(t)}
                             style={{
                               background: "white",
                               borderRadius: 8,
@@ -228,6 +285,7 @@ export default function BoardCleanDnD() {
                               marginBottom: 8,
                               boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
                               opacity: snapshot.isDragging ? 0.7 : 1,
+                              cursor: "pointer",
                               ...dProvided.draggableProps.style,
                             }}
                           >
@@ -259,6 +317,32 @@ export default function BoardCleanDnD() {
           })}
         </div>
       </DragDropContext>
+
+      {/* Modals */}
+      <TaskCreationModal
+        isOpen={isCreateOpen}
+        onClose={() => setIsCreateOpen(false)}
+        stations={stationLabels}
+        onCreated={handleCreated}
+      />
+
+      <TaskEditModal
+        isOpen={!!editTask}
+        onClose={() => setEditTask(null)}
+        task={editTask}
+        stations={stationLabels}
+        onSaved={handleSaved}
+      />
     </div>
   );
 }
+
+const styles = {
+  btnPrimary: {
+    padding: "8px 12px",
+    borderRadius: 6,
+    border: "1px solid #2563eb",
+    background: "#2563eb",
+    color: "#fff",
+  },
+};
