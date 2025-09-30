@@ -18,7 +18,7 @@ export default function TaskEditModal({
   task,
   stations = [],
   onSaved,
-  onDeleted, // <- neu: Parent-Callback nach erfolgreichem Löschen
+  onRequestDelete, // statt onDeleted: Parent soll Undo/Server übernehmen
 }) {
   const [bezeichnung, setBezeichnung] = useState("");
   const [info, setInfo] = useState("");
@@ -79,20 +79,10 @@ export default function TaskEditModal({
     if (deleting) return;
     const ok = window.confirm(`Aufgabe #${task.id} wirklich löschen?`);
     if (!ok) return;
-
+    setDeleting(true);
     try {
-      setDeleting(true);
-      const res = await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
-      if (!res.ok && res.status !== 204) {
-        const txt = await res.text().catch(() => "");
-        throw new Error(txt || `HTTP ${res.status}`);
-      }
-      // Parent kümmert sich um UI-Update + Success-Toast
-      onDeleted?.(task);
+      onRequestDelete?.(task);   // Parent erledigt Undo+Server
       onClose();
-    } catch (err) {
-      console.error(err);
-      toast.error("Löschen fehlgeschlagen.", { title: "Fehler" });
     } finally {
       setDeleting(false);
     }
