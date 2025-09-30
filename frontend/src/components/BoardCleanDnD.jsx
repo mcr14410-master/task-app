@@ -1,3 +1,4 @@
+// src/components/BoardCleanDnD.jsx
 import React, { useEffect, useRef, useState } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import useToast from "./ui/useToast";
@@ -56,10 +57,10 @@ function pickStationLabel(rec) {
   return (rec.bezeichnung ?? rec.name ?? rec.titel ?? rec.title ?? rec.arbeitsstation ?? rec.station ?? rec.kurzname ?? null);
 }
 
-// --- Text-Match für Filter ---
+// --- Suche/Highlight ---
 function matchesQuery(task, q) {
-  if (!q) return true;
-  const s = q.toLowerCase();
+  const s = (q || "").trim().toLowerCase();
+  if (!s) return true;
   const fields = [
     task?.bezeichnung,
     task?.teilenummer,
@@ -72,17 +73,49 @@ function matchesQuery(task, q) {
   return fields.some((v) => String(v).toLowerCase().includes(s));
 }
 
+function formatDate(d) {
+  if (!d) return null;
+  // ISO YYYY-MM-DD or ISO timestamp → human
+  try {
+    const dt = typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d) ? new Date(d + "T00:00:00") : new Date(d);
+    if (Number.isNaN(dt.getTime())) return d;
+    const yyyy = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, "0");
+    const dd = String(dt.getDate()).padStart(2, "0");
+    return `${dd}.${mm}.${yyyy}`;
+  } catch { return String(d); }
+}
+
+function dueState(endDatum) {
+  if (!endDatum) return { label: null, tone: "muted" };
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const end = /^\d{4}-\d{2}-\d{2}$/.test(endDatum) ? new Date(endDatum + "T00:00:00") : new Date(endDatum);
+  if (Number.isNaN(end.getTime())) return { label: endDatum, tone: "muted" };
+  const diff = (end - today) / (1000 * 60 * 60 * 24);
+  if (diff < 0) return { label: "Überfällig " + formatDate(endDatum), tone: "danger" };
+  if (diff <= 2) return { label: "Bald fällig " + formatDate(endDatum), tone: "warn" };
+  return { label: formatDate(endDatum), tone: "ok" };
+}
+
+function statusTone(status) {
+  const s = String(status || "").toUpperCase();
+  if (s.includes("BLOCK")) return "danger";
+  if (s.includes("DONE") || s.includes("ERLEDIGT")) return "ok";
+  if (s.includes("PROGRESS") || s.includes("WIP")) return "warn";
+  if (s.includes("NEU")) return "info";
+  return "info";
+}
+
 export default function BoardCleanDnD() {
-  const [columns, setColumns] = useState({});       // { [normKey]: Task[] }
-  const [labelByKey, setLabelByKey] = useState({}); // { [normKey]: Original-Label }
+  const [columns, setColumns] = useState({});
+  const [labelByKey, setLabelByKey] = useState({});
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
 
-  // Modals
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editTask, setEditTask] = useState(null);
 
-  // Suche/Filter
   const [query, setQuery] = useState("");
   const [stationFilter, setStationFilter] = useState("ALL");
 
@@ -114,7 +147,7 @@ export default function BoardCleanDnD() {
             const stJ = JSON.parse(stTxt);
             const arr = Array.isArray(stJ) ? stJ : Array.isArray(stJ?.content) ? stJ.content : Array.isArray(stJ?.items) ? stJ.items : [];
             stations = arr.map(pickStationLabel).filter(Boolean).map(String);
-          } catch { /* ignore */ }
+          } catch {}
         }
 
         const labels = {};
@@ -137,11 +170,7 @@ export default function BoardCleanDnD() {
     return () => { alive = false; pendingRef.current.forEach(({ timeout }) => clearTimeout(timeout)); };
   }, []);
 
-  // DnD – bei aktivem Textfilter deaktivieren (Indizes vs. gefilterte Listen!)
-  const textFilterActive = query.trim().length > 0;
-
   const onDragEnd = async (result) => {
-    if (textFilterActive) return; // Sicherheit
     const { source, destination } = result;
     if (!destination) return;
     if (source.droppableId === destination.droppableId && source.index === destination.index) return;
@@ -189,7 +218,6 @@ export default function BoardCleanDnD() {
     }
   };
 
-  // Create
   const handleCreated = (saved) => {
     const raw = saved?.arbeitsstation ?? "Unassigned";
     const key = normalizeStationLabel(raw);
@@ -205,7 +233,6 @@ export default function BoardCleanDnD() {
     toast.success("Aufgabe erstellt.");
   };
 
-  // Save
   const handleSaved = (saved) => {
     const oldKey = normalizeStationLabel(editTask?.arbeitsstation ?? "Unassigned");
     const newRaw = saved?.arbeitsstation ?? "Unassigned";
@@ -229,13 +256,11 @@ export default function BoardCleanDnD() {
     toast.success("Änderungen gespeichert.");
   };
 
-  // Delete mit Undo (5s)
   const handleRequestDelete = (task) => {
     const key = normalizeStationLabel(task?.arbeitsstation ?? "Unassigned");
     const index = (columns[key] || []).findIndex((t) => t.id === task.id);
     if (index < 0) return;
 
-    // Optimistisch entfernen
     setColumns((prev) => {
       const draft = { ...prev };
       draft[key] = (draft[key] || []).filter((t) => t.id !== task.id);
@@ -277,7 +302,6 @@ export default function BoardCleanDnD() {
         toast.success("Aufgabe endgültig gelöscht.");
       } catch (e) {
         console.error(e);
-        // Rollback
         setColumns((prev) => {
           const arr = [...(prev[key] || [])];
           arr.splice(index, 0, task);
@@ -292,31 +316,87 @@ export default function BoardCleanDnD() {
     pendingRef.current.set(task.id, { timeout, key, index, task });
   };
 
-  if (loading) return <p style={{ padding: 16 }}>lade…</p>;
-  if (err) return <pre style={{ whiteSpace: "pre-wrap", color: "red", padding: 16 }}>Fehler: {err}</pre>;
+  if (loading) return <p style={{ padding: 16, color: "#cbd5e1", background: "#0b1220", minHeight: "100vh" }}>lade…</p>;
+  if (err) return (
+    <div style={{ padding: 16, background: "#0b1220", minHeight: "100vh" }}>
+      <pre style={{ whiteSpace: "pre-wrap", color: "#f87171", background: "transparent" }}>Fehler: {err}</pre>
+    </div>
+  );
 
   const allStationKeys = Object.keys(labelByKey).sort((a, b) => a.localeCompare(b));
-  const visibleStationKeys =
-    stationFilter === "ALL" ? allStationKeys : allStationKeys.filter((k) => k === stationFilter);
+  const visibleStationKeys = stationFilter === "ALL" ? allStationKeys : allStationKeys.filter((k) => k === stationFilter);
+
+  const q = query.trim();
+  const queryActive = q.length > 0;
 
   return (
-    <div style={{ padding: 16 }}>
-      {/* kleine CSS für Fokus-Styles */}
+    <div style={{ padding: 16, background: "var(--bg)", minHeight: "100vh" }}>
+      {/* Dark Theme */}
       <style>{`
-        .task-card:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
-        .toolbar-input { padding: 8px; border-radius: 6px; border: 1px solid #d1d5db; min-width: 220px; }
-        .toolbar-select { padding: 8px; border-radius: 6px; border: 1px solid #d1d5db; }
-        .badge { font-size: 12px; color: #6b7280; }
+        :root {
+          --bg: #0b1220;
+          --panel: #0f172a;
+          --card: #111827;
+          --card-2: #0b1220;
+          --text: #e5e7eb;
+          --muted: #94a3b8;
+          --border: #1f2937;
+          --shadow: rgba(0,0,0,0.35);
+          --brand: #3b82f6;
+          --ok: #22c55e;
+          --warn: #f59e0b;
+          --danger: #ef4444;
+          --info: #38bdf8;
+          --match-bg: rgba(59,130,246,0.12);
+        }
+        .toolbar-input, .toolbar-select, .btn, .btn-primary {
+          transition: box-shadow .2s ease, transform .06s ease, background .2s ease, border-color .2s ease, color .2s ease;
+        }
+        .toolbar-input { padding: 8px; border-radius: 8px; border: 1px solid var(--border); min-width: 240px; background: var(--card); color: var(--text); }
+        .toolbar-input::placeholder { color: var(--muted); }
+        .toolbar-select { padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); }
+        .btn-primary { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--brand); background: var(--brand); color: white; }
+        .btn-primary:hover { filter: brightness(1.05); }
+        .col { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 8px 24px var(--shadow) }
+        .col h2 { color: var(--text); }
+        .badge { font-size: 12px; color: var(--muted); }
+        .task-card {
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 10px;
+          margin-bottom: 10px;
+          box-shadow: 0 4px 16px var(--shadow);
+          transition: transform .06s ease, box-shadow .18s ease, background .18s ease, opacity .18s ease, filter .18s ease;
+        }
+        .task-card:hover { transform: translateY(-1px); }
+        .task-card:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+        .task-card.match { box-shadow: 0 0 0 2px var(--brand) inset, 0 8px 24px var(--shadow); background: linear-gradient(0deg, var(--match-bg), var(--card)); }
+        .task-card.dim { opacity: .45; filter: grayscale(.5) blur(.2px); }
+        .pill { padding: 3px 8px; border-radius: 999px; font-size: 11px; border: 1px solid var(--border); color: var(--text); background: var(--card-2); }
+        .pill.ok { border-color: var(--ok); color: var(--ok); }
+        .pill.warn { border-color: var(--warn); color: var(--warn); }
+        .pill.danger { border-color: var(--danger); color: var(--danger); }
+        .pill.info { border-color: var(--info); color: var(--info); }
+        .meta-chip { padding: 2px 6px; border-radius: 6px; font-size: 11px; border: 1px dashed var(--border); color: var(--muted); background: transparent; }
+        .title { color: var(--text); }
+        .muted { color: var(--muted); }
+        .clamp {
+          display: -webkit-box;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 3;
+          overflow: hidden;
+        }
       `}</style>
 
-      {/* Toolbar: Suche + Station-Filter + Aktion */}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
-        <h1 style={{ margin: 0, marginRight: 8 }}>Board</h1>
+      {/* Toolbar */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+        <h1 style={{ margin: 0, marginRight: 8, color: "var(--text)" }}>Board</h1>
 
         <input
           className="toolbar-input"
           type="search"
-          placeholder="Suchen (Bezeichnung, Kunde, …)"
+          placeholder="Suchen (Bezeichnung, Kunde, …) – Treffer werden hervorgehoben"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           aria-label="Aufgaben durchsuchen"
@@ -335,82 +415,88 @@ export default function BoardCleanDnD() {
         </select>
 
         <div style={{ flex: 1 }} />
+        {queryActive && <span className="badge">Treffer gehighlighted, andere gedimmt</span>}
 
-        {textFilterActive && <span className="badge">DnD ist bei aktivem Textfilter deaktiviert</span>}
-
-        <button onClick={() => setIsCreateOpen(true)} style={styles.btnPrimary}>+ Neue Aufgabe</button>
+        <button onClick={() => setIsCreateOpen(true)} className="btn-primary">+ Neue Aufgabe</button>
       </div>
 
       <DragDropContext onDragEnd={onDragEnd}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
           {visibleStationKeys.map((key) => {
             const title = labelByKey[key];
-            // pro Spalte filtern
-            const listFull = columns[key] || [];
-            const list = listFull.filter((t) => matchesQuery(t, query));
+            const list = columns[key] || [];
+            const matchesInCol = list.reduce((acc, t) => acc + (matchesQuery(t, q) ? 1 : 0), 0);
 
             return (
               <Droppable droppableId={key} key={key}>
                 {(provided) => (
-                  <div
-                    ref={provided.innerRef}
-                    {...provided.droppableProps}
-                    style={{ width: "100%", background: "#f3f4f6", padding: 12, borderRadius: 8, minHeight: 60 }}
-                  >
+                  <div ref={provided.innerRef} {...provided.droppableProps} className="col" style={{ padding: 12, minHeight: 80 }}>
                     <h2 style={{ margin: "0 0 8px 0" }}>
-                      {title} <span className="badge">({list.length})</span>
+                      {title} <span className="badge">({matchesInCol}/{list.length})</span>
                     </h2>
 
-                    {list.map((t, index) => (
-                      <Draggable
-                        draggableId={t.id.toString()}
-                        index={index}
-                        key={t.id}
-                        isDragDisabled={textFilterActive}
-                      >
-                        {(dProvided, snapshot) => (
-                          <div
-                            ref={dProvided.innerRef}
-                            {...dProvided.draggableProps}
-                            {...dProvided.dragHandleProps}
-                            tabIndex={0}
-                            className="task-card"
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" || e.key === " ") {
-                                e.preventDefault();
-                                setEditTask(t);
-                              }
-                            }}
-                            onClick={() => setEditTask(t)}
-                            style={{
-                              background: "white",
-                              borderRadius: 8,
-                              padding: 8,
-                              marginBottom: 8,
-                              boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
-                              opacity: snapshot.isDragging ? 0.7 : 1,
-                              cursor: "pointer",
-                              ...dProvided.draggableProps.style,
-                            }}
-                          >
-                            <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                              <strong style={{ fontSize: 13 }}>{t.bezeichnung ?? "(ohne Bezeichnung)"}</strong>
-                              <span style={{ fontSize: 10, color: "#6b7280" }}>#{t.id}</span>
+                    {list.map((t, index) => {
+                      const isMatch = matchesQuery(t, q);
+                      const due = dueState(t.endDatum);
+                      const tone = statusTone(t.status);
+
+                      return (
+                        <Draggable draggableId={t.id.toString()} index={index} key={t.id}>
+                          {(dProvided, snapshot) => (
+                            <div
+                              ref={dProvided.innerRef}
+                              {...dProvided.draggableProps}
+                              {...dProvided.dragHandleProps}
+                              tabIndex={0}
+                              className={`task-card ${queryActive ? (isMatch ? "match" : "dim") : ""}`}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  setEditTask(t);
+                                }
+                              }}
+                              onClick={() => setEditTask(t)}
+                              style={{
+                                opacity: snapshot.isDragging ? 0.85 : undefined,
+                                cursor: "pointer",
+                                ...dProvided.draggableProps.style,
+                              }}
+                            >
+                              {/* Title + ID */}
+                              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
+                                <strong className="title" style={{ fontSize: 14 }}>{t.bezeichnung ?? "(ohne Bezeichnung)"}</strong>
+                                <span className="muted" style={{ fontSize: 11 }}>#{t.id}</span>
+                              </div>
+
+                              {/* Meta: Kunde + Teilenummer */}
+                              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                                {t.kunde && <span className="meta-chip">Kunde: {t.kunde}</span>}
+                                {t.teilenummer && <span className="meta-chip">Teilenr.: {t.teilenummer}</span>}
+                                {t.zuständig && <span className="meta-chip">Zuständig: {t.zuständig}</span>}
+                              </div>
+
+                              {/* Zusatzinfos */}
+                              {t["zusätzlicheInfos"] && (
+                                <div className="clamp" style={{ marginTop: 8, fontSize: 12, color: "var(--text)" }}>
+                                  {t["zusätzlicheInfos"]}
+                                </div>
+                              )}
+
+                              {/* Footer: Status + Due */}
+                              <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <span className={`pill ${tone}`} title={`Status: ${t.status ?? "-"}`}>
+                                  {t.status ?? "—"}
+                                </span>
+                                {due.label && <span className={`pill ${due.tone}`}>{due.label}</span>}
+                              </div>
                             </div>
-                            {t["zusätzlicheInfos"] && (
-                              <div style={{ marginTop: 4, fontSize: 12, color: "#4b5563" }}>{t["zusätzlicheInfos"]}</div>
-                            )}
-                            <div style={{ marginTop: 6, display: "flex", justifyContent: "space-between", fontSize: 11, color: "#6b7280" }}>
-                              <span>{t.status ?? "—"}</span>
-                              {t.endDatum && <span>{t.endDatum}</span>}
-                            </div>
-                          </div>
-                        )}
-                      </Draggable>
-                    ))}
+                          )}
+                        </Draggable>
+                      );
+                    })}
 
                     {provided.placeholder}
-                    {list.length === 0 && <div style={{ fontSize: 12, color: "#6b7280" }}>keine Tasks</div>}
+                    {list.length === 0 && <div className="muted" style={{ fontSize: 12 }}>keine Tasks</div>}
                   </div>
                 )}
               </Droppable>
@@ -437,13 +523,3 @@ export default function BoardCleanDnD() {
     </div>
   );
 }
-
-const styles = {
-  btnPrimary: {
-    padding: "8px 12px",
-    borderRadius: 6,
-    border: "1px solid #2563eb",
-    background: "#2563eb",
-    color: "#fff",
-  },
-};
