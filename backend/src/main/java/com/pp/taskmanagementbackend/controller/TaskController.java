@@ -23,6 +23,20 @@ public class TaskController {
         this.taskRepository = taskRepository;
     }
 
+    // --- 0) Alle Tasks (NEU) ---
+    @GetMapping
+    public List<Task> getAllTasks() {
+        return taskRepository.findAll();
+    }
+
+    // --- 0b) Einzel-Task lesen (optional, sinnvoll für Details) ---
+    @GetMapping("/{id}")
+    public ResponseEntity<Task> getOne(@PathVariable Long id) {
+        return taskRepository.findById(id)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
     // --- 1) Bulk-Sortierung / Stationswechsel ---
     @PutMapping("/sort")
     public ResponseEntity<Void> updateTasksSorting(@RequestBody List<@Valid Task> tasksToUpdate) {
@@ -36,11 +50,11 @@ public class TaskController {
         return taskService.findByStationNormalized(station);
     }
 
-    // --- 2b) Legacy (falls noch irgendwo genutzt) ---
-    @GetMapping("/{station}")
-    public List<Task> getTasksByStation(@PathVariable String station) {
-        return taskService.findByStationNormalized(station);
-    }
+    // --- 2b) (ENTFERNT/DEAKTIVIERT) Legacy-Route war kollisionsgefährdet:
+    // @GetMapping("/{station}")
+    // public List<Task> getTasksByStation(@PathVariable String station) {
+    //     return taskService.findByStationNormalized(station);
+    // }
 
     // --- 3) Task anlegen (Validation + Fallbacks) ---
     @PostMapping
