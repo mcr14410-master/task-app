@@ -1,119 +1,71 @@
-import React, { useState } from "react";
-import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
-import { useTasks } from "@/hooks/useTasks";
-import TaskItem from "./TaskItem";
-import TaskCreationModal from "./modals/TaskCreationModal";
-import TaskEditModal from "./modals/TaskEditModal";
+// src/components/TaskItem.jsx
+import React from "react";
 
-export default function TaskBoard() {
-  const { tasks, createTask, updateTask, loading } = useTasks();
-
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [editTask, setEditTask] = useState(null);
-
-  if (loading) return <p>Lade Aufgaben...</p>;
-
-  // Sicherstellen, dass wir wirklich ein Array haben
-  const list = Array.isArray(tasks) ? tasks : [];
-  // ---- Tasks nach Station gruppieren ----
-  const grouped = list.reduce((acc, task) => {
-    const key = task?.station ?? "Unassigned";
-    acc[key] = acc[key] || [];
-    acc[key].push(task);
-    return acc;
-  }, {});
-
-  const stations = Object.keys(grouped);
-
-  // ---- Drag & Drop Handler ----
-  const handleDragEnd = async (result) => {
-    const { source, destination, draggableId } = result;
-    if (!destination) return;
-
-    if (
-      source.droppableId === destination.droppableId &&
-      source.index === destination.index
-    ) {
-      return;
-    }
-
-    const taskId = parseInt(draggableId, 10);
-    const movedTask = tasks.find((t) => t.id === taskId);
-    if (!movedTask) return;
-
-    await updateTask(taskId, {
-      ...movedTask,
-      station: destination.droppableId,
+function formatDate(value) {
+  if (!value) return null;
+  // Reines YYYY-MM-DD -> in DE-Format umwandeln
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [y, m, d] = value.split("-");
+    return `${d}.${m}.${y}`;
+  }
+  // ISO-String oder Date-kompatibel
+  const dt = new Date(value);
+  if (!isNaN(dt.getTime())) {
+    return dt.toLocaleDateString("de-DE", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "2-digit",
     });
+  }
+  // Fallback: Rohwert anzeigen
+  return String(value);
+}
+
+export default function TaskItem({ task, onDelete }) {
+  const title = task?.bezeichnung ?? "(ohne Bezeichnung)";
+  // Achtung: Schlüssel mit Umlaut muss in eckigen Klammern angesprochen werden
+  const description =
+    (task && task["zusätzlicheInfos"]) ??
+    task?.zusatzlicheInfos ?? // falls mal ohne Umlaut gespeichert
+    "";
+
+  const due = task?.endDatum ? formatDate(task.endDatum) : null;
+  const station = task?.arbeitsstation ?? task?.status ?? "—";
+  const id = task?.id;
+
+  const handleDelete = (e) => {
+    e.stopPropagation(); // verhindert Öffnen des Edit-Modals
+    if (!onDelete) return;
+    const ok = window.confirm(`Aufgabe #${id} wirklich löschen?`);
+    if (ok) onDelete(id);
   };
 
   return (
-    <>
-      {/* Action-Bar oben */}
-      <div className="flex justify-between items-center p-4">
-        <h1 className="text-xl font-bold">Task Board</h1>
-        <button
-          onClick={() => setIsCreateOpen(true)}
-          className="px-3 py-1 bg-blue-600 text-white rounded shadow hover:bg-blue-700"
-        >
-          + Neue Aufgabe
-        </button>
+    <div className="bg-white rounded-md shadow p-2 cursor-pointer hover:shadow-lg transition">
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="font-semibold text-sm">{title}</h3>
+
+        {onDelete && (
+          <button
+            type="button"
+            onClick={handleDelete}
+            title="Löschen"
+            className="text-red-600 text-xs px-2 py-1 border border-red-200 rounded hover:bg-red-50"
+          >
+            Löschen
+          </button>
+        )}
       </div>
 
-      {/* Drag & Drop Board */}
-      <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="flex gap-4 overflow-x-auto p-4">
-          {stations.map((station) => (
-            <Droppable droppableId={station} key={station}>
-              {(provided) => (
-                <div
-                  ref={provided.innerRef}
-                  {...provided.droppableProps}
-                  className="w-64 bg-gray-100 p-2 rounded-md shadow-md flex flex-col"
-                >
-                  <h2 className="text-lg font-semibold mb-2">{station}</h2>
-                  {grouped[station].map((task, index) => (
-                    <Draggable
-                      key={task.id}
-                      draggableId={task.id.toString()}
-                      index={index}
-                    >
-                      {(provided, snapshot) => (
-                        <div
-                          ref={provided.innerRef}
-                          {...provided.draggableProps}
-                          {...provided.dragHandleProps}
-                          className={`mb-2 ${
-                            snapshot.isDragging ? "opacity-70" : ""
-                          }`}
-                          onClick={() => setEditTask(task)} // Klick = Edit öffnen
-                        >
-                          <TaskItem task={task} />
-                        </div>
-                      )}
-                    </Draggable>
-                  ))}
-                  {provided.placeholder}
-                </div>
-              )}
-            </Droppable>
-          ))}
-        </div>
-      </DragDropContext>
+      {description && (
+        <p className="text-xs text-gray-600 mt-1">{description}</p>
+      )}
 
-      {/* Modals */}
-      <TaskCreationModal
-        isOpen={isCreateOpen}
-        onClose={() => setIsCreateOpen(false)}
-        onSubmit={createTask}
-      />
-
-      <TaskEditModal
-        isOpen={!!editTask}
-        onClose={() => setEditTask(null)}
-        task={editTask}
-        onSubmit={(updated) => updateTask(updated.id, updated)}
-      />
-    </>
+      <div className="flex flex-wrap items-center justify-between mt-2 text-xs text-gray-500 gap-2">
+        <span>#{id}</span>
+        <span className="px-2 py-0.5 rounded bg-gray-200">{station}</span>
+        {due && <span>{due}</span>}
+      </div>
+    </div>
   );
 }

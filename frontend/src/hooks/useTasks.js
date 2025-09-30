@@ -11,15 +11,21 @@ export function useTasks() {
     setLoading(true);
     try {
       const data = await taskService.getAll();
-      // Robust normalisieren: akzeptiert Array, {content:[]}, {items:[]}, sonst []
-      const normalized = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.content)
-        ? data.content
-        : Array.isArray(data?.items)
-        ? data.items
-        : [];
-      setTasks(normalized);
+
+      // 1) Array aus vielen möglichen Formen robust extrahieren
+      let arr = [];
+      if (Array.isArray(data)) arr = data;
+      else if (Array.isArray(data?.content)) arr = data.content;
+      else if (Array.isArray(data?.items)) arr = data.items;
+      else if (Array.isArray(data?.tasks)) arr = data.tasks;
+      else if (Array.isArray(data?._embedded?.tasks)) arr = data._embedded.tasks;
+      else if (data && typeof data === "object") {
+        // Notfalls alles Values nehmen (z.B. wenn es ein Objekt-Map ist)
+        const vals = Object.values(data);
+        if (vals.every(v => typeof v === "object")) arr = vals;
+      }
+
+      setTasks(Array.isArray(arr) ? arr : []);
     } catch (err) {
       console.error("Fehler beim Laden der Aufgaben:", err);
       setTasks([]); // Fallback verhindert reduce-Fehler
@@ -27,6 +33,7 @@ export function useTasks() {
       setLoading(false);
     }
   };
+
 
   // ---- Neue Task anlegen ----
   const createTask = async (task) => {
