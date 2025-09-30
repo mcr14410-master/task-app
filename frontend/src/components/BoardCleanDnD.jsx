@@ -7,7 +7,11 @@ import TaskEditModal from "./modals/TaskEditModal";
 
 function normalizeStationLabel(v) {
   const s = String(v ?? "Unassigned");
-  return s.replace(/\u00A0/g, " ").replace(/[\u200B-\u200D\uFEFF]/g, "").normalize("NFKC").replace(/\s+/g, " ").trim();
+  return s.replace(/\u00A0/g, " ")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 const sortTasksInitial = (arr) =>
@@ -27,15 +31,12 @@ async function updateTaskServer(id, body) {
   if (!res.ok) throw new Error((await res.text().catch(() => "")) || `HTTP ${res.status}`);
   try { return await res.json(); } catch { return body; }
 }
-
 async function deleteTaskServer(id) {
   const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
   if (!res.ok && res.status !== 204) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(txt || `HTTP ${res.status}`);
+    const txt = await res.text().catch(() => ""); throw new Error(txt || `HTTP ${res.status}`);
   }
 }
-
 async function bulkSortServer(payload) {
   const res = await fetch(`/api/tasks/sort`, {
     method: "PUT",
@@ -44,20 +45,18 @@ async function bulkSortServer(payload) {
   });
   if (!res.ok) throw new Error((await res.text().catch(() => "")) || `HTTP ${res.status}`);
 }
-
 function buildSortPayload(state, keys) {
   const payload = [];
   for (const k of keys) (state[k] || []).forEach((t, idx) => payload.push({ ...t, prioritaet: idx }));
   return payload;
 }
-
 function pickStationLabel(rec) {
   if (rec == null) return null;
   if (typeof rec === "string") return rec;
   return (rec.bezeichnung ?? rec.name ?? rec.titel ?? rec.title ?? rec.arbeitsstation ?? rec.station ?? rec.kurzname ?? null);
 }
 
-// --- Suche/Highlight ---
+// Suche/Highlight
 function matchesQuery(task, q) {
   const s = (q || "").trim().toLowerCase();
   if (!s) return true;
@@ -84,26 +83,36 @@ function formatDate(d) {
     return `${dd}.${mm}.${yyyy}`;
   } catch { return String(d); }
 }
-
-function dueState(endDatum) {
-  if (!endDatum) return { label: null, tone: "muted" };
+function dueColors(endDatum) {
+  if (!endDatum) return { color: "#94a3b8", border: "transparent", label: null };
   const today = new Date(); today.setHours(0,0,0,0);
-  const end = /^\d{4}-\d{2}-\d{2}$/.test(endDatum) ? new Date(endDatum + "T00:00:00") : new Date(endDatum);
-  if (Number.isNaN(end.getTime())) return { label: endDatum, tone: "muted" };
-  const diff = (end - today) / (1000 * 60 * 60 * 24);
-  if (diff < 0) return { label: "Überfällig " + formatDate(endDatum), tone: "danger" };
-  if (diff <= 2) return { label: "Bald fällig " + formatDate(endDatum), tone: "warn" };
-  return { label: formatDate(endDatum), tone: "ok" };
+  const dt = /^\d{4}-\d{2}-\d{2}$/.test(endDatum) ? new Date(endDatum + "T00:00:00") : new Date(endDatum);
+  if (Number.isNaN(dt.getTime())) return { color: "#94a3b8", border: "transparent", label: endDatum };
+  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+  if (dt < today) return { color: "#ef4444", border: "#ef4444", label: "Überfällig " + formatDate(endDatum) };
+  if (dt.getTime() === today.getTime()) return { color: "#f59e0b", border: "#f59e0b", label: "Fällig heute" };
+  if (dt.getTime() === tomorrow.getTime()) return { color: "#fde047", border: "#fde047", label: "Fällig morgen" };
+  return { color: "#22c55e", border: "transparent", label: formatDate(endDatum) };
 }
-
 function statusTone(status) {
   const s = String(status || "").toUpperCase();
-  if (s.includes("BLOCK")) return "danger";
-  if (s.includes("DONE") || s.includes("ERLEDIGT")) return "ok";
-  if (s.includes("PROGRESS") || s.includes("WIP")) return "warn";
-  if (s.includes("NEU")) return "info";
-  return "info";
+  if (s.includes("BLOCK")) return { cls: "danger", label: status };
+  if (s.includes("DONE") || s.includes("ERLEDIGT")) return { cls: "ok", label: status };
+  if (s.includes("PROGRESS") || s.includes("WIP")) return { cls: "warn", label: status };
+  if (s.includes("NEU")) return { cls: "info", label: status };
+  return { cls: "info", label: status ?? "—" };
 }
+
+// kleine Inline-Icons (kein externes Paket nötig)
+const Icon = ({ path, size = 12, stroke = "#9ca3af" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flex: "0 0 auto" }}>
+    {path}
+  </svg>
+);
+const IconTag = (p) => <Icon {...p} path={<g><path d="M20.59 13.41L11 3H4v7l9.59 9.59a2 2 0 0 0 2.82 0l4.18-4.18a2 2 0 0 0 0-2.82z"/><circle cx="6.5" cy="6.5" r="1.5"/></g>} />;
+const IconUser = (p) => <Icon {...p} path={<g><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></g>} />;
+const IconClock = (p) => <Icon {...p} path={<g><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></g>} />;
+const IconCalendar = (p) => <Icon {...p} path={<g><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></g>} />;
 
 export default function BoardCleanDnD() {
   const [columns, setColumns] = useState({});
@@ -134,9 +143,7 @@ export default function BoardCleanDnD() {
           const txt = await tasksRes.value.text();
           const j = JSON.parse(txt);
           tasks = Array.isArray(j) ? j : Array.isArray(j?.content) ? j.content : Array.isArray(j?.items) ? j.items : [];
-        } else {
-          throw new Error(`Fehler bei /api/tasks: ${String(tasksRes.reason)}`);
-        }
+        } else { throw new Error(`Fehler bei /api/tasks: ${String(tasksRes.reason)}`); }
 
         let stations = [];
         if (stationsRes.status === "fulfilled" && stationsRes.value.ok) {
@@ -329,7 +336,6 @@ export default function BoardCleanDnD() {
 
   return (
     <div style={{ padding: 16, background: "var(--bg)", minHeight: "100vh" }}>
-      {/* Dark Theme + Karten-Styling */}
       <style>{`
         :root {
           --bg: #0b1220;
@@ -357,29 +363,25 @@ export default function BoardCleanDnD() {
           background: var(--card);
           border: 1px solid var(--border);
           border-radius: 12px;
-          padding: 10px;
+          padding: 12px;
           margin-bottom: 10px;
           box-shadow: 0 4px 16px var(--shadow);
-          transition: transform .06s ease, box-shadow .18s ease, background .18s ease, opacity .18s ease, filter .18s ease;
+          transition: transform .12s ease, box-shadow .12s ease, background .18s ease, opacity .18s ease, filter .18s ease;
         }
-        .task-card:hover { transform: translateY(-1px); }
+        .task-card:hover { transform: translateY(-1px) scale(1.02); }
         .task-card:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
         .task-card.match { box-shadow: 0 0 0 2px var(--brand) inset, 0 8px 24px var(--shadow); background: linear-gradient(0deg, var(--match-bg), var(--card)); }
         .task-card.dim { opacity: .45; filter: grayscale(.5) blur(.2px); }
-        .pill { padding: 3px 8px; border-radius: 999px; font-size: 11px; border: 1px solid var(--border); color: var(--text); background: var(--card-2); }
-        .pill.ok { border-color: var(--ok); color: var(--ok); }
-        .pill.warn { border-color: var(--warn); color: var(--warn); }
-        .pill.danger { border-color: var(--danger); color: var(--danger); }
-        .pill.info { border-color: var(--info); color: var(--info); }
-
-        /* Backup-ähnliche Label/Value-Aufteilung */
-        .kv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; margin-top: 8px; }
-        .kv { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
-        .kv-label { width: 78px; flex: 0 0 auto; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
-        .kv-value { font-size: 12px; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .title { color: var(--text); }
-        .muted { color: var(--muted); }
-        .clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+        .pill { padding: 4px 10px; border-radius: 999px; font-size: 11px; border: 1px solid var(--border); color: #fff; text-transform: uppercase; font-weight: 700; }
+        .pill.ok { background: var(--ok); border-color: var(--ok); }
+        .pill.warn { background: var(--warn); border-color: var(--warn); }
+        .pill.danger { background: var(--danger); border-color: var(--danger); }
+        .pill.info { background: var(--info); border-color: var(--info); }
+        .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+        .meta { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; min-width: 0; }
+        .meta-right { font-size: 12px; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .title { color: var(--text); font-size: 14px; font-weight: 600; margin: 0 0 8px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .desc { margin: 8px 0 0 0; font-size: 12.5px; color: #cbd5e1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       `}</style>
 
       {/* Toolbar */}
@@ -430,77 +432,95 @@ export default function BoardCleanDnD() {
 
                     {list.map((t, index) => {
                       const isMatch = matchesQuery(t, q);
-                      const due = dueState(t.endDatum);
-                      const tone = statusTone(t.status);
+                      const { color: dueColor, border: dueBorder, label: dueLabel } = dueColors(t.endDatum);
+                      const st = statusTone(t.status);
 
+                      // DnD Transform + extra Effekt beim Drag
+                      const dStyle = {};
+                      // provided.draggableProps.style wird in-line gemischt
                       return (
                         <Draggable draggableId={t.id.toString()} index={index} key={t.id}>
-                          {(dProvided, snapshot) => (
-                            <div
-                              ref={dProvided.innerRef}
-                              {...dProvided.draggableProps}
-                              {...dProvided.dragHandleProps}
-                              tabIndex={0}
-                              className={`task-card ${queryActive ? (isMatch ? "match" : "dim") : ""}`}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" || e.key === " ") {
-                                  e.preventDefault();
-                                  setEditTask(t);
-                                }
-                              }}
-                              onClick={() => setEditTask(t)}
-                              style={{
-                                opacity: snapshot.isDragging ? 0.85 : undefined,
-                                cursor: "pointer",
-                                ...dProvided.draggableProps.style,
-                              }}
-                            >
-                              {/* Kopfzeile: Titel + ID */}
-                              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "baseline" }}>
-                                <strong className="title" style={{ fontSize: 14, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                  {t.bezeichnung ?? "(ohne Bezeichnung)"}
-                                </strong>
-                                <span className="muted" style={{ fontSize: 11, flex: "0 0 auto" }}>#{t.id}</span>
-                              </div>
+                          {(dProvided, snapshot) => {
+                            const base = dProvided.draggableProps.style || {};
+                            const baseTransform = base.transform || "";
+                            const extra = snapshot.isDragging ? " rotate(2deg) scale(1.03)" : "";
+                            const composedTransform = `${baseTransform || ""}${extra}`;
 
-                              {/* Backup-ähnliche Info-Zeilen */}
-                              <div className="kv-grid">
-                                {t.kunde && (
-                                  <div className="kv"><span className="kv-label">Kunde</span><span className="kv-value" title={t.kunde}>{t.kunde}</span></div>
-                                )}
-                                {t.teilenummer && (
-                                  <div className="kv"><span className="kv-label">Teilenr.</span><span className="kv-value" title={t.teilenummer}>{t.teilenummer}</span></div>
-                                )}
-                                {t.zuständig && (
-                                  <div className="kv"><span className="kv-label">Zuständig</span><span className="kv-value" title={t.zuständig}>{t.zuständig}</span></div>
-                                )}
-                                {(t.aufwandStunden ?? 0) > 0 && (
-                                  <div className="kv"><span className="kv-label">Aufwand</span><span className="kv-value">{t.aufwandStunden} h</span></div>
-                                )}
-                              </div>
+                            return (
+                              <div
+                                ref={dProvided.innerRef}
+                                {...dProvided.draggableProps}
+                                {...dProvided.dragHandleProps}
+                                tabIndex={0}
+                                className={`task-card ${queryActive ? (isMatch ? "match" : "dim") : ""}`}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setEditTask(t); }
+                                }}
+                                onClick={() => setEditTask(t)}
+                                style={{
+                                  ...base,
+                                  transform: composedTransform || base.transform,
+                                  border: `2px solid ${dueBorder}`,
+                                  cursor: "pointer",
+                                }}
+                              >
+                                {/* Titel */}
+                                <h4 className="title">{t.bezeichnung ?? t.titel ?? "(ohne Bezeichnung)"}</h4>
 
-                              {/* Zusatzinfos */}
-                              {t["zusätzlicheInfos"] && (
-                                <div className="clamp" style={{ marginTop: 8, fontSize: 12, color: "var(--text)" }}>
-                                  {t["zusätzlicheInfos"]}
+                                {/* Zeile 1: Teilenummer | Kunde */}
+                                <div className="row" style={{ marginBottom: 6 }}>
+                                  <div className="meta" title={t.teilenummer || "-"}>
+                                    <IconTag stroke="#9ca3af" />
+                                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                      {t.teilenummer || "-"}
+                                    </span>
+                                  </div>
+                                  <div className="meta-right" title={t.kunde || "-"}>
+                                    {t.kunde || "-"}
+                                  </div>
                                 </div>
-                              )}
 
-                              {/* Footer: Status & Fälligkeit */}
-                              <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                                <span className={`pill ${tone}`} title={`Status: ${t.status ?? "-"}`}>
-                                  {t.status ?? "—"}
-                                </span>
-                                {due.label && <span className={`pill ${due.tone}`}>{due.label}</span>}
+                                {/* Zeile 2: Zuständig | Aufwand */}
+                                <div className="row" style={{ marginBottom: 6 }}>
+                                  <div className="meta" title={t.zuständig || "offen"}>
+                                    <IconUser stroke="#9ca3af" />
+                                    <span>{t.zuständig || "offen"}</span>
+                                  </div>
+                                  <div className="meta" title={`${t.aufwandStunden || 0}h`}>
+                                    <IconClock stroke="#9ca3af" />
+                                    <span>{t.aufwandStunden ? `${t.aufwandStunden}h` : "0h"}</span>
+                                  </div>
+                                </div>
+
+                                {/* Zeile 3: Datum links (falls vorhanden) | Status rechts */}
+                                <div className="row">
+                                  {t.endDatum ? (
+                                    <div className="meta" title={formatDate(t.endDatum)} style={{ color: dueColor }}>
+                                      <IconCalendar stroke={dueColor} />
+                                      <span style={{ color: dueColor }}>{formatDate(t.endDatum)}</span>
+                                    </div>
+                                  ) : <div />}
+
+                                  <span className={`pill ${st.cls}`} title={`Status: ${st.label}`}>
+                                    {st.label}
+                                  </span>
+                                </div>
+
+                                {/* Zusatzinfos (eine Zeile, Ellipsis) */}
+                                { (t["zusätzlicheInfos"] ?? t.zusatzlicheInfos) && (
+                                  <p className="desc" title={t["zusätzlicheInfos"] ?? t.zusatzlicheInfos}>
+                                    {t["zusätzlicheInfos"] ?? t.zusatzlicheInfos}
+                                  </p>
+                                )}
                               </div>
-                            </div>
-                          )}
+                            );
+                          }}
                         </Draggable>
                       );
                     })}
 
                     {provided.placeholder}
-                    {list.length === 0 && <div className="muted" style={{ fontSize: 12 }}>keine Tasks</div>}
+                    {list.length === 0 && <div className="badge" style={{ fontSize: 12 }}>keine Tasks</div>}
                   </div>
                 )}
               </Droppable>
