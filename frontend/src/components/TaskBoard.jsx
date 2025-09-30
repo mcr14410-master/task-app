@@ -13,10 +13,13 @@ export default function TaskBoard() {
 
   if (loading) return <p>Lade Aufgaben...</p>;
 
+  // Sicherstellen, dass wir wirklich ein Array haben
+  const list = Array.isArray(tasks) ? tasks : [];
   // ---- Tasks nach Station gruppieren ----
-  const grouped = tasks.reduce((acc, task) => {
-    acc[task.station] = acc[task.station] || [];
-    acc[task.station].push(task);
+  const grouped = list.reduce((acc, task) => {
+    const key = task?.station ?? "Unassigned";
+    acc[key] = acc[key] || [];
+    acc[key].push(task);
     return acc;
   }, {});
 

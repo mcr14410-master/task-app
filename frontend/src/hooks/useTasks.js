@@ -11,10 +11,18 @@ export function useTasks() {
     setLoading(true);
     try {
       const data = await taskService.getAll();
-      setTasks(data);
+      // Robust normalisieren: akzeptiert Array, {content:[]}, {items:[]}, sonst []
+      const normalized = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.content)
+        ? data.content
+        : Array.isArray(data?.items)
+        ? data.items
+        : [];
+      setTasks(normalized);
     } catch (err) {
       console.error("Fehler beim Laden der Aufgaben:", err);
-      toast.error("Fehler beim Laden der Aufgaben");
+      setTasks([]); // Fallback verhindert reduce-Fehler
     } finally {
       setLoading(false);
     }
