@@ -1,13 +1,11 @@
 // src/components/modals/TaskEditModal.jsx
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 const stationNamesFrom = (stations) => {
   if (!Array.isArray(stations)) return [];
   return stations
     .map((s) =>
-      typeof s === "string"
-        ? s
-        : s?.name ?? s?.bezeichnung ?? s?.title ?? s?.titel ?? ""
+      typeof s === "string" ? s : s?.name ?? s?.bezeichnung ?? s?.title ?? s?.titel ?? ""
     )
     .filter(Boolean);
 };
@@ -33,6 +31,10 @@ const toInputDate = (d) => {
   } catch { return ""; }
 };
 
+// ✨ Dichte + Animation feinjustierbar
+const DENSE = true;
+const MODAL_DUR_MS = 260;
+
 const ui = {
   overlay: {
     position: "fixed", inset: 0, background: "rgba(3,10,22,0.65)", backdropFilter: "blur(6px)",
@@ -45,66 +47,55 @@ const ui = {
     width: 640, maxWidth: "100%", maxHeight: "85vh", overflowY: "auto",
     boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
   },
-  container: { padding: "20px 22px" },
+  container: { padding: DENSE ? "18px 20px" : "20px 22px" },
   header: {
     display: "flex", justifyContent: "space-between", alignItems: "baseline",
-    marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid #233145",
+    marginBottom: 8, paddingBottom: 6, borderBottom: "1px solid #233145",
   },
   titleRow: { display: "flex", alignItems: "baseline", gap: 10 },
-  title: { fontSize: "1.1rem", color: "#93c5fd", margin: 0, letterSpacing: ".2px" },
+  title: { fontSize: "1.08rem", color: "#93c5fd", margin: 0, letterSpacing: ".2px" },
   idBadge: {
-    padding: "2px 8px",
-    borderRadius: 999,
-    border: "1px solid #1e3a8a",
-    background: "linear-gradient(180deg,#0f172a,#0b1220)",
-    color: "#dbeafe",
-    fontSize: ".82rem",
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 6,
+    padding: "2px 8px", borderRadius: 999, border: "1px solid #1e3a8a",
+    background: "linear-gradient(180deg,#0f172a,#0b1220)", color: "#dbeafe",
+    fontSize: ".82rem", display: "inline-flex", alignItems: "center", gap: 6,
     boxShadow: "0 0 0 2px rgba(59,130,246,.15), 0 0 12px rgba(59,130,246,.25)",
   },
   idMono: { fontVariantNumeric: "tabular-nums", letterSpacing: ".02em" },
   close: { background: "transparent", border: 0, color: "#9ca3af", fontSize: 20, cursor: "pointer", padding: 4, borderRadius: 8 },
 
-  section: { background: "linear-gradient(180deg,#0b1220,#0f172a)", border: "1px solid #1f2937", padding: 12, borderRadius: 10, marginBottom: 10 },
+  section: { background: "linear-gradient(180deg,#0b1220,#0f172a)", border: "1px solid #1f2937", padding: DENSE ? 10 : 12, borderRadius: 10, marginBottom: DENSE ? 8 : 10 },
   sectionTitle: { margin: "0 0 8px 0", fontSize: "0.78rem", color: "#94a3b8", borderBottom: "1px dashed #233145", paddingBottom: 5, textTransform: "uppercase", fontWeight: 700, letterSpacing: ".06em" },
 
   label: { display: "block", marginBottom: 5, fontWeight: 700, color: "#d1d5db", fontSize: ".88rem" },
   inputBase: {
-    width: "100%", padding: "8px 10px", border: "1px solid #243146", borderRadius: 9,
+    width: "100%", padding: DENSE ? "7px 9px" : "8px 10px", border: "1px solid #243146", borderRadius: 9,
     background: "linear-gradient(180deg,#0f172a,#0b1220)", color: "#e5e7eb", fontSize: ".92rem",
     outline: "none", boxSizing: "border-box", transition: "border-color .12s ease, box-shadow .12s ease",
   },
   inputFocus: { borderColor: "#3b82f6", boxShadow: "0 0 0 3px rgba(59,130,246,.18)" },
-  grid2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 },
+  grid2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: DENSE ? 10 : 12 },
   textarea: { minHeight: 86, resize: "vertical" },
 
-  footer: { marginTop: 10, display: "flex", justifyContent: "space-between", gap: 8, paddingTop: 10, borderTop: "1px solid #233145" },
-  ghost: { padding: "9px 12px", background: "transparent", color: "#93c5fd", border: "1px dashed #1e3a8a", borderRadius: 9, cursor: "pointer", fontWeight: 700 },
-  danger: { padding: "9px 16px", background: "linear-gradient(180deg,#dc2626,#b91c1c)", color: "#fff", border: "1px solid #7f1d1d", borderRadius: 9, cursor: "pointer", fontWeight: 800 },
-  secondary: { padding: "9px 16px", background: "linear-gradient(180deg,#111827,#0b1220)", color: "#e5e7eb", border: "1px solid #233145", borderRadius: 9, cursor: "pointer", fontWeight: 700 },
-  primary: { padding: "9px 16px", background: "linear-gradient(180deg,#22c55e,#16a34a)", color: "#fff", border: "1px solid #065f46", borderRadius: 9, cursor: "pointer", fontWeight: 800 },
+  footer: { marginTop: DENSE ? 8 : 10, display: "flex", justifyContent: "space-between", gap: 8, paddingTop: DENSE ? 8 : 10, borderTop: "1px solid #233145" },
+  ghost: { padding: DENSE ? "8px 12px" : "9px 12px", background: "transparent", color: "#93c5fd", border: "1px dashed #1e3a8a", borderRadius: 9, cursor: "pointer", fontWeight: 700 },
+  danger: { padding: DENSE ? "8px 14px" : "9px 16px", background: "linear-gradient(180deg,#dc2626,#b91c1c)", color: "#fff", border: "1px solid #7f1d1d", borderRadius: 9, cursor: "pointer", fontWeight: 800 },
+  secondary: { padding: DENSE ? "8px 14px" : "9px 16px", background: "linear-gradient(180deg,#111827,#0b1220)", color: "#e5e7eb", border: "1px solid #233145", borderRadius: 9, cursor: "pointer", fontWeight: 700 },
+  primary: { padding: DENSE ? "8px 14px" : "9px 16px", background: "linear-gradient(180deg,#22c55e,#16a34a)", color: "#fff", border: "1px solid #065f46", borderRadius: 9, cursor: "pointer", fontWeight: 800 },
 
   badgeRow: { display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 },
   badge: (bg, selected) => ({
-    background: bg, color: "#fff", padding: "5px 9px", borderRadius: 999, fontSize: ".76rem", fontWeight: 800,
+    background: bg, color: "#fff", padding: DENSE ? "4px 8px" : "5px 9px", borderRadius: 999, fontSize: ".76rem", fontWeight: 800,
     border: `1px solid ${selected ? "#fff" : "#1f2937"}`, boxShadow: selected ? "0 0 0 3px rgba(255,255,255,.12)" : "none",
     cursor: "pointer", userSelect: "none",
   }),
 };
 
-export default function TaskEditModal({
-  isOpen,
-  task,
-  stations = [],
-  onSaved,
-  onClose,
-  onRequestDelete,
+function TaskEditModal({
+  isOpen, task, stations = [], onSaved, onClose, onRequestDelete,
 }) {
   const [focusKey, setFocusKey] = useState(null);
   const [shake, setShake] = useState(false);
-  const names = stationNamesFrom(stations);
+  const names = useMemo(() => stationNamesFrom(stations), [stations]);
   const modalRef = useRef(null);
   const formRef = useRef(null);
   const titleId = "edit-modal-title";
@@ -114,11 +105,11 @@ export default function TaskEditModal({
     aufwandStunden: 0, zuständig: "", zusätzlicheInfos: "",
     arbeitsstation: "Unassigned", id: null, status: "NEU",
   });
-  const initialTaskRef = useRef(taskData); // hält Snapshot beim Öffnen
+  const initialTaskRef = useRef(taskData);
   const [isSaving, setIsSaving] = useState(false);
   const [submitError, setSubmitError] = useState(null);
 
-  // Beim Öffnen / Taskwechsel: Daten übernehmen + Fehler zurücksetzen
+  // Daten beim Öffnen übernehmen + Errors resetten
   useEffect(() => {
     if (!task) return;
     const snapshot = {
@@ -135,8 +126,8 @@ export default function TaskEditModal({
     };
     setTaskData(snapshot);
     initialTaskRef.current = snapshot;
-    setSubmitError(null); // BUGFIX: alte Fehlermeldungen nicht anzeigen
-  }, [task?.id, isOpen]); // reset auch beim erneuten Öffnen
+    setSubmitError(null);
+  }, [task?.id, isOpen]);
 
   const handleChange = (e) => {
     const { name, value, type } = e.target;
@@ -169,7 +160,7 @@ export default function TaskEditModal({
 
   const handleDelete = () => { onRequestDelete?.(task); onClose?.(); };
 
-  // NEU: Reset auf ursprüngliche Werte (beim Öffnen)
+  // Reset auf ursprüngliche Werte (beim Öffnen)
   const handleReset = () => {
     setTaskData(initialTaskRef.current);
     setSubmitError(null);
@@ -181,15 +172,14 @@ export default function TaskEditModal({
   // Focus-Trap + ESC + Ctrl/Cmd+Enter
   useEffect(() => {
     if (!isOpen) return;
-    const node = modalRef.current;
-    if (!node) return;
+    const node = modalRef.current; if (!node) return;
 
     const firstInput = node.querySelector("#bezeichnung");
     setTimeout(() => { firstInput?.focus(); }, 0);
 
-    const onKeyDown = (e) => {
-      if (e.key === "Escape") { e.preventDefault(); onClose?.(); return; }
-      if ((e.key === "Enter") && (e.ctrlKey || e.metaKey)) { e.preventDefault(); formRef.current?.requestSubmit(); return; }
+    const onKeyDown = (ev) => {
+      if (ev.key === "Escape") { ev.preventDefault(); onClose?.(); return; }
+      if ((ev.key === "Enter") && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); formRef.current?.requestSubmit(); return; }
     };
 
     node.addEventListener("keydown", onKeyDown);
@@ -197,8 +187,8 @@ export default function TaskEditModal({
   }, [isOpen, onClose]);
 
   // Overlay-Klick → valid? close : shake + focus + error
-  const handleOverlayClick = (e) => {
-    e.stopPropagation();
+  const handleOverlayClick = (ev) => {
+    ev.stopPropagation();
     const v = validate();
     if (v) {
       setSubmitError(v);
@@ -219,7 +209,7 @@ export default function TaskEditModal({
   return (
     <div style={ui.overlay} onClick={handleOverlayClick}>
       <style>{`
-        :root { --modal-dur: 220ms; }
+        :root { --modal-dur: ${MODAL_DUR_MS}ms; }
         @keyframes modalOverlayIn { from { opacity: 0 } to { opacity: 1 } }
         @keyframes modalScaleIn { from { opacity: 0; transform: translateY(6px) scale(.985) } to { opacity: 1; transform: translateY(0) scale(1) } }
         @keyframes modalShake {
@@ -228,6 +218,7 @@ export default function TaskEditModal({
           30%, 50%, 70% { transform: translateX(-4px); }
           40%, 60% { transform: translateX(4px); }
         }
+        @media (prefers-reduced-motion: reduce) { [style*="modalOverlayIn"], [style*="modalScaleIn"], [style*="modalShake"] { animation: none !important; } }
       `}</style>
       <div
         style={{ ...ui.modalBase, animation: anim }}
@@ -265,7 +256,7 @@ export default function TaskEditModal({
                 />
               </div>
 
-              <div style={{ height: 8 }} />
+              <div style={{ height: DENSE ? 6 : 8 }} />
 
               <div style={ui.grid2}>
                 <div>
@@ -315,7 +306,7 @@ export default function TaskEditModal({
                 </div>
               </div>
 
-              <div style={{ height: 8 }} />
+              <div style={{ height: DENSE ? 6 : 8 }} />
 
               <div>
                 <label style={ui.label}>Status</label>
@@ -367,3 +358,5 @@ export default function TaskEditModal({
     </div>
   );
 }
+
+export default React.memo(TaskEditModal);

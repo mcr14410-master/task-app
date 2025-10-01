@@ -16,6 +16,10 @@ const stationNamesFrom = (stations) => {
 const STATUS_COLORS = { NEU: "#6366f1", TO_DO: "#f59e0b", IN_PROGRESS: "#22c55e", DONE: "#10b981" };
 const STATUS_ORDER = ["NEU", "TO_DO", "IN_PROGRESS", "DONE"];
 
+// ✨ Dichte + Animation feinjustierbar
+const DENSE = true;           // << true = kompakter
+const MODAL_DUR_MS = 260;     // << 180–320 je nach Geschmack
+
 const styles = {
   overlay: {
     position: "fixed", inset: 0, background: "rgba(3,10,22,0.65)", backdropFilter: "blur(6px)",
@@ -28,41 +32,47 @@ const styles = {
     width: 640, maxWidth: "100%", maxHeight: "85vh", overflowY: "auto",
     boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
   },
-  container: { padding: "20px 22px" },
+  container: { padding: DENSE ? "18px 20px" : "20px 22px" },
   header: {
     display: "flex", justifyContent: "space-between", alignItems: "baseline",
-    marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid #233145",
+    marginBottom: 8, paddingBottom: 6, borderBottom: "1px solid #233145",
   },
   titleRow: { display: "flex", alignItems: "baseline", gap: 10 },
-  title: { margin: 0, fontSize: "1.1rem", color: "#93c5fd", letterSpacing: ".2px" },
+  title: { margin: 0, fontSize: "1.08rem", color: "#93c5fd", letterSpacing: ".2px" },
   newBadge: {
-    padding: "2px 8px",
-    borderRadius: 999,
-    border: "1px solid #1e3a8a",
-    background: "linear-gradient(180deg,#0f172a,#0b1220)",
-    color: "#dbeafe",
+    padding: "2px 8px", borderRadius: 999, border: "1px solid #1e3a8a",
+    background: "linear-gradient(180deg,#0f172a,#0b1220)", color: "#dbeafe",
     fontSize: ".82rem", display: "inline-flex", alignItems: "center", gap: 6,
     boxShadow: "0 0 0 2px rgba(59,130,246,.15), 0 0 12px rgba(59,130,246,.25)",
   },
   closeBtn: { background: "transparent", border: 0, color: "#9ca3af", fontSize: 20, cursor: "pointer", padding: 4, borderRadius: 8 },
-  section: { background: "linear-gradient(180deg,#0b1220,#0f172a)", border: "1px solid #1f2937", padding: 12, borderRadius: 10, marginBottom: 10 },
-  sectionTitle: { margin: "0 0 8px 0", fontSize: "0.78rem", color: "#94a3b8", borderBottom: "1px dashed #233145", paddingBottom: 5, textTransform: "uppercase", fontWeight: 700, letterSpacing: ".06em" },
+  section: {
+    background: "linear-gradient(180deg,#0b1220,#0f172a)", border: "1px solid #1f2937",
+    padding: DENSE ? 10 : 12, borderRadius: 10, marginBottom: DENSE ? 8 : 10
+  },
+  sectionTitle: {
+    margin: "0 0 8px 0", fontSize: "0.78rem", color: "#94a3b8",
+    borderBottom: "1px dashed #233145", paddingBottom: 5, textTransform: "uppercase", fontWeight: 700, letterSpacing: ".06em"
+  },
   label: { display: "block", marginBottom: 5, fontWeight: 700, color: "#d1d5db", fontSize: ".88rem" },
   inputBase: {
-    width: "100%", padding: "8px 10px", border: "1px solid #243146", borderRadius: 9,
+    width: "100%", padding: DENSE ? "7px 9px" : "8px 10px", border: "1px solid #243146", borderRadius: 9,
     background: "linear-gradient(180deg,#0f172a,#0b1220)", color: "#e5e7eb", fontSize: ".92rem",
     outline: "none", boxSizing: "border-box", transition: "border-color .12s ease, box-shadow .12s ease",
   },
   inputFocus: { borderColor: "#3b82f6", boxShadow: "0 0 0 3px rgba(59,130,246,.18)" },
   textarea: { minHeight: 88, resize: "vertical" },
-  grid2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 },
-  footer: { marginTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, paddingTop: 10, borderTop: "1px solid #233145" },
-  btnPrimary: { padding: "9px 16px", background: "linear-gradient(180deg,#2563eb,#1d4ed8)", color: "#fff", border: "1px solid #1e3a8a", borderRadius: 9, cursor: "pointer", fontWeight: 800 },
-  btnSecondary: { padding: "9px 16px", background: "linear-gradient(180deg,#111827,#0b1220)", color: "#e5e7eb", border: "1px solid #233145", borderRadius: 9, cursor: "pointer", fontWeight: 700 },
-  btnGhost: { padding: "9px 12px", background: "transparent", color: "#93c5fd", border: "1px dashed #1e3a8a", borderRadius: 9, cursor: "pointer", fontWeight: 700 },
+  grid2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: DENSE ? 10 : 12 },
+  footer: {
+    marginTop: DENSE ? 8 : 10, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8,
+    paddingTop: DENSE ? 8 : 10, borderTop: "1px solid #233145"
+  },
+  btnPrimary: { padding: DENSE ? "8px 14px" : "9px 16px", background: "linear-gradient(180deg,#2563eb,#1d4ed8)", color: "#fff", border: "1px solid #1e3a8a", borderRadius: 9, cursor: "pointer", fontWeight: 800 },
+  btnSecondary: { padding: DENSE ? "8px 14px" : "9px 16px", background: "linear-gradient(180deg,#111827,#0b1220)", color: "#e5e7eb", border: "1px solid #233145", borderRadius: 9, cursor: "pointer", fontWeight: 700 },
+  btnGhost: { padding: DENSE ? "8px 12px" : "9px 12px", background: "transparent", color: "#93c5fd", border: "1px dashed #1e3a8a", borderRadius: 9, cursor: "pointer", fontWeight: 700 },
   statusRow: { display: "flex", gap: 6, flexWrap: "wrap" },
   pill: (active, color) => ({
-    padding: "5px 9px", borderRadius: 999, fontSize: ".76rem", fontWeight: 800, cursor: "pointer",
+    padding: DENSE ? "4px 8px" : "5px 9px", borderRadius: 999, fontSize: ".76rem", fontWeight: 800, cursor: "pointer",
     userSelect: "none", background: active ? color : "#334155", color: "#fff",
     border: `1px solid ${active ? "#fff" : "#1f2937"}`, boxShadow: active ? "0 0 0 3px rgba(255,255,255,.12)" : "none",
     transition: "transform .08s ease", transform: active ? "scale(1.02)" : "scale(1.0)",
@@ -71,23 +81,17 @@ const styles = {
 };
 
 const makeDefaultForm = () => ({
-  bezeichnung: "",
-  teilenummer: "",
-  kunde: "",
-  endDatum: "",
-  aufwandStunden: 0,
-  zuständig: "",
-  zusätzlicheInfos: "",
-  arbeitsstation: "Unassigned",
-  status: "NEU",
+  bezeichnung: "", teilenummer: "", kunde: "", endDatum: "",
+  aufwandStunden: 0, zuständig: "", zusätzlicheInfos: "",
+  arbeitsstation: "Unassigned", status: "NEU",
 });
 
-export default function TaskCreationModal({ isOpen, stations = [], onCreated, onClose }) {
+function TaskCreationModal({ isOpen, stations = [], onCreated, onClose }) {
   const [focusKey, setFocusKey] = useState(null);
   const [shake, setShake] = useState(false);
   const modalRef = useRef(null);
   const formRef = useRef(null);
-  const resetOnNextOpenRef = useRef(true); // ← nur beim allerersten Öffnen resetten — sonst kontrolliert durch Speichern/Reset
+  const resetOnNextOpenRef = useRef(true);
   const titleId = "create-modal-title";
 
   const stationNames = useMemo(() => {
@@ -102,18 +106,15 @@ export default function TaskCreationModal({ isOpen, stations = [], onCreated, on
   const [errorMsg, setErrorMsg] = useState(null);
 
   // Station default auf Unassigned halten (ohne restliche Felder zu resetten)
-  useEffect(() => {
-    setForm((f) => ({ ...f, arbeitsstation: "Unassigned" }));
-  }, [stationNames.length]);
+  useEffect(() => { setForm((f) => ({ ...f, arbeitsstation: "Unassigned" })); }, [stationNames.length]);
 
-  // Reset NUR, wenn "beim nächsten Öffnen zurücksetzen" aktiv ist
+  // Reset nur beim (erneuten) Öffnen falls gewünscht
   useEffect(() => {
     if (!isOpen) return;
     if (resetOnNextOpenRef.current) {
       setForm(makeDefaultForm());
       setErrorMsg(null);
-      resetOnNextOpenRef.current = false; // Einmal pro Öffnen
-      // Fokus nach Render auf Bezeichnung
+      resetOnNextOpenRef.current = false;
       setTimeout(() => modalRef.current?.querySelector("#bezeichnung")?.focus(), 0);
     }
   }, [isOpen]);
@@ -140,7 +141,6 @@ export default function TaskCreationModal({ isOpen, stations = [], onCreated, on
 
   const validate = () => (!form.bezeichnung?.trim() ? "Bezeichnung ist ein Pflichtfeld." : null);
 
-  // Standard "Erstellen" → schließt Modal, sorgt dafür, dass beim nächsten Öffnen resettet wird
   const handleCreate = async (e) => {
     e?.preventDefault?.();
     setErrorMsg(null);
@@ -157,15 +157,13 @@ export default function TaskCreationModal({ isOpen, stations = [], onCreated, on
       if (!res.ok) throw new Error((await res.text().catch(() => "")) || `HTTP ${res.status}`);
       const saved = await res.json().catch(() => payload);
       onCreated?.(saved);
-      // Beim nächsten Öffnen bitte leer starten:
-      resetOnNextOpenRef.current = true;
+      resetOnNextOpenRef.current = true; // nächstes Öffnen leer starten
       onClose?.();
     } catch (err) {
       setErrorMsg(err?.message || "Unbekannter Fehler beim Erstellen.");
     } finally { setSubmitting(false); }
   };
 
-  // "Speichern & Neu" → speichert, lässt Modal offen und leert sofort mit Fokus auf Bezeichnung
   const handleCreateAndNew = async (e) => {
     e?.preventDefault?.();
     setErrorMsg(null);
@@ -182,7 +180,6 @@ export default function TaskCreationModal({ isOpen, stations = [], onCreated, on
       if (!res.ok) throw new Error((await res.text().catch(() => "")) || `HTTP ${res.status}`);
       const saved = await res.json().catch(() => payload);
       onCreated?.(saved);
-      // Modal bleibt offen, Formular wird geleert + Fokus zurück:
       setForm(makeDefaultForm());
       setTimeout(() => modalRef.current?.querySelector("#bezeichnung")?.focus(), 0);
     } catch (err) {
@@ -190,7 +187,6 @@ export default function TaskCreationModal({ isOpen, stations = [], onCreated, on
     } finally { setSubmitting(false); }
   };
 
-  // Manuelles Zurücksetzen (ohne Modal zu schließen)
   const handleReset = (e) => {
     e?.preventDefault?.();
     setForm(makeDefaultForm());
@@ -200,26 +196,23 @@ export default function TaskCreationModal({ isOpen, stations = [], onCreated, on
 
   const inputStyle = (key) => (focusKey === key ? { ...styles.inputBase, ...styles.inputFocus } : styles.inputBase);
 
-  // ESC + Ctrl/Cmd+Enter (Speichern)
+  // ESC + Ctrl/Cmd+Enter
   useEffect(() => {
     if (!isOpen) return;
-    const node = modalRef.current;
-    if (!node) return;
-
+    const node = modalRef.current; if (!node) return;
     const firstInput = node.querySelector("#bezeichnung");
     setTimeout(() => { firstInput?.focus(); }, 0);
-
-    const onKeyDown = (e) => {
-      if (e.key === "Escape") { e.preventDefault(); onClose?.(); return; }
-      if ((e.key === "Enter") && (e.ctrlKey || e.metaKey)) { e.preventDefault(); formRef.current?.requestSubmit(); return; }
+    const onKeyDown = (ev) => {
+      if (ev.key === "Escape") { ev.preventDefault(); onClose?.(); return; }
+      if ((ev.key === "Enter") && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); formRef.current?.requestSubmit(); return; }
     };
     node.addEventListener("keydown", onKeyDown);
     return () => node.removeEventListener("keydown", onKeyDown);
   }, [isOpen, onClose]);
 
-  // Overlay-Klick: NICHT schließen (um versehentliche Resets zu vermeiden). Nur Shake, wenn invalid.
-  const handleOverlayClick = (e) => {
-    e.stopPropagation();
+  // Overlay-Klick: nicht schließen; bei Fehler Shake
+  const handleOverlayClick = (ev) => {
+    ev.stopPropagation();
     const v = validate();
     if (v) {
       setErrorMsg(v);
@@ -227,7 +220,6 @@ export default function TaskCreationModal({ isOpen, stations = [], onCreated, on
       modalRef.current?.querySelector("#bezeichnung")?.focus();
       setTimeout(() => setShake(false), 220);
     }
-    // if valid → nichts tun (nicht schließen)
   };
 
   if (!isOpen) return null;
@@ -237,7 +229,7 @@ export default function TaskCreationModal({ isOpen, stations = [], onCreated, on
   return (
     <div style={styles.overlay} onClick={handleOverlayClick}>
       <style>{`
-        :root { --modal-dur: 220ms; }
+        :root { --modal-dur: ${MODAL_DUR_MS}ms; }
         @keyframes modalOverlayIn { from { opacity: 0 } to { opacity: 1 } }
         @keyframes modalScaleIn { from { opacity: 0; transform: translateY(6px) scale(.985) } to { opacity: 1; transform: translateY(0) scale(1) } }
         @keyframes modalShake { 10%,90%{transform:translateX(-1px)}20%,80%{transform:translateX(2px)}30%,50%,70%{transform:translateX(-4px)}40%,60%{transform:translateX(4px)} }
@@ -275,7 +267,7 @@ export default function TaskCreationModal({ isOpen, stations = [], onCreated, on
                 onChange={(e) => setValue("bezeichnung", e.target.value)} disabled={submitting} required
               />
 
-              <div style={{ height: 8 }} />
+              <div style={{ height: DENSE ? 6 : 8 }} />
               <div style={styles.grid2}>
                 <div>
                   <label style={styles.label} htmlFor="teilenummer">Teilenummer</label>
@@ -324,7 +316,7 @@ export default function TaskCreationModal({ isOpen, stations = [], onCreated, on
                 </div>
               </div>
 
-              <div style={{ height: 8 }} />
+              <div style={{ height: DENSE ? 6 : 8 }} />
               <div>
                 <label style={styles.label}>Status</label>
                 <div style={styles.statusRow}>
@@ -371,3 +363,5 @@ export default function TaskCreationModal({ isOpen, stations = [], onCreated, on
     </div>
   );
 }
+
+export default React.memo(TaskCreationModal);
