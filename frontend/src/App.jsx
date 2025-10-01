@@ -1,13 +1,13 @@
 import React from "react";
 import ToastProvider from "./components/ui/ToastsProvider";
 import ErrorBoundary from "./components/ErrorBoundary";
-import BoardCleanDnD from "./components/BoardCleanDnD";
+import TaskBoard from "@/components/TaskBoard";
 
 export default function App() {
   return (
     <ToastProvider>
       <ErrorBoundary>
-        <BoardCleanDnD />
+        <TaskBoard />
       </ErrorBoundary>
     </ToastProvider>
   );

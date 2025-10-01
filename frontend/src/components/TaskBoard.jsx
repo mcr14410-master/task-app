@@ -1,4 +1,4 @@
-// src/components/BoardCleanDnD.jsx
+// frontend/src/components/TaskBoard.jsx
 import React, { useEffect, useRef, useState } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import useToast from "./ui/useToast";
@@ -73,7 +73,6 @@ async function bulkSortServer(payload) {
 }
 
 function buildSortPayload(columns, keys) {
-  // keys: betroffene Spalten minimieren
   const out = [];
   const kset = new Set(keys);
   for (const [k, list] of Object.entries(columns)) {
@@ -184,7 +183,7 @@ const IconBriefcase = (p) => (
   />
 );
 
-export default function BoardCleanDnD() {
+export default function TaskBoard() {
   const toast = useToast();
   const pendingRef = useRef(new Map());
 
@@ -260,7 +259,7 @@ export default function BoardCleanDnD() {
     })();
   }, []);
 
-  // DnD Ende
+  // DnD Ende (mit „schieben“-Animation im Style unten)
   async function onDragEnd(result) {
     const { destination, source } = result;
     if (!destination) return;
@@ -294,13 +293,10 @@ export default function BoardCleanDnD() {
         await updateTaskServer(updatedTask.id, updatedTask);
         await bulkSortServer(buildSortPayload(next, [fromKey, toKey]));
       } else {
-        // nur Reihenfolge in einer Spalte geändert
         await bulkSortServer(buildSortPayload(next, [fromKey]));
       }
     } catch (e) {
-      // Rollback bei Fehler
       toast.error("Konnte neue Reihenfolge nicht speichern.");
-      // Soft-Reload der Daten
       setColumns((prev) => ({ ...prev })); // no-op trigger
     }
   }
@@ -399,7 +395,7 @@ export default function BoardCleanDnD() {
         .toolbar-input, .toolbar-select { padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); }
         .toolbar-input::placeholder { color: var(--muted); }
         .btn-primary { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--brand); background: var(--brand); color: white; }
-        /* ⬇️ Patch #1: Spalten immer nebeneinander */
+        /* Spalten nebeneinander (Patch #1) */
         .cols-row { display: flex; gap: 16px; align-items: flex-start; overflow-x: auto; padding-bottom: 8px; }
         .cols-row::-webkit-scrollbar { height: 8px; }
         .cols-row::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 8px; }
@@ -450,25 +446,25 @@ export default function BoardCleanDnD() {
           ))}
         </select>
         <div style={{ flex: 1 }} />
-        {queryActive && <span className="badge">Treffer gehighlighted, andere gedimmt</span>}
+        {q && <span className="badge">Treffer gehighlighted, andere gedimmt</span>}
         <button onClick={() => setIsCreateOpen(true)} className="btn-primary">
           + Neue Aufgabe
         </button>
       </div>
 
       <DragDropContext onDragEnd={onDragEnd}>
-        {/* ⬇️ Patch #1: horizontal nebeneinander */}
+        {/* Spalten nebeneinander (Patch #1) */}
         <div className="cols-row">
           {visibleStationKeys.map((key) => {
             const title = labelByKey[key];
             const list = columns[key] || [];
 
-            const matchesInCol = queryActive ? list.filter((t) => matchesQuery(t, q)).length : list.length;
+            const matchesInCol = q ? list.filter((t) => matchesQuery(t, q)).length : list.length;
 
             const totalHoursRaw = list.reduce((acc, t) => acc + (Number(t?.aufwandStunden) || 0), 0);
             const totalHours = Math.round(totalHoursRaw * 10) / 10;
 
-            const matchedHoursRaw = queryActive
+            const matchedHoursRaw = q
               ? list.filter((t) => matchesQuery(t, q)).reduce((acc, t) => acc + (Number(t?.aufwandStunden) || 0), 0)
               : totalHoursRaw;
             const matchedHours = Math.round(matchedHoursRaw * 10) / 10;
@@ -480,22 +476,21 @@ export default function BoardCleanDnD() {
                     ref={provided.innerRef}
                     {...provided.droppableProps}
                     className="col"
-                    /* ⬇️ Patch #1B: fixe Breite pro Spalte für Side-by-Side */
+                    /* feste Spaltenbreite (Patch #1B) */
                     style={{ padding: 12, minHeight: 80, minWidth: 320, width: 360, flex: "0 0 auto" }}
                   >
                     <div className="col-head">
                       <h2>{title}</h2>
                       {/* Head rechts: Tasks | Aufwand */}
                       <div className="stats">
-                        <span>Tasks {queryActive ? `${matchesInCol}/${list.length}` : `${list.length}`}</span>
+                        <span>Tasks {q ? `${matchesInCol}/${list.length}` : `${list.length}`}</span>
                         <span className="sep">|</span>
-                        <span>Aufwand {queryActive ? `${matchedHours}/${totalHours}h` : `${totalHours}h`}</span>
+                        <span>Aufwand {q ? `${matchedHours}/${totalHours}h` : `${totalHours}h`}</span>
                       </div>
                     </div>
 
                     {list.map((t, index) => {
-                      const isMatch = matchesQuery(t, q);
-                      // Fälligkeitston
+                      const isMatch = q ? matchesQuery(t, q) : true;
                       const dueInfo = (() => {
                         const today = new Date();
                         today.setHours(0, 0, 0, 0);
@@ -518,7 +513,7 @@ export default function BoardCleanDnD() {
                         <Draggable draggableId={t.id.toString()} index={index} key={t.id}>
                           {(dProvided, snapshot) => {
                             const base = dProvided.draggableProps.style || {};
-                            /* ⬇️ Patch #3: „schieben“-Gefühl statt Z-Drehung */
+                            // „schieben“-Gefühl (Patch #3)
                             const composedTransform = `${base.transform || ""}${
                               snapshot.isDragging ? " perspective(900px) rotateX(5deg) scale(1.01) translateZ(0)" : ""
                             }`;
@@ -528,14 +523,14 @@ export default function BoardCleanDnD() {
                                 {...dProvided.draggableProps}
                                 {...dProvided.dragHandleProps}
                                 tabIndex={0}
-                                className={`task-card ${queryActive ? (isMatch ? "match" : "dim") : ""}`}
+                                className={`task-card ${q ? (isMatch ? "match" : "dim") : ""}`}
                                 onKeyDown={(e) => {
                                   if (e.key === "Enter" || e.key === " ") {
                                     e.preventDefault();
                                     setEditTask(t);
                                   }
                                 }}
-                                /* ⬇️ Patch #2: nur noch Doppelklick öffnet Edit */
+                                // Doppelklick statt Single-Klick (Patch #2)
                                 onDoubleClick={() => setEditTask(t)}
                                 style={{
                                   ...base,
