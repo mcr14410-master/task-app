@@ -7,20 +7,38 @@ import TaskEditModal from "./modals/TaskEditModal";
 
 function normalizeStationLabel(v) {
   const s = String(v ?? "Unassigned");
-  return s.replace(/\u00A0/g, " ")
+  return s
+    .replace(/\u00A0/g, " ")
     .replace(/[\u200B-\u200D\uFEFF]/g, "")
     .normalize("NFKC")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-const sortTasksInitial = (arr) =>
-  [...arr].sort((a, b) => {
+function pickStationLabel(rec) {
+  return normalizeStationLabel(
+    rec?.bezeichnung ??
+      rec?.name ??
+      rec?.label ??
+      rec?.title ??
+      rec?.titel ??
+      rec?.arbeitsstation ??
+      rec?.station ??
+      rec?.kurzname ??
+      (typeof rec === "string" ? rec : null) ??
+      null
+  );
+}
+
+// Sort helper
+function sortByPriorityThenId(list) {
+  return [...list].sort((a, b) => {
     const pa = Number.isFinite(a?.prioritaet) ? a.prioritaet : 999999;
     const pb = Number.isFinite(b?.prioritaet) ? b.prioritaet : 999999;
     if (pa !== pb) return pa - pb;
     return (a?.id ?? 0) - (b?.id ?? 0);
   });
+}
 
 async function updateTaskServer(id, body) {
   const res = await fetch(`/api/tasks/${id}`, {
@@ -29,12 +47,17 @@ async function updateTaskServer(id, body) {
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error((await res.text().catch(() => "")) || `HTTP ${res.status}`);
-  try { return await res.json(); } catch { return body; }
+  try {
+    return await res.json();
+  } catch {
+    return body;
+  }
 }
 async function deleteTaskServer(id) {
   const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
   if (!res.ok && res.status !== 204) {
-    const txt = await res.text().catch(() => ""); throw new Error(txt || `HTTP ${res.status}`);
+    const txt = await res.text().catch(() => "");
+    throw new Error(txt || `HTTP ${res.status}`);
   }
 }
 async function bulkSortServer(payload) {
@@ -43,20 +66,39 @@ async function bulkSortServer(payload) {
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error((await res.text().catch(() => "")) || `HTTP ${res.status}`);
-}
-function buildSortPayload(state, keys) {
-  const payload = [];
-  for (const k of keys) (state[k] || []).forEach((t, idx) => payload.push({ ...t, prioritaet: idx }));
-  return payload;
-}
-function pickStationLabel(rec) {
-  if (rec == null) return null;
-  if (typeof rec === "string") return rec;
-  return (rec.bezeichnung ?? rec.name ?? rec.titel ?? rec.title ?? rec.arbeitsstation ?? rec.station ?? rec.kurzname ?? null);
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(txt || `HTTP ${res.status}`);
+  }
 }
 
-// Suche/Highlight
+function buildSortPayload(columns, keys) {
+  // keys: betroffene Spalten minimieren
+  const out = [];
+  const kset = new Set(keys);
+  for (const [k, list] of Object.entries(columns)) {
+    if (!kset.has(k)) continue;
+    (list || []).forEach((t, i) => {
+      out.push({ ...t, prioritaet: i });
+    });
+  }
+  return out;
+}
+
+function formatDate(d) {
+  if (!d) return null;
+  try {
+    const dt = typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d) ? new Date(d + "T00:00:00") : new Date(d);
+    if (Number.isNaN(dt.getTime())) return d;
+    const yyyy = dt.getFullYear();
+    const mm = String(dt.getMonth() + 1).padStart(2, "0");
+    const dd = String(dt.getDate()).padStart(2, "0");
+    return `${dd}.${mm}.${yyyy}`;
+  } catch {
+    return d;
+  }
+}
+
 function matchesQuery(task, q) {
   const s = (q || "").trim().toLowerCase();
   if (!s) return true;
@@ -72,70 +114,99 @@ function matchesQuery(task, q) {
   return fields.some((v) => String(v).toLowerCase().includes(s));
 }
 
-function formatDate(d) {
-  if (!d) return null;
-  try {
-    const dt = typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d) ? new Date(d + "T00:00:00") : new Date(d);
-    if (Number.isNaN(dt.getTime())) return d;
-    const yyyy = dt.getFullYear();
-    const mm = String(dt.getMonth() + 1).padStart(2, "0");
-    const dd = String(dt.getDate()).padStart(2, "0");
-    return `${dd}.${mm}.${yyyy}`;
-  } catch { return String(d); }
-}
-function dueColors(endDatum) {
-  if (!endDatum) return { color: "#94a3b8", border: "transparent", label: null };
-  const today = new Date(); today.setHours(0,0,0,0);
-  const dt = /^\d{4}-\d{2}-\d{2}$/.test(endDatum) ? new Date(endDatum + "T00:00:00") : new Date(endDatum);
-  if (Number.isNaN(dt.getTime())) return { color: "#94a3b8", border: "transparent", label: endDatum };
-  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
-  if (dt < today) return { color: "#ef4444", border: "#ef4444", label: "Überfällig " + formatDate(endDatum) };
-  if (dt.getTime() === today.getTime()) return { color: "#f59e0b", border: "#f59e0b", label: "Fällig heute" };
-  if (dt.getTime() === tomorrow.getTime()) return { color: "#fde047", border: "#fde047", label: "Fällig morgen" };
-  return { color: "#22c55e", border: "transparent", label: formatDate(endDatum) };
-}
-function statusTone(status) {
-  const s = String(status || "").toUpperCase();
-  if (s.includes("BLOCK")) return { cls: "danger", label: status };
-  if (s.includes("DONE") || s.includes("ERLEDIGT")) return { cls: "ok", label: status };
-  if (s.includes("PROGRESS") || s.includes("WIP")) return { cls: "warn", label: status };
-  if (s.includes("NEU")) return { cls: "info", label: status };
-  return { cls: "info", label: status ?? "—" };
-}
-
-// kleine Inline-Icons (kein externes Paket nötig)
-const Icon = ({ path, size = 12, stroke = "#9ca3af" }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flex: "0 0 auto" }}>
+// Icons
+const Icon = ({ size = 16, stroke = "#9ca3af", path }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke={stroke}
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    style={{ flex: "0 0 auto" }}
+  >
     {path}
   </svg>
 );
-const IconTag = (p) => <Icon {...p} path={<g><path d="M20.59 13.41L11 3H4v7l9.59 9.59a2 2 0 0 0 2.82 0l4.18-4.18a2 2 0 0 0 0-2.82z"/><circle cx="6.5" cy="6.5" r="1.5"/></g>} />;
-const IconUser = (p) => <Icon {...p} path={<g><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></g>} />;
-const IconClock = (p) => <Icon {...p} path={<g><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></g>} />;
-const IconCalendar = (p) => <Icon {...p} path={<g><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></g>} />;
+const IconTag = (p) => (
+  <Icon
+    {...p}
+    path={
+      <g>
+        <path d="M20.59 13.41L11 3H4v7l9.59 9.59a2 2 0 0 0 2.82 0l4.18-4.18a2 2 0 0 0 0-2.82z" />
+        <circle cx="6.5" cy="6.5" r="1.5" />
+      </g>
+    }
+  />
+);
+const IconUser = (p) => (
+  <Icon
+    {...p}
+    path={
+      <g>
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+        <circle cx="12" cy="7" r="4" />
+      </g>
+    }
+  />
+);
+const IconClock = (p) => (
+  <Icon
+    {...p}
+    path={
+      <g>
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 6v6l4 2" />
+      </g>
+    }
+  />
+);
+const IconCalendar = (p) => (
+  <Icon
+    {...p}
+    path={
+      <g>
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+        <line x1="16" y1="2" x2="16" y2="6" />
+        <line x1="8" y1="2" x2="8" y2="6" />
+        <line x1="3" y1="10" x2="21" y2="10" />
+      </g>
+    }
+  />
+);
+const IconBriefcase = (p) => (
+  <Icon
+    {...p}
+    path={<path d="M20 7h-5V6a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v1H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z" />}
+  />
+);
 
 export default function BoardCleanDnD() {
-  const [columns, setColumns] = useState({});
+  const toast = useToast();
+  const pendingRef = useRef(new Map());
+
   const [labelByKey, setLabelByKey] = useState({});
+  const [columns, setColumns] = useState({});
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
-
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [editTask, setEditTask] = useState(null);
 
   const [query, setQuery] = useState("");
   const [stationFilter, setStationFilter] = useState("ALL");
 
-  const toast = useToast();
-  const pendingRef = useRef(new Map()); // id -> { timeout, key, index, task }
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editTask, setEditTask] = useState(null);
 
+  // Daten laden
   useEffect(() => {
-    let alive = true;
     (async () => {
       try {
+        setLoading(true);
         const [tasksRes, stationsRes] = await Promise.allSettled([
-          fetch("/api/tasks", { headers: { Accept: "application/json" } }),
-          fetch("/api/arbeitsstationen", { headers: { Accept: "application/json" } }),
+          fetch(`/api/tasks`),
+          fetch(`/api/arbeitsstationen`),
         ]);
 
         let tasks = [];
@@ -143,7 +214,9 @@ export default function BoardCleanDnD() {
           const txt = await tasksRes.value.text();
           const j = JSON.parse(txt);
           tasks = Array.isArray(j) ? j : Array.isArray(j?.content) ? j.content : Array.isArray(j?.items) ? j.items : [];
-        } else { throw new Error(`Fehler bei /api/tasks: ${String(tasksRes.reason)}`); }
+        } else {
+          throw new Error(`Fehler bei /api/tasks: ${String(tasksRes.reason)}`);
+        }
 
         let stations = [];
         if (stationsRes.status === "fulfilled" && stationsRes.value.ok) {
@@ -156,36 +229,44 @@ export default function BoardCleanDnD() {
         }
 
         const labels = {};
-        for (const raw of stations) { const k = normalizeStationLabel(raw); if (!labels[k]) labels[k] = String(raw).trim(); }
-        for (const t of tasks) { const raw = t?.arbeitsstation ?? "Unassigned"; const k = normalizeStationLabel(raw); if (!labels[k]) labels[k] = String(raw).trim(); }
-        if (!labels["Unassigned"]) labels["Unassigned"] = "Unassigned";
+        for (const raw of stations) {
+          const k = normalizeStationLabel(raw);
+          if (!labels[k]) labels[k] = String(raw).trim();
+        }
+        for (const t of tasks) {
+          const raw = t?.arbeitsstation ?? "Unassigned";
+          const k = normalizeStationLabel(raw);
+          if (!labels[k]) labels[k] = String(raw).trim();
+        }
 
         const grouped = {};
-        for (const t of tasks) { const raw = t?.arbeitsstation ?? "Unassigned"; const k = normalizeStationLabel(raw); (grouped[k] ||= []).push(t); }
-        for (const k of Object.keys(grouped)) grouped[k] = sortTasksInitial(grouped[k]);
-        for (const k of Object.keys(labels)) if (!grouped[k]) grouped[k] = [];
+        for (const t of tasks) {
+          const raw = t?.arbeitsstation ?? "Unassigned";
+          const key = normalizeStationLabel(raw);
+          if (!grouped[key]) grouped[key] = [];
+          grouped[key].push(t);
+        }
+        Object.keys(grouped).forEach((k) => (grouped[k] = sortByPriorityThenId(grouped[k])));
 
-        if (alive) { setLabelByKey(labels); setColumns(grouped); }
+        setLabelByKey(labels);
+        setColumns(grouped);
+        setErr(null);
       } catch (e) {
-        if (alive) setErr(String(e));
+        console.error(e);
+        setErr(String(e?.message || e));
       } finally {
-        if (alive) setLoading(false);
+        setLoading(false);
       }
     })();
-    return () => { alive = false; pendingRef.current.forEach(({ timeout }) => clearTimeout(timeout)); };
   }, []);
 
-  const onDragEnd = async (result) => {
-    const { source, destination } = result;
+  // DnD Ende
+  async function onDragEnd(result) {
+    const { destination, source } = result;
     if (!destination) return;
-    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
-
-    const prev = typeof structuredClone === "function"
-      ? structuredClone({ columns, labelByKey })
-      : { columns: JSON.parse(JSON.stringify(columns)), labelByKey: { ...labelByKey } };
 
     const fromKey = source.droppableId;
-    const toKey   = destination.droppableId;
+    const toKey = destination.droppableId;
     const toLabel = labelByKey[toKey] ?? toKey;
 
     let updatedTask = null;
@@ -194,7 +275,7 @@ export default function BoardCleanDnD() {
     setColumns((prevCols) => {
       const draft = { ...prevCols };
       const fromList = [...(draft[fromKey] || [])];
-      const toList   = fromKey === toKey ? fromList : [...(draft[toKey] || [])];
+      const toList = fromKey === toKey ? fromList : [...(draft[toKey] || [])];
 
       const [moved] = fromList.splice(source.index, 1);
       if (!moved) return prevCols;
@@ -203,7 +284,7 @@ export default function BoardCleanDnD() {
       toList.splice(destination.index, 0, updatedTask);
 
       draft[fromKey] = fromList;
-      draft[toKey]   = toList;
+      draft[toKey] = toList;
       next = draft;
       return draft;
     });
@@ -213,38 +294,21 @@ export default function BoardCleanDnD() {
         await updateTaskServer(updatedTask.id, updatedTask);
         await bulkSortServer(buildSortPayload(next, [fromKey, toKey]));
       } else {
-        await bulkSortServer(buildSortPayload(next, [toKey]));
+        // nur Reihenfolge in einer Spalte geändert
+        await bulkSortServer(buildSortPayload(next, [fromKey]));
       }
     } catch (e) {
-      toast.error("Speichern fehlgeschlagen. Änderung zurückgenommen.");
-      console.error(e);
-      setColumns(prev.columns);
-      setLabelByKey(prev.labelByKey);
+      // Rollback bei Fehler
+      toast.error("Konnte neue Reihenfolge nicht speichern.");
+      // Soft-Reload der Daten
+      setColumns((prev) => ({ ...prev })); // no-op trigger
     }
-  };
+  }
 
-  const handleCreated = (saved) => {
-    const raw = saved?.arbeitsstation ?? "Unassigned";
-    const key = normalizeStationLabel(raw);
-    setLabelByKey((prev) => ({ ...prev, [key]: String(raw).trim() }));
-
-    const prevCols = typeof structuredClone === "function" ? structuredClone(columns) : JSON.parse(JSON.stringify(columns));
-    setColumns((prev) => {
-      const next = { ...prev, [key]: (prev[key] || []).concat(saved) };
-      const draft = { ...prevCols, [key]: (prevCols[key] || []).concat(saved) };
-      bulkSortServer(buildSortPayload(draft, [key])).catch(() => {});
-      return next;
-    });
-    toast.success("Aufgabe erstellt.");
-  };
-
-  const handleSaved = (saved) => {
-    const oldKey = normalizeStationLabel(editTask?.arbeitsstation ?? "Unassigned");
-    const newRaw = saved?.arbeitsstation ?? "Unassigned";
-    const newKey = normalizeStationLabel(newRaw);
-
-    setLabelByKey((prev) => ({ ...prev, [newKey]: String(newRaw).trim() }));
-
+  // Save / Delete aus Modals
+  const handleSaved = async (saved) => {
+    const oldKey = normalizeStationLabel(saved?.__oldArbeitsstation ?? saved?.arbeitsstation ?? "Unassigned");
+    const newKey = normalizeStationLabel(saved?.arbeitsstation ?? "Unassigned");
     const prevCols = typeof structuredClone === "function" ? structuredClone(columns) : JSON.parse(JSON.stringify(columns));
     setColumns((prev) => {
       const draft = { ...prev };
@@ -275,46 +339,35 @@ export default function BoardCleanDnD() {
     const UNDO_MS = 5000;
     const toastId = toast.show("info", `Aufgabe #${task.id} wird gelöscht …`, {
       title: "Gelöscht",
-      ttl: UNDO_MS,
       actions: [
         {
           label: "Rückgängig",
-          variant: "primary",
           onClick: () => {
-            const pending = pendingRef.current.get(task.id);
-            if (!pending) return;
-            clearTimeout(pending.timeout);
-            pendingRef.current.delete(task.id);
+            clearTimeout(timeout);
+            toast.dismiss(toastId);
+            const info = pendingRef.current.get(task.id);
+            if (!info) return;
             setColumns((prev) => {
               const draft = { ...prev };
-              const arr = [...(draft[key] || [])];
-              arr.splice(index, 0, task);
-              draft[key] = arr;
+              const list = [...(draft[info.key] || [])];
+              list.splice(info.index, 0, info.task);
+              draft[info.key] = list;
               return draft;
             });
-            toast.info("Wiederhergestellt.");
+            pendingRef.current.delete(task.id);
           },
         },
       ],
     });
 
     const timeout = setTimeout(async () => {
-      pendingRef.current.delete(task.id);
+      toast.dismiss(toastId);
       try {
         await deleteTaskServer(task.id);
-        const draft = typeof structuredClone === "function" ? structuredClone(columns) : JSON.parse(JSON.stringify(columns));
-        await bulkSortServer(buildSortPayload(draft, [key]));
-        toast.success("Aufgabe endgültig gelöscht.");
+        pendingRef.current.delete(task.id);
+        toast.success("Endgültig gelöscht.");
       } catch (e) {
-        console.error(e);
-        setColumns((prev) => {
-          const arr = [...(prev[key] || [])];
-          arr.splice(index, 0, task);
-          return { ...prev, [key]: arr };
-        });
-        toast.error("Löschen fehlgeschlagen. Wiederhergestellt.");
-      } finally {
-        toast.remove?.(toastId);
+        toast.error("Löschen fehlgeschlagen.");
       }
     }, UNDO_MS);
 
@@ -322,11 +375,12 @@ export default function BoardCleanDnD() {
   };
 
   if (loading) return <p style={{ padding: 16, color: "#cbd5e1", background: "#0b1220", minHeight: "100vh" }}>lade…</p>;
-  if (err) return (
-    <div style={{ padding: 16, background: "#0b1220", minHeight: "100vh" }}>
-      <pre style={{ whiteSpace: "pre-wrap", color: "#f87171", background: "transparent" }}>Fehler: {err}</pre>
-    </div>
-  );
+  if (err)
+    return (
+      <div style={{ padding: 16, background: "#0b1220", minHeight: "100vh" }}>
+        <pre style={{ whiteSpace: "pre-wrap", color: "#f87171", background: "transparent" }}>Fehler: {err}</pre>
+      </div>
+    );
 
   const allStationKeys = Object.keys(labelByKey).sort((a, b) => a.localeCompare(b));
   const visibleStationKeys = stationFilter === "ALL" ? allStationKeys : allStationKeys.filter((k) => k === stationFilter);
@@ -338,36 +392,24 @@ export default function BoardCleanDnD() {
     <div style={{ padding: 16, background: "var(--bg)", minHeight: "100vh" }}>
       <style>{`
         :root {
-          --bg: #0b1220;
-          --panel: #0f172a;
-          --card: #111827;
-          --card-2: #0b1220;
-          --text: #e5e7eb;
-          --muted: #94a3b8;
-          --border: #1f2937;
-          --shadow: rgba(0,0,0,0.35);
-          --brand: #3b82f6;
-          --ok: #22c55e;
-          --warn: #f59e0b;
-          --danger: #ef4444;
-          --info: #38bdf8;
-          --match-bg: rgba(59,130,246,0.12);
+          --bg: #0b1220; --panel: #0f172a; --card: #111827; --card-2: #0b1220;
+          --text: #e5e7eb; --muted: #94a3b8; --border: #1f2937; --shadow: rgba(0,0,0,0.35);
+          --brand: #3b82f6; --ok: #22c55e; --warn: #f59e0b; --danger: #ef4444; --info: #38bdf8; --match-bg: rgba(59,130,246,0.12);
         }
         .toolbar-input, .toolbar-select { padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); }
         .toolbar-input::placeholder { color: var(--muted); }
         .btn-primary { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--brand); background: var(--brand); color: white; }
+        /* ⬇️ Patch #1: Spalten immer nebeneinander */
+        .cols-row { display: flex; gap: 16px; align-items: flex-start; overflow-x: auto; padding-bottom: 8px; }
+        .cols-row::-webkit-scrollbar { height: 8px; }
+        .cols-row::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 8px; }
         .col { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 8px 24px var(--shadow) }
-        .col h2 { color: var(--text); }
+        .col-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 0 0 8px 0; }
+        .col h2 { color: var(--text); margin: 0; font-size: 16px; }
+        .stats { color: var(--muted); font-size: 12px; display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
+        .stats .sep { opacity: .6; }
         .badge { font-size: 12px; color: var(--muted); }
-        .task-card {
-          background: var(--card);
-          border: 1px solid var(--border);
-          border-radius: 12px;
-          padding: 12px;
-          margin-bottom: 10px;
-          box-shadow: 0 4px 16px var(--shadow);
-          transition: transform .12s ease, box-shadow .12s ease, background .18s ease, opacity .18s ease, filter .18s ease;
-        }
+        .task-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 10px; box-shadow: 0 4px 16px var(--shadow); transition: transform .12s ease, box-shadow .12s ease, background .18s ease, opacity .18s ease, filter .18s ease; }
         .task-card:hover { transform: translateY(-1px) scale(1.02); }
         .task-card:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
         .task-card.match { box-shadow: 0 0 0 2px var(--brand) inset, 0 8px 24px var(--shadow); background: linear-gradient(0deg, var(--match-bg), var(--card)); }
@@ -386,17 +428,14 @@ export default function BoardCleanDnD() {
 
       {/* Toolbar */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
-        <h1 style={{ margin: 0, marginRight: 8, color: "var(--text)" }}>Board</h1>
-
         <input
+          type="text"
           className="toolbar-input"
-          type="search"
-          placeholder="Suchen (Bezeichnung, Kunde, …) – Treffer werden hervorgehoben"
+          placeholder="Filtern… (Bezeichnung, Kunde, Teilenummer …)"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          aria-label="Aufgaben durchsuchen"
+          style={{ minWidth: 220 }}
         />
-
         <select
           className="toolbar-select"
           value={stationFilter}
@@ -405,47 +444,84 @@ export default function BoardCleanDnD() {
         >
           <option value="ALL">Alle Stationen</option>
           {allStationKeys.map((k) => (
-            <option key={k} value={k}>{labelByKey[k]}</option>
+            <option key={k} value={k}>
+              {labelByKey[k]}
+            </option>
           ))}
         </select>
-
         <div style={{ flex: 1 }} />
         {queryActive && <span className="badge">Treffer gehighlighted, andere gedimmt</span>}
-
-        <button onClick={() => setIsCreateOpen(true)} className="btn-primary">+ Neue Aufgabe</button>
+        <button onClick={() => setIsCreateOpen(true)} className="btn-primary">
+          + Neue Aufgabe
+        </button>
       </div>
 
       <DragDropContext onDragEnd={onDragEnd}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
+        {/* ⬇️ Patch #1: horizontal nebeneinander */}
+        <div className="cols-row">
           {visibleStationKeys.map((key) => {
             const title = labelByKey[key];
             const list = columns[key] || [];
-            const matchesInCol = list.reduce((acc, t) => acc + (matchesQuery(t, q) ? 1 : 0), 0);
+
+            const matchesInCol = queryActive ? list.filter((t) => matchesQuery(t, q)).length : list.length;
+
+            const totalHoursRaw = list.reduce((acc, t) => acc + (Number(t?.aufwandStunden) || 0), 0);
+            const totalHours = Math.round(totalHoursRaw * 10) / 10;
+
+            const matchedHoursRaw = queryActive
+              ? list.filter((t) => matchesQuery(t, q)).reduce((acc, t) => acc + (Number(t?.aufwandStunden) || 0), 0)
+              : totalHoursRaw;
+            const matchedHours = Math.round(matchedHoursRaw * 10) / 10;
 
             return (
               <Droppable droppableId={key} key={key}>
                 {(provided) => (
-                  <div ref={provided.innerRef} {...provided.droppableProps} className="col" style={{ padding: 12, minHeight: 80 }}>
-                    <h2 style={{ margin: "0 0 8px 0" }}>
-                      {title} <span className="badge">({matchesInCol}/{list.length})</span>
-                    </h2>
+                  <div
+                    ref={provided.innerRef}
+                    {...provided.droppableProps}
+                    className="col"
+                    /* ⬇️ Patch #1B: fixe Breite pro Spalte für Side-by-Side */
+                    style={{ padding: 12, minHeight: 80, minWidth: 320, width: 360, flex: "0 0 auto" }}
+                  >
+                    <div className="col-head">
+                      <h2>{title}</h2>
+                      {/* Head rechts: Tasks | Aufwand */}
+                      <div className="stats">
+                        <span>Tasks {queryActive ? `${matchesInCol}/${list.length}` : `${list.length}`}</span>
+                        <span className="sep">|</span>
+                        <span>Aufwand {queryActive ? `${matchedHours}/${totalHours}h` : `${totalHours}h`}</span>
+                      </div>
+                    </div>
 
                     {list.map((t, index) => {
                       const isMatch = matchesQuery(t, q);
-                      const { color: dueColor, border: dueBorder, label: dueLabel } = dueColors(t.endDatum);
-                      const st = statusTone(t.status);
+                      // Fälligkeitston
+                      const dueInfo = (() => {
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        if (!t.endDatum) return { color: "#94a3b8", border: "#1f2937" };
+                        const d = new Date(t.endDatum);
+                        d.setHours(0, 0, 0, 0);
+                        if (d < today) return { color: "#fca5a5", border: "#7f1d1d" }; // überfällig
+                        if (+d === +today) return { color: "#fde68a", border: "#7a5d0a" }; // heute
+                        return { color: "#a7f3d0", border: "#1f2937" }; // zukünftig
+                      })();
+                      const stTone = (() => {
+                        const s = String(t.status || "").toUpperCase();
+                        if (s.includes("DONE") || s.includes("ERLEDIGT")) return { cls: "ok", label: "DONE" };
+                        if (s.includes("PROG")) return { cls: "info", label: "IN PROGRESS" };
+                        if (s.includes("NEU") || s.includes("NEW")) return { cls: "warn", label: "NEU" };
+                        return { cls: "warn", label: s || "TO DO" };
+                      })();
 
-                      // DnD Transform + extra Effekt beim Drag
-                      const dStyle = {};
-                      // provided.draggableProps.style wird in-line gemischt
                       return (
                         <Draggable draggableId={t.id.toString()} index={index} key={t.id}>
                           {(dProvided, snapshot) => {
                             const base = dProvided.draggableProps.style || {};
-                            const baseTransform = base.transform || "";
-                            const extra = snapshot.isDragging ? " rotate(2deg) scale(1.03)" : "";
-                            const composedTransform = `${baseTransform || ""}${extra}`;
-
+                            /* ⬇️ Patch #3: „schieben“-Gefühl statt Z-Drehung */
+                            const composedTransform = `${base.transform || ""}${
+                              snapshot.isDragging ? " perspective(900px) rotateX(5deg) scale(1.01) translateZ(0)" : ""
+                            }`;
                             return (
                               <div
                                 ref={dProvided.innerRef}
@@ -454,14 +530,21 @@ export default function BoardCleanDnD() {
                                 tabIndex={0}
                                 className={`task-card ${queryActive ? (isMatch ? "match" : "dim") : ""}`}
                                 onKeyDown={(e) => {
-                                  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setEditTask(t); }
+                                  if (e.key === "Enter" || e.key === " ") {
+                                    e.preventDefault();
+                                    setEditTask(t);
+                                  }
                                 }}
-                                onClick={() => setEditTask(t)}
+                                /* ⬇️ Patch #2: nur noch Doppelklick öffnet Edit */
+                                onDoubleClick={() => setEditTask(t)}
                                 style={{
                                   ...base,
-                                  transform: composedTransform || base.transform,
-                                  border: `2px solid ${dueBorder}`,
-                                  cursor: "pointer",
+                                  transform: composedTransform,
+                                  border: `2px solid ${dueInfo.border}`,
+                                  cursor: snapshot.isDragging ? "grabbing" : "grab",
+                                  boxShadow: snapshot.isDragging
+                                    ? "0 18px 40px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.25)"
+                                    : "0 4px 16px var(--shadow, rgba(0,0,0,.35))",
                                 }}
                               >
                                 {/* Titel */}
@@ -470,44 +553,46 @@ export default function BoardCleanDnD() {
                                 {/* Zeile 1: Teilenummer | Kunde */}
                                 <div className="row" style={{ marginBottom: 6 }}>
                                   <div className="meta" title={t.teilenummer || "-"}>
-                                    <IconTag stroke="#9ca3af" />
+                                    <IconTag />
                                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                                       {t.teilenummer || "-"}
                                     </span>
                                   </div>
-                                  <div className="meta-right" title={t.kunde || "-"}>
-                                    {t.kunde || "-"}
+                                  <div className="meta" title={t.kunde || "-"} style={{ justifyContent: "flex-end" }}>
+                                    <IconBriefcase />
+                                    <span className="meta-right">{t.kunde || "-"}</span>
                                   </div>
                                 </div>
 
                                 {/* Zeile 2: Zuständig | Aufwand */}
                                 <div className="row" style={{ marginBottom: 6 }}>
                                   <div className="meta" title={t.zuständig || "offen"}>
-                                    <IconUser stroke="#9ca3af" />
+                                    <IconUser />
                                     <span>{t.zuständig || "offen"}</span>
                                   </div>
                                   <div className="meta" title={`${t.aufwandStunden || 0}h`}>
-                                    <IconClock stroke="#9ca3af" />
+                                    <IconClock />
                                     <span>{t.aufwandStunden ? `${t.aufwandStunden}h` : "0h"}</span>
                                   </div>
                                 </div>
 
-                                {/* Zeile 3: Datum links (falls vorhanden) | Status rechts */}
+                                {/* Zeile 3: Datum links | Status rechts */}
                                 <div className="row">
                                   {t.endDatum ? (
-                                    <div className="meta" title={formatDate(t.endDatum)} style={{ color: dueColor }}>
-                                      <IconCalendar stroke={dueColor} />
-                                      <span style={{ color: dueColor }}>{formatDate(t.endDatum)}</span>
+                                    <div className="meta" title={formatDate(t.endDatum)} style={{ color: dueInfo.color }}>
+                                      <IconCalendar />
+                                      <span style={{ color: dueInfo.color }}>{formatDate(t.endDatum)}</span>
                                     </div>
-                                  ) : <div />}
-
-                                  <span className={`pill ${st.cls}`} title={`Status: ${st.label}`}>
-                                    {st.label}
+                                  ) : (
+                                    <div />
+                                  )}
+                                  <span className={`pill ${stTone.cls}`} title={`Status: ${stTone.label}`}>
+                                    {stTone.label}
                                   </span>
                                 </div>
 
-                                {/* Zusatzinfos (eine Zeile, Ellipsis) */}
-                                { (t["zusätzlicheInfos"] ?? t.zusatzlicheInfos) && (
+                                {/* Zusatzinfos */}
+                                {(t["zusätzlicheInfos"] ?? t.zusatzlicheInfos) && (
                                   <p className="desc" title={t["zusätzlicheInfos"] ?? t.zusatzlicheInfos}>
                                     {t["zusätzlicheInfos"] ?? t.zusatzlicheInfos}
                                   </p>
@@ -534,7 +619,20 @@ export default function BoardCleanDnD() {
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
         stations={allStationKeys.map((k) => labelByKey[k])}
-        onCreated={handleCreated}
+        onCreated={(newTask) => {
+          const k = normalizeStationLabel(newTask?.arbeitsstation ?? "Unassigned");
+          setColumns((prev) => {
+            const draft = { ...prev };
+            draft[k] = sortByPriorityThenId([...(draft[k] || []), newTask]);
+            return draft;
+          });
+          const raw = newTask?.arbeitsstation ?? "Unassigned";
+          setLabelByKey((prev) => {
+            const kk = normalizeStationLabel(raw);
+            if (prev[kk]) return prev;
+            return { ...prev, [kk]: String(raw).trim() };
+          });
+        }}
       />
       <TaskEditModal
         isOpen={!!editTask}
