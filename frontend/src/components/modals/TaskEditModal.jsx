@@ -10,13 +10,14 @@ const stationNamesFrom = (stations) => {
     .filter(Boolean);
 };
 
-const STATUSES = ["NEU", "TO_DO", "IN_PROGRESS", "DONE"];
+const STATUSES = ["NEU", "TO_DO", "IN_PROGRESS", "DONE", "GESPERRT"];
 const getStatusColor = (status) => {
   switch (status) {
     case "NEU": return "#6366f1";
     case "TO_DO": return "#f59e0b";
     case "IN_PROGRESS": return "#22c55e";
     case "DONE": return "#10b981";
+    case "GESPERRT": return "#ef4444";
     default: return "#64748b";
   }
 };
@@ -31,7 +32,6 @@ const toInputDate = (d) => {
   } catch { return ""; }
 };
 
-// ✨ Dichte + Animation feinjustierbar
 const DENSE = true;
 const MODAL_DUR_MS = 260;
 
@@ -48,18 +48,10 @@ const ui = {
     boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
   },
   container: { padding: DENSE ? "18px 20px" : "20px 22px" },
-  header: {
-    display: "flex", justifyContent: "space-between", alignItems: "baseline",
-    marginBottom: 8, paddingBottom: 6, borderBottom: "1px solid #233145",
-  },
+  header: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8, paddingBottom: 6, borderBottom: "1px solid #233145" },
   titleRow: { display: "flex", alignItems: "baseline", gap: 10 },
   title: { fontSize: "1.08rem", color: "#93c5fd", margin: 0, letterSpacing: ".2px" },
-  idBadge: {
-    padding: "2px 8px", borderRadius: 999, border: "1px solid #1e3a8a",
-    background: "linear-gradient(180deg,#0f172a,#0b1220)", color: "#dbeafe",
-    fontSize: ".82rem", display: "inline-flex", alignItems: "center", gap: 6,
-    boxShadow: "0 0 0 2px rgba(59,130,246,.15), 0 0 12px rgba(59,130,246,.25)",
-  },
+  idBadge: { padding: "2px 8px", borderRadius: 999, border: "1px solid #1e3a8a", background: "linear-gradient(180deg,#0f172a,#0b1220)", color: "#dbeafe", fontSize: ".82rem", display: "inline-flex", alignItems: "center", gap: 6, boxShadow: "0 0 0 2px rgba(59,130,246,.15), 0 0 12px rgba(59,130,246,.25)" },
   idMono: { fontVariantNumeric: "tabular-nums", letterSpacing: ".02em" },
   close: { background: "transparent", border: 0, color: "#9ca3af", fontSize: 20, cursor: "pointer", padding: 4, borderRadius: 8 },
 
@@ -67,11 +59,7 @@ const ui = {
   sectionTitle: { margin: "0 0 8px 0", fontSize: "0.78rem", color: "#94a3b8", borderBottom: "1px dashed #233145", paddingBottom: 5, textTransform: "uppercase", fontWeight: 700, letterSpacing: ".06em" },
 
   label: { display: "block", marginBottom: 5, fontWeight: 700, color: "#d1d5db", fontSize: ".88rem" },
-  inputBase: {
-    width: "100%", padding: DENSE ? "7px 9px" : "8px 10px", border: "1px solid #243146", borderRadius: 9,
-    background: "linear-gradient(180deg,#0f172a,#0b1220)", color: "#e5e7eb", fontSize: ".92rem",
-    outline: "none", boxSizing: "border-box", transition: "border-color .12s ease, box-shadow .12s ease",
-  },
+  inputBase: { width: "100%", padding: DENSE ? "7px 9px" : "8px 10px", border: "1px solid #243146", borderRadius: 9, background: "linear-gradient(180deg,#0f172a,#0b1220)", color: "#e5e7eb", fontSize: ".92rem", outline: "none", boxSizing: "border-box", transition: "border-color .12s ease, box-shadow .12s ease" },
   inputFocus: { borderColor: "#3b82f6", boxShadow: "0 0 0 3px rgba(59,130,246,.18)" },
   grid2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: DENSE ? 10 : 12 },
   textarea: { minHeight: 86, resize: "vertical" },
@@ -90,15 +78,13 @@ const ui = {
   }),
 };
 
-function TaskEditModal({
-  isOpen, task, stations = [], onSaved, onClose, onRequestDelete,
-}) {
+function TaskEditModal({ isOpen, task, stations = [], onSaved, onClose, onRequestDelete }) {
   const [focusKey, setFocusKey] = useState(null);
   const [shake, setShake] = useState(false);
   const names = useMemo(() => stationNamesFrom(stations), [stations]);
   const modalRef = useRef(null);
   const formRef = useRef(null);
-  const titleId = "edit-modal-title";
+  const titleId = "edit-modal-title"; // <-- wird unten benutzt
 
   const [taskData, setTaskData] = useState({
     bezeichnung: "", teilenummer: "", kunde: "", endDatum: "",
@@ -109,7 +95,6 @@ function TaskEditModal({
   const [isSaving, setIsSaving] = useState(false);
   const [submitError, setSubmitError] = useState(null);
 
-  // Daten beim Öffnen übernehmen + Errors resetten
   useEffect(() => {
     if (!task) return;
     const snapshot = {
@@ -159,8 +144,6 @@ function TaskEditModal({
   };
 
   const handleDelete = () => { onRequestDelete?.(task); onClose?.(); };
-
-  // Reset auf ursprüngliche Werte (beim Öffnen)
   const handleReset = () => {
     setTaskData(initialTaskRef.current);
     setSubmitError(null);
@@ -169,24 +152,19 @@ function TaskEditModal({
 
   const inputStyle = (key) => (focusKey === key ? { ...ui.inputBase, ...ui.inputFocus } : ui.inputBase);
 
-  // Focus-Trap + ESC + Ctrl/Cmd+Enter
   useEffect(() => {
     if (!isOpen) return;
     const node = modalRef.current; if (!node) return;
-
     const firstInput = node.querySelector("#bezeichnung");
     setTimeout(() => { firstInput?.focus(); }, 0);
-
     const onKeyDown = (ev) => {
       if (ev.key === "Escape") { ev.preventDefault(); onClose?.(); return; }
       if ((ev.key === "Enter") && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); formRef.current?.requestSubmit(); return; }
     };
-
     node.addEventListener("keydown", onKeyDown);
     return () => node.removeEventListener("keydown", onKeyDown);
   }, [isOpen, onClose]);
 
-  // Overlay-Klick → valid? close : shake + focus + error
   const handleOverlayClick = (ev) => {
     ev.stopPropagation();
     const v = validate();
@@ -226,13 +204,13 @@ function TaskEditModal({
         ref={modalRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby={titleId}
+        aria-labelledby={titleId}   // <-- benutzt titleId
         tabIndex={-1}
       >
         <div style={ui.container}>
           <div style={ui.header}>
             <div style={ui.titleRow}>
-              <h2 id={titleId} style={ui.title}>Aufgabe bearbeiten</h2>
+              <h2 id={titleId} style={ui.title}>Aufgabe bearbeiten</h2> {/* <-- benutzt titleId */}
               <span style={ui.idBadge} title={`Task-ID ${task.id}`}>
                 <span aria-hidden>✏️</span>
                 <span style={ui.idMono}>#{task.id}</span>
@@ -345,7 +323,7 @@ function TaskEditModal({
             <div style={ui.footer}>
               <div style={{ display: "flex", gap: 8 }}>
                 <button type="button" style={ui.ghost} onClick={handleReset} disabled={isSaving} title="Änderungen verwerfen und zurücksetzen">↺ Zurücksetzen</button>
-                <button type="button" style={ui.danger} onClick={handleDelete} disabled={isSaving} title="Aufgabe löschen (mit Undo im Board)">🗑 Löschen</button>
+                <button type="button" style={ui.danger} onClick={onRequestDelete} disabled={isSaving} title="Aufgabe löschen (mit Undo im Board)">🗑 Löschen</button>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button type="button" style={ui.secondary} onClick={onClose} disabled={isSaving}>Abbrechen</button>

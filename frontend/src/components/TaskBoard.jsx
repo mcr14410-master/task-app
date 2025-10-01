@@ -6,10 +6,10 @@ import TaskCreationModal from "./modals/TaskCreationModal";
 import TaskEditModal from "./modals/TaskEditModal";
 import TaskItem from "./TaskItem";
 
+// ---------- helpers ----------
 function normalizeStationLabel(v) {
   const s = String(v ?? "Unassigned");
-  return s
-    .replace(/\u00A0/g, " ")
+  return s.replace(/\u00A0/g, " ")
     .replace(/[\u200B-\u200D\uFEFF]/g, "")
     .normalize("NFKC")
     .replace(/\s+/g, " ")
@@ -17,16 +17,9 @@ function normalizeStationLabel(v) {
 }
 function pickStationLabel(rec) {
   return normalizeStationLabel(
-    rec?.bezeichnung ??
-      rec?.name ??
-      rec?.label ??
-      rec?.title ??
-      rec?.titel ??
-      rec?.arbeitsstation ??
-      rec?.station ??
-      rec?.kurzname ??
-      (typeof rec === "string" ? rec : null) ??
-      null
+    rec?.bezeichnung ?? rec?.name ?? rec?.label ?? rec?.title ?? rec?.titel ??
+    rec?.arbeitsstation ?? rec?.station ?? rec?.kurzname ??
+    (typeof rec === "string" ? rec : null) ?? null
   );
 }
 function sortByPriorityThenId(list) {
@@ -44,18 +37,11 @@ async function updateTaskServer(id, body) {
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error((await res.text().catch(() => "")) || `HTTP ${res.status}`);
-  try {
-    return await res.json();
-  } catch {
-    return body;
-  }
+  try { return await res.json(); } catch { return body; }
 }
 async function deleteTaskServer(id) {
   const res = await fetch(`/api/tasks/${id}`, { method: "DELETE" });
-  if (!res.ok && res.status !== 204) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(txt || `HTTP ${res.status}`);
-  }
+  if (!res.ok && res.status !== 204) throw new Error((await res.text().catch(() => "")) || `HTTP ${res.status}`);
 }
 async function bulkSortServer(payload) {
   const res = await fetch(`/api/tasks/sort`, {
@@ -63,37 +49,49 @@ async function bulkSortServer(payload) {
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(txt || `HTTP ${res.status}`);
-  }
+  if (!res.ok) throw new Error((await res.text().catch(() => "")) || `HTTP ${res.status}`);
 }
 function buildSortPayload(columns, keys) {
-  const out = [];
-  const kset = new Set(keys);
+  const out = []; const kset = new Set(keys);
   for (const [k, list] of Object.entries(columns)) {
     if (!kset.has(k)) continue;
-    (list || []).forEach((t, i) => {
-      out.push({ ...t, prioritaet: i });
-    });
+    (list || []).forEach((t, i) => out.push({ ...t, prioritaet: i }));
   }
   return out;
 }
 function matchesQuery(task, q) {
   const s = (q || "").trim().toLowerCase();
   if (!s) return true;
-  const fields = [
-    task?.bezeichnung,
-    task?.teilenummer,
-    task?.kunde,
-    task?.zuständig,
-    task?.["zusätzlicheInfos"],
-    task?.arbeitsstation,
-    task?.status,
-  ].filter(Boolean);
+  const fields = [task?.bezeichnung, task?.teilenummer, task?.kunde, task?.zuständig, task?.["zusätzlicheInfos"], task?.arbeitsstation, task?.status].filter(Boolean);
   return fields.some((v) => String(v).toLowerCase().includes(s));
 }
 
+// ---------- status & due coloring ----------
+function getStatusTone(statusRaw) {
+  const s = String(statusRaw || "").toUpperCase();
+  if (s.includes("GESPERR")) return { label: "GESPERRT", bg: "#ef4444", border: "#7f1d1d" };
+  if (s.includes("DONE") || s.includes("ERLED")) return { label: "DONE", bg: "#10b981", border: "#065f46" };
+  if (s.includes("PROG")) return { label: "IN PROGRESS", bg: "#22c55e", border: "#166534" };
+  if (s.includes("TO_DO") || s === "TODO" || s.includes("TO-DO")) return { label: "TO_DO", bg: "#f59e0b", border: "#7a5d0a" };
+  if (s.includes("NEU") || s.includes("NEW")) return { label: "NEU", bg: "#6366f1", border: "#3730a3" };
+  return { label: s || "TO DO", bg: "#64748b", border: "#334155" };
+}
+function getDueInfo(task) {
+  // Glow +10% & helleres Gelb für „morgen“
+  const noColor = { state: "none", dateColor: "#94a3b8", border: "#1f2937", glow: "" };
+  const v = task?.endDatum; if (!v) return noColor;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const d = new Date(v); d.setHours(0,0,0,0);
+  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+  const rgba = (hex, a) => { const m=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex); if(!m) return `rgba(0,0,0,${a})`; const r=parseInt(m[1],16),g=parseInt(m[2],16),b=parseInt(m[3],16); return `rgba(${r},${g},${b},${a})`; };
+
+  if (d < today)   return { state: "overdue",  dateColor: "#ef4444", border: "#7f1d1d", glow: `0 0 0 2px ${rgba("#ef4444",.22)}, 0 0 14px ${rgba("#ef4444",.31)}` };
+  if (+d === +today)    return { state: "today",    dateColor: "#f59e0b", border: "#7a5d0a", glow: `0 0 0 2px ${rgba("#f59e0b",.18)}, 0 0 12px ${rgba("#f59e0b",.24)}` };
+  if (+d === +tomorrow) return { state: "tomorrow", dateColor: "#fde68a", border: "#eab308", glow: `0 0 0 2px ${rgba("#fde68a",.154)}, 0 0 10px ${rgba("#fde68a",.22)}` };
+  return noColor;
+}
+
+// =======================================================
 export default function TaskBoard() {
   const toast = useToast();
   const pendingRef = useRef(new Map());
@@ -108,6 +106,13 @@ export default function TaskBoard() {
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editTask, setEditTask] = useState(null);
+
+  // ESC leeren — immer montiert
+  useEffect(() => {
+    const onKey = (ev) => { if (ev.key === "Escape") setQuery((prev) => (prev ? "" : prev)); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // Daten laden
   useEffect(() => {
@@ -135,45 +140,34 @@ export default function TaskBoard() {
             const stJ = JSON.parse(stTxt);
             const arr = Array.isArray(stJ) ? stJ : Array.isArray(stJ?.content) ? stJ.content : Array.isArray(stJ?.items) ? stJ.items : [];
             stations = arr.map(pickStationLabel).filter(Boolean).map(String);
-          } catch (err) {
-            // no-op: Stationen optional
-            console.debug("arbeitsstationen parse skipped:", err);
-          }
+          } catch { /* optional */ }
         }
 
         const labels = {};
-        for (const raw of stations) {
-          const k = normalizeStationLabel(raw);
-          if (!labels[k]) labels[k] = String(raw).trim();
-        }
-        for (const t of tasks) {
-          const raw = t?.arbeitsstation ?? "Unassigned";
-          const k = normalizeStationLabel(raw);
-          if (!labels[k]) labels[k] = String(raw).trim();
-        }
+        for (const raw of stations) { const k = normalizeStationLabel(raw); if (!labels[k]) labels[k] = String(raw).trim(); }
+        for (const t of tasks) { const raw = t?.arbeitsstation ?? "Unassigned"; const k = normalizeStationLabel(raw); if (!labels[k]) labels[k] = String(raw).trim(); }
 
         const grouped = {};
         for (const t of tasks) {
           const raw = t?.arbeitsstation ?? "Unassigned";
           const key = normalizeStationLabel(raw);
-          if (!grouped[key]) grouped[key] = [];
-          grouped[key].push(t);
+          (grouped[key] ||= []).push(t);
         }
         Object.keys(grouped).forEach((k) => (grouped[k] = sortByPriorityThenId(grouped[k])));
 
         setLabelByKey(labels);
         setColumns(grouped);
         setErr(null);
-      } catch (err) {
-        console.error(err);
-        setErr(String(err?.message || err));
+      } catch (e) {
+        console.error(e);
+        setErr(String(e?.message || e));
       } finally {
         setLoading(false);
       }
     })();
   }, []);
 
-  // DnD Ende
+  // DnD Ende — ohne 3D/Rotate/Scale-Effekt
   async function onDragEnd(result) {
     const { destination, source } = result;
     if (!destination) return;
@@ -211,13 +205,11 @@ export default function TaskBoard() {
       }
     } catch (err) {
       toast.error("Konnte neue Reihenfolge nicht speichern.");
-      // minimaler Re-Render, um UI nicht zu „klemmen“
       setColumns((prev) => ({ ...prev }));
       console.error(err);
     }
   }
 
-  // Save / Delete als benannte Handler (und unten übergeben → nicht „unbenutzt“)
   function handleSaved(saved) {
     const oldKey = normalizeStationLabel(saved?.__oldArbeitsstation ?? saved?.arbeitsstation ?? "Unassigned");
     const newKey = normalizeStationLabel(saved?.arbeitsstation ?? "Unassigned");
@@ -231,7 +223,7 @@ export default function TaskBoard() {
       after[oldKey] = (after[oldKey] || []).filter((t) => t.id !== saved.id);
       after[newKey] = (after[newKey] || []).concat(saved);
       const keys = oldKey === newKey ? [newKey] : [oldKey, newKey];
-      bulkSortServer(buildSortPayload(after, keys)).catch((err) => console.debug("bulk sort (saved) skipped:", err));
+      bulkSortServer(buildSortPayload(after, keys)).catch(() => {});
       return draft;
     });
     toast.success("Änderungen gespeichert.");
@@ -251,61 +243,36 @@ export default function TaskBoard() {
     const UNDO_MS = 5000;
     const toastId = toast.show("info", `Aufgabe #${task.id} wird gelöscht …`, {
       title: "Gelöscht",
-      actions: [
-        {
-          label: "Rückgängig",
-          onClick: () => {
-            clearTimeout(timeout);
-            toast.dismiss(toastId);
-            const info = pendingRef.current.get(task.id);
-            if (!info) return;
-            setColumns((prev) => {
-              const draft = { ...prev };
-              const list = [...(draft[info.key] || [])];
-              list.splice(info.index, 0, info.task);
-              draft[info.key] = list;
-              return draft;
-            });
-            pendingRef.current.delete(task.id);
-          },
-        },
-      ],
+      actions: [{ label: "Rückgängig", onClick: () => {
+        clearTimeout(timeout); toast.dismiss(toastId);
+        const info = pendingRef.current.get(task.id); if (!info) return;
+        setColumns((prev) => {
+          const draft = { ...prev };
+          const list = [...(draft[info.key] || [])];
+          list.splice(info.index, 0, info.task);
+          draft[info.key] = list;
+          return draft;
+        });
+        pendingRef.current.delete(task.id);
+      }}],
     });
 
     const timeout = setTimeout(async () => {
       toast.dismiss(toastId);
-      try {
-        await deleteTaskServer(task.id);
-        pendingRef.current.delete(task.id);
-        toast.success("Endgültig gelöscht.");
-      } catch (err) {
-        toast.error("Löschen fehlgeschlagen.");
-        console.error(err);
-      }
+      try { await deleteTaskServer(task.id); pendingRef.current.delete(task.id); toast.success("Endgültig gelöscht."); }
+      catch (e) { toast.error("Löschen fehlgeschlagen."); console.error(e); }
     }, UNDO_MS);
 
     pendingRef.current.set(task.id, { timeout, key, index, task });
   }
 
-  if (loading)
-    return (
-      <p style={{ padding: 16, color: "#cbd5e1", background: "#0b1220", minHeight: "100vh" }}>
-        lade…
-      </p>
-    );
-  if (err)
-    return (
-      <div style={{ padding: 16, background: "#0b1220", minHeight: "100vh" }}>
-        <pre style={{ whiteSpace: "pre-wrap", color: "#f87171", background: "transparent" }}>
-          Fehler: {err}
-        </pre>
-      </div>
-    );
+  if (loading) return <p style={{ padding: 16, color: "#cbd5e1", background: "#0b1220", minHeight: "100vh" }}>lade…</p>;
+  if (err) return <div style={{ padding: 16, background: "#0b1220", minHeight: "100vh" }}>
+    <pre style={{ whiteSpace: "pre-wrap", color: "#f87171", background: "transparent" }}>Fehler: {err}</pre>
+  </div>;
 
   const allStationKeys = Object.keys(labelByKey).sort((a, b) => a.localeCompare(b));
-  const visibleStationKeys =
-    stationFilter === "ALL" ? allStationKeys : allStationKeys.filter((k) => k === stationFilter);
-
+  const visibleStationKeys = stationFilter === "ALL" ? allStationKeys : allStationKeys.filter((k) => k === stationFilter);
   const q = query.trim();
   const queryActive = q.length > 0;
 
@@ -320,42 +287,51 @@ export default function TaskBoard() {
         .toolbar-input, .toolbar-select { padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); }
         .toolbar-input::placeholder { color: var(--muted); }
         .btn-primary { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--brand); background: var(--brand); color: white; }
+
         .cols-row { display: flex; gap: 16px; align-items: flex-start; overflow-x: auto; padding-bottom: 8px; }
         .cols-row::-webkit-scrollbar { height: 8px; }
         .cols-row::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 8px; }
-        .col { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 8px 24px var(--shadow) }
+
+        .col { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 8px 24px var(--shadow); padding: 12px; minHeight: 80px; min-width: 320px; width: 360px; flex: 0 0 auto; }
         .col-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 0 0 8px 0; }
         .col h2 { color: var(--text); margin: 0; font-size: 16px; }
         .stats { color: var(--muted); font-size: 12px; display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
         .stats .sep { opacity: .6; }
         .badge { font-size: 12px; color: var(--muted); }
+
         .task-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 10px; box-shadow: 0 4px 16px var(--shadow); transition: transform .12s ease, box-shadow .12s ease, background .18s ease, opacity .18s ease, filter .18s ease; }
         .task-card:hover { transform: translateY(-1px) scale(1.02); }
         .task-card:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
         .task-card.match { box-shadow: 0 0 0 2px var(--brand) inset, 0 8px 24px var(--shadow); background: linear-gradient(0deg, var(--match-bg), var(--card)); }
         .task-card.dim { opacity: .45; filter: grayscale(.5) blur(.2px); }
+
         .pill { padding: 4px 10px; border-radius: 999px; font-size: 11px; border: 1px solid var(--border); color: #fff; text-transform: uppercase; font-weight: 700; }
-        .pill.ok { background: var(--ok); border-color: var(--ok); }
-        .pill.warn { background: var(--warn); border-color: var(--warn); }
-        .pill.danger { background: var(--danger); border-color: var(--danger); }
-        .pill.info { background: var(--info); border-color: var(--info); }
-        .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-        .meta { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; min-width: 0; }
-        .meta-right { font-size: 12px; color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .title { color: var(--text); font-size: 14px; font-weight: 600; margin: 0 0 8px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .desc { margin: 8px 0 0 0; font-size: 12.5px; color: #cbd5e1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        .search-wrap { position: relative; display: inline-flex; align-items: center; }
+        .search-wrap input { padding-right: 28px; }
+        .search-clear { position: absolute; right: 6px; background: transparent; border: 0; color: #9ca3af; cursor: pointer; font-size: 16px; line-height: 1; border-radius: 6px; padding: 2px 4px; }
+        .search-clear:hover { color: #e5e7eb; }
       `}</style>
 
       {/* Toolbar */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
-        <input
-          type="text"
-          className="toolbar-input"
-          placeholder="Filtern… (Bezeichnung, Kunde, Teilenummer …)"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          style={{ minWidth: 220 }}
-        />
+        <div className="search-wrap">
+          <input
+            type="text"
+            className="toolbar-input"
+            placeholder="Filtern… (Bezeichnung, Kunde, Teilenummer …) — ESC leert"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Escape") setQuery(""); }}
+            style={{ minWidth: 260 }}
+            aria-label="Aufgaben filtern"
+          />
+          {queryActive && (
+            <button className="search-clear" onClick={() => setQuery("")} aria-label="Filter löschen">×</button>
+          )}
+        </div>
+        {queryActive && <span className="badge">Treffer gehighlighted, andere gedimmt</span>}
+
         <select
           className="toolbar-select"
           value={stationFilter}
@@ -363,17 +339,11 @@ export default function TaskBoard() {
           aria-label="Nach Arbeitsstation filtern"
         >
           <option value="ALL">Alle Stationen</option>
-          {allStationKeys.map((k) => (
-            <option key={k} value={k}>
-              {labelByKey[k]}
-            </option>
-          ))}
+          {allStationKeys.map((k) => (<option key={k} value={k}>{labelByKey[k]}</option>))}
         </select>
+
         <div style={{ flex: 1 }} />
-        {queryActive && <span className="badge">Treffer gehighlighted, andere gedimmt</span>}
-        <button onClick={() => setIsCreateOpen(true)} className="btn-primary">
-          + Neue Aufgabe
-        </button>
+        <button onClick={() => setIsCreateOpen(true)} className="btn-primary">+ Neue Aufgabe</button>
       </div>
 
       <DragDropContext onDragEnd={onDragEnd}>
@@ -384,7 +354,6 @@ export default function TaskBoard() {
 
             const totalHoursRaw = list.reduce((acc, t) => acc + (Number(t?.aufwandStunden) || 0), 0);
             const totalHours = Math.round(totalHoursRaw * 10) / 10;
-
             const matchesInCol = queryActive ? list.filter((t) => matchesQuery(t, q)).length : list.length;
             const matchedHoursRaw = queryActive
               ? list.filter((t) => matchesQuery(t, q)).reduce((acc, t) => acc + (Number(t?.aufwandStunden) || 0), 0)
@@ -394,12 +363,7 @@ export default function TaskBoard() {
             return (
               <Droppable droppableId={key} key={key}>
                 {(provided) => (
-                  <div
-                    ref={provided.innerRef}
-                    {...provided.droppableProps}
-                    className="col"
-                    style={{ padding: 12, minHeight: 80, minWidth: 320, width: 360, flex: "0 0 auto" }}
-                  >
+                  <div ref={provided.innerRef} {...provided.droppableProps} className="col">
                     <div className="col-head">
                       <h2>{title}</h2>
                       <div className="stats">
@@ -411,34 +375,23 @@ export default function TaskBoard() {
 
                     {list.map((t, index) => {
                       const isMatch = queryActive ? matchesQuery(t, q) : true;
-
-                      const dueInfo = (() => {
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-                        if (!t.endDatum) return { color: "#94a3b8", border: "#1f2937" };
-                        const d = new Date(t.endDatum);
-                        d.setHours(0, 0, 0, 0);
-                        if (d < today) return { color: "#fca5a5", border: "#7f1d1d" };
-                        if (+d === +today) return { color: "#fde68a", border: "#7a5d0a" };
-                        return { color: "#a7f3d0", border: "#1f2937" };
-                      })();
-                      const stTone = (() => {
-                        const s = String(t.status || "").toUpperCase();
-                        if (s.includes("DONE") || s.includes("ERLEDIGT")) return { cls: "ok", label: "DONE" };
-                        if (s.includes("PROG")) return { cls: "info", label: "IN PROGRESS" };
-                        if (s.includes("NEU") || s.includes("NEW")) return { cls: "warn", label: "NEU" };
-                        return { cls: "warn", label: s || "TO DO" };
-                      })();
+                      const due = getDueInfo(t);
+                      const tone = getStatusTone(t.status);
 
                       return (
                         <Draggable draggableId={t.id.toString()} index={index} key={t.id}>
                           {(dProvided, snapshot) => {
                             const base = dProvided.draggableProps.style || {};
-                            const composedTransform = `${base.transform || ""}${
-                              snapshot.isDragging
-                                ? " perspective(900px) rotateX(5deg) scale(1.01) translateZ(0)"
-                                : ""
-                            }`;
+
+                            const normalShadow = snapshot.isDragging
+                              ? "0 18px 40px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.25)"
+                              : "0 4px 16px var(--shadow, rgba(0,0,0,.35))";
+                            const shadowWithGlow = due.glow ? `${normalShadow}, ${due.glow}` : normalShadow;
+
+                            // WICHTIG: kein eigenes transform setzen -> Bibliothek steuert Position alleine
+                            const borderStyle =
+                              due.state === "none" ? "1px solid var(--border)" : `2px solid ${due.border}`;
+
                             return (
                               <div
                                 ref={dProvided.innerRef}
@@ -446,24 +399,16 @@ export default function TaskBoard() {
                                 {...dProvided.dragHandleProps}
                                 tabIndex={0}
                                 className={`task-card ${queryActive ? (isMatch ? "match" : "dim") : ""}`}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter" || e.key === " ") {
-                                    e.preventDefault();
-                                    setEditTask(t);
-                                  }
-                                }}
+                                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setEditTask(t); } }}
                                 onDoubleClick={() => setEditTask(t)}
                                 style={{
                                   ...base,
-                                  transform: composedTransform,
-                                  border: `2px solid ${dueInfo.border}`,
+                                  border: borderStyle,
                                   cursor: snapshot.isDragging ? "grabbing" : "grab",
-                                  boxShadow: snapshot.isDragging
-                                    ? "0 18px 40px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.25)"
-                                    : "0 4px 16px var(--shadow, rgba(0,0,0,.35))",
+                                  boxShadow: due.state === "none" ? normalShadow : shadowWithGlow,
                                 }}
                               >
-                                <TaskItem task={t} dueColor={dueInfo.color} statusTone={stTone} />
+                                <TaskItem task={t} dueColor={due.dateColor} statusTone={tone} />
                               </div>
                             );
                           }}
@@ -488,17 +433,9 @@ export default function TaskBoard() {
         stations={allStationKeys.map((k) => labelByKey[k])}
         onCreated={(newTask) => {
           const k = normalizeStationLabel(newTask?.arbeitsstation ?? "Unassigned");
-          setColumns((prev) => {
-            const draft = { ...prev };
-            draft[k] = sortByPriorityThenId([...(draft[k] || []), newTask]);
-            return draft;
-          });
+          setColumns((prev) => { const draft = { ...prev }; draft[k] = sortByPriorityThenId([...(draft[k] || []), newTask]); return draft; });
           const raw = newTask?.arbeitsstation ?? "Unassigned";
-          setLabelByKey((prev) => {
-            const kk = normalizeStationLabel(raw);
-            if (prev[kk]) return prev;
-            return { ...prev, [kk]: String(raw).trim() };
-          });
+          setLabelByKey((prev) => { const kk = normalizeStationLabel(raw); return prev[kk] ? prev : { ...prev, [kk]: String(raw).trim() }; });
         }}
       />
       <TaskEditModal

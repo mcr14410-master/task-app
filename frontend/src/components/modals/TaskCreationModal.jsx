@@ -1,7 +1,6 @@
 // src/components/modals/TaskCreationModal.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-/** Stations-Liste in Namen umwandeln */
 const stationNamesFrom = (stations) => {
   if (!Array.isArray(stations)) return [];
   return stations
@@ -13,12 +12,17 @@ const stationNamesFrom = (stations) => {
     .filter(Boolean);
 };
 
-const STATUS_COLORS = { NEU: "#6366f1", TO_DO: "#f59e0b", IN_PROGRESS: "#22c55e", DONE: "#10b981" };
-const STATUS_ORDER = ["NEU", "TO_DO", "IN_PROGRESS", "DONE"];
+const STATUS_COLORS = {
+  NEU: "#6366f1",
+  TO_DO: "#f59e0b",
+  IN_PROGRESS: "#22c55e",
+  DONE: "#10b981",
+  GESPERRT: "#ef4444", // neu
+};
+const STATUS_ORDER = ["NEU", "TO_DO", "IN_PROGRESS", "DONE", "GESPERRT"];
 
-// ✨ Dichte + Animation feinjustierbar
-const DENSE = true;           // << true = kompakter
-const MODAL_DUR_MS = 260;     // << 180–320 je nach Geschmack
+const DENSE = true;
+const MODAL_DUR_MS = 260;
 
 const styles = {
   overlay: {
@@ -92,7 +96,7 @@ function TaskCreationModal({ isOpen, stations = [], onCreated, onClose }) {
   const modalRef = useRef(null);
   const formRef = useRef(null);
   const resetOnNextOpenRef = useRef(true);
-  const titleId = "create-modal-title";
+  const titleId = "create-modal-title"; // <-- wird unten benutzt
 
   const stationNames = useMemo(() => {
     const names = stationNamesFrom(stations);
@@ -105,10 +109,8 @@ function TaskCreationModal({ isOpen, stations = [], onCreated, onClose }) {
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
 
-  // Station default auf Unassigned halten (ohne restliche Felder zu resetten)
   useEffect(() => { setForm((f) => ({ ...f, arbeitsstation: "Unassigned" })); }, [stationNames.length]);
 
-  // Reset nur beim (erneuten) Öffnen falls gewünscht
   useEffect(() => {
     if (!isOpen) return;
     if (resetOnNextOpenRef.current) {
@@ -157,7 +159,7 @@ function TaskCreationModal({ isOpen, stations = [], onCreated, onClose }) {
       if (!res.ok) throw new Error((await res.text().catch(() => "")) || `HTTP ${res.status}`);
       const saved = await res.json().catch(() => payload);
       onCreated?.(saved);
-      resetOnNextOpenRef.current = true; // nächstes Öffnen leer starten
+      resetOnNextOpenRef.current = true;
       onClose?.();
     } catch (err) {
       setErrorMsg(err?.message || "Unbekannter Fehler beim Erstellen.");
@@ -196,7 +198,6 @@ function TaskCreationModal({ isOpen, stations = [], onCreated, onClose }) {
 
   const inputStyle = (key) => (focusKey === key ? { ...styles.inputBase, ...styles.inputFocus } : styles.inputBase);
 
-  // ESC + Ctrl/Cmd+Enter
   useEffect(() => {
     if (!isOpen) return;
     const node = modalRef.current; if (!node) return;
@@ -210,7 +211,6 @@ function TaskCreationModal({ isOpen, stations = [], onCreated, onClose }) {
     return () => node.removeEventListener("keydown", onKeyDown);
   }, [isOpen, onClose]);
 
-  // Overlay-Klick: nicht schließen; bei Fehler Shake
   const handleOverlayClick = (ev) => {
     ev.stopPropagation();
     const v = validate();
@@ -241,13 +241,13 @@ function TaskCreationModal({ isOpen, stations = [], onCreated, onClose }) {
         ref={modalRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby={titleId}
+        aria-labelledby={titleId}      // <-- benutzt titleId
         tabIndex={-1}
       >
         <div style={styles.container}>
           <div style={styles.header}>
             <div style={styles.titleRow}>
-              <h2 id={titleId} style={styles.title}>Neue Aufgabe</h2>
+              <h2 id={titleId} style={styles.title}>Neue Aufgabe</h2> {/* <-- benutzt titleId */}
               <span style={styles.newBadge}><span aria-hidden>✨</span><span>Neu</span></span>
             </div>
             <button style={styles.closeBtn} onClick={() => { onClose?.(); resetOnNextOpenRef.current = true; }} aria-label="Schließen">×</button>

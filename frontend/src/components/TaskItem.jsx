@@ -44,10 +44,11 @@ function formatDate(d) {
 }
 
 /**
- * Nur der Inhalt der Karte. Styling-Klassen (.title, .row, .meta, .pill …)
- * kommen aus dem Board (TaskBoard) <style>-Block.
+ * Nur der Karteninhalt. Rahmen/Glow wird im Board gesetzt.
+ * statusTone: { label, bg, border }
+ * dueColor: Textfarbe des Datums
  */
-export default function TaskItem({ task, dueColor = "#94a3b8", statusTone = { cls: "warn", label: "TO DO" } }) {
+export default function TaskItem({ task, dueColor = "#94a3b8", statusTone = { label: "TO DO", bg: "#f59e0b", border: "#7a5d0a" } }) {
   const {
     bezeichnung, titel,
     teilenummer, kunde, zuständig,
@@ -94,7 +95,14 @@ export default function TaskItem({ task, dueColor = "#94a3b8", statusTone = { cl
           </div>
         ) : <div />}
 
-        <span className={`pill ${statusTone.cls}`} title={`Status: ${statusTone.label}`}>
+        <span
+          className="pill"
+          title={`Status: ${statusTone.label}`}
+          style={{
+            background: statusTone.bg,
+            borderColor: statusTone.border,
+          }}
+        >
           {statusTone.label}
         </span>
       </div>
