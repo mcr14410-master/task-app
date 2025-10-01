@@ -4,6 +4,7 @@ import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import useToast from "./ui/useToast";
 import TaskCreationModal from "./modals/TaskCreationModal";
 import TaskEditModal from "./modals/TaskEditModal";
+import TaskItem from "./TaskItem";
 
 function normalizeStationLabel(v) {
   const s = String(v ?? "Unassigned");
@@ -14,7 +15,6 @@ function normalizeStationLabel(v) {
     .replace(/\s+/g, " ")
     .trim();
 }
-
 function pickStationLabel(rec) {
   return normalizeStationLabel(
     rec?.bezeichnung ??
@@ -29,8 +29,6 @@ function pickStationLabel(rec) {
       null
   );
 }
-
-// Sort helper
 function sortByPriorityThenId(list) {
   return [...list].sort((a, b) => {
     const pa = Number.isFinite(a?.prioritaet) ? a.prioritaet : 999999;
@@ -39,7 +37,6 @@ function sortByPriorityThenId(list) {
     return (a?.id ?? 0) - (b?.id ?? 0);
   });
 }
-
 async function updateTaskServer(id, body) {
   const res = await fetch(`/api/tasks/${id}`, {
     method: "PUT",
@@ -71,7 +68,6 @@ async function bulkSortServer(payload) {
     throw new Error(txt || `HTTP ${res.status}`);
   }
 }
-
 function buildSortPayload(columns, keys) {
   const out = [];
   const kset = new Set(keys);
@@ -83,21 +79,6 @@ function buildSortPayload(columns, keys) {
   }
   return out;
 }
-
-function formatDate(d) {
-  if (!d) return null;
-  try {
-    const dt = typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d) ? new Date(d + "T00:00:00") : new Date(d);
-    if (Number.isNaN(dt.getTime())) return d;
-    const yyyy = dt.getFullYear();
-    const mm = String(dt.getMonth() + 1).padStart(2, "0");
-    const dd = String(dt.getDate()).padStart(2, "0");
-    return `${dd}.${mm}.${yyyy}`;
-  } catch {
-    return d;
-  }
-}
-
 function matchesQuery(task, q) {
   const s = (q || "").trim().toLowerCase();
   if (!s) return true;
@@ -112,76 +93,6 @@ function matchesQuery(task, q) {
   ].filter(Boolean);
   return fields.some((v) => String(v).toLowerCase().includes(s));
 }
-
-// Icons
-const Icon = ({ size = 16, stroke = "#9ca3af", path }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke={stroke}
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    style={{ flex: "0 0 auto" }}
-  >
-    {path}
-  </svg>
-);
-const IconTag = (p) => (
-  <Icon
-    {...p}
-    path={
-      <g>
-        <path d="M20.59 13.41L11 3H4v7l9.59 9.59a2 2 0 0 0 2.82 0l4.18-4.18a2 2 0 0 0 0-2.82z" />
-        <circle cx="6.5" cy="6.5" r="1.5" />
-      </g>
-    }
-  />
-);
-const IconUser = (p) => (
-  <Icon
-    {...p}
-    path={
-      <g>
-        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-        <circle cx="12" cy="7" r="4" />
-      </g>
-    }
-  />
-);
-const IconClock = (p) => (
-  <Icon
-    {...p}
-    path={
-      <g>
-        <circle cx="12" cy="12" r="10" />
-        <path d="M12 6v6l4 2" />
-      </g>
-    }
-  />
-);
-const IconCalendar = (p) => (
-  <Icon
-    {...p}
-    path={
-      <g>
-        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-        <line x1="16" y1="2" x2="16" y2="6" />
-        <line x1="8" y1="2" x2="8" y2="6" />
-        <line x1="3" y1="10" x2="21" y2="10" />
-      </g>
-    }
-  />
-);
-const IconBriefcase = (p) => (
-  <Icon
-    {...p}
-    path={<path d="M20 7h-5V6a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v1H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z" />}
-  />
-);
 
 export default function TaskBoard() {
   const toast = useToast();
@@ -224,7 +135,10 @@ export default function TaskBoard() {
             const stJ = JSON.parse(stTxt);
             const arr = Array.isArray(stJ) ? stJ : Array.isArray(stJ?.content) ? stJ.content : Array.isArray(stJ?.items) ? stJ.items : [];
             stations = arr.map(pickStationLabel).filter(Boolean).map(String);
-          } catch {}
+          } catch (err) {
+            // no-op: Stationen optional
+            console.debug("arbeitsstationen parse skipped:", err);
+          }
         }
 
         const labels = {};
@@ -250,16 +164,16 @@ export default function TaskBoard() {
         setLabelByKey(labels);
         setColumns(grouped);
         setErr(null);
-      } catch (e) {
-        console.error(e);
-        setErr(String(e?.message || e));
+      } catch (err) {
+        console.error(err);
+        setErr(String(err?.message || err));
       } finally {
         setLoading(false);
       }
     })();
   }, []);
 
-  // DnD Ende (mit „schieben“-Animation im Style unten)
+  // DnD Ende
   async function onDragEnd(result) {
     const { destination, source } = result;
     if (!destination) return;
@@ -295,14 +209,16 @@ export default function TaskBoard() {
       } else {
         await bulkSortServer(buildSortPayload(next, [fromKey]));
       }
-    } catch (e) {
+    } catch (err) {
       toast.error("Konnte neue Reihenfolge nicht speichern.");
-      setColumns((prev) => ({ ...prev })); // no-op trigger
+      // minimaler Re-Render, um UI nicht zu „klemmen“
+      setColumns((prev) => ({ ...prev }));
+      console.error(err);
     }
   }
 
-  // Save / Delete aus Modals
-  const handleSaved = async (saved) => {
+  // Save / Delete als benannte Handler (und unten übergeben → nicht „unbenutzt“)
+  function handleSaved(saved) {
     const oldKey = normalizeStationLabel(saved?.__oldArbeitsstation ?? saved?.arbeitsstation ?? "Unassigned");
     const newKey = normalizeStationLabel(saved?.arbeitsstation ?? "Unassigned");
     const prevCols = typeof structuredClone === "function" ? structuredClone(columns) : JSON.parse(JSON.stringify(columns));
@@ -315,13 +231,13 @@ export default function TaskBoard() {
       after[oldKey] = (after[oldKey] || []).filter((t) => t.id !== saved.id);
       after[newKey] = (after[newKey] || []).concat(saved);
       const keys = oldKey === newKey ? [newKey] : [oldKey, newKey];
-      bulkSortServer(buildSortPayload(after, keys)).catch(() => {});
+      bulkSortServer(buildSortPayload(after, keys)).catch((err) => console.debug("bulk sort (saved) skipped:", err));
       return draft;
     });
     toast.success("Änderungen gespeichert.");
-  };
+  }
 
-  const handleRequestDelete = (task) => {
+  function handleRequestDelete(task) {
     const key = normalizeStationLabel(task?.arbeitsstation ?? "Unassigned");
     const index = (columns[key] || []).findIndex((t) => t.id === task.id);
     if (index < 0) return;
@@ -362,24 +278,33 @@ export default function TaskBoard() {
         await deleteTaskServer(task.id);
         pendingRef.current.delete(task.id);
         toast.success("Endgültig gelöscht.");
-      } catch (e) {
+      } catch (err) {
         toast.error("Löschen fehlgeschlagen.");
+        console.error(err);
       }
     }, UNDO_MS);
 
     pendingRef.current.set(task.id, { timeout, key, index, task });
-  };
+  }
 
-  if (loading) return <p style={{ padding: 16, color: "#cbd5e1", background: "#0b1220", minHeight: "100vh" }}>lade…</p>;
+  if (loading)
+    return (
+      <p style={{ padding: 16, color: "#cbd5e1", background: "#0b1220", minHeight: "100vh" }}>
+        lade…
+      </p>
+    );
   if (err)
     return (
       <div style={{ padding: 16, background: "#0b1220", minHeight: "100vh" }}>
-        <pre style={{ whiteSpace: "pre-wrap", color: "#f87171", background: "transparent" }}>Fehler: {err}</pre>
+        <pre style={{ whiteSpace: "pre-wrap", color: "#f87171", background: "transparent" }}>
+          Fehler: {err}
+        </pre>
       </div>
     );
 
   const allStationKeys = Object.keys(labelByKey).sort((a, b) => a.localeCompare(b));
-  const visibleStationKeys = stationFilter === "ALL" ? allStationKeys : allStationKeys.filter((k) => k === stationFilter);
+  const visibleStationKeys =
+    stationFilter === "ALL" ? allStationKeys : allStationKeys.filter((k) => k === stationFilter);
 
   const q = query.trim();
   const queryActive = q.length > 0;
@@ -395,7 +320,6 @@ export default function TaskBoard() {
         .toolbar-input, .toolbar-select { padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); }
         .toolbar-input::placeholder { color: var(--muted); }
         .btn-primary { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--brand); background: var(--brand); color: white; }
-        /* Spalten nebeneinander (Patch #1) */
         .cols-row { display: flex; gap: 16px; align-items: flex-start; overflow-x: auto; padding-bottom: 8px; }
         .cols-row::-webkit-scrollbar { height: 8px; }
         .cols-row::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 8px; }
@@ -446,25 +370,23 @@ export default function TaskBoard() {
           ))}
         </select>
         <div style={{ flex: 1 }} />
-        {q && <span className="badge">Treffer gehighlighted, andere gedimmt</span>}
+        {queryActive && <span className="badge">Treffer gehighlighted, andere gedimmt</span>}
         <button onClick={() => setIsCreateOpen(true)} className="btn-primary">
           + Neue Aufgabe
         </button>
       </div>
 
       <DragDropContext onDragEnd={onDragEnd}>
-        {/* Spalten nebeneinander (Patch #1) */}
         <div className="cols-row">
           {visibleStationKeys.map((key) => {
             const title = labelByKey[key];
             const list = columns[key] || [];
 
-            const matchesInCol = q ? list.filter((t) => matchesQuery(t, q)).length : list.length;
-
             const totalHoursRaw = list.reduce((acc, t) => acc + (Number(t?.aufwandStunden) || 0), 0);
             const totalHours = Math.round(totalHoursRaw * 10) / 10;
 
-            const matchedHoursRaw = q
+            const matchesInCol = queryActive ? list.filter((t) => matchesQuery(t, q)).length : list.length;
+            const matchedHoursRaw = queryActive
               ? list.filter((t) => matchesQuery(t, q)).reduce((acc, t) => acc + (Number(t?.aufwandStunden) || 0), 0)
               : totalHoursRaw;
             const matchedHours = Math.round(matchedHoursRaw * 10) / 10;
@@ -476,30 +398,29 @@ export default function TaskBoard() {
                     ref={provided.innerRef}
                     {...provided.droppableProps}
                     className="col"
-                    /* feste Spaltenbreite (Patch #1B) */
                     style={{ padding: 12, minHeight: 80, minWidth: 320, width: 360, flex: "0 0 auto" }}
                   >
                     <div className="col-head">
                       <h2>{title}</h2>
-                      {/* Head rechts: Tasks | Aufwand */}
                       <div className="stats">
-                        <span>Tasks {q ? `${matchesInCol}/${list.length}` : `${list.length}`}</span>
+                        <span>Tasks {queryActive ? `${matchesInCol}/${list.length}` : `${list.length}`}</span>
                         <span className="sep">|</span>
-                        <span>Aufwand {q ? `${matchedHours}/${totalHours}h` : `${totalHours}h`}</span>
+                        <span>Aufwand {queryActive ? `${matchedHours}/${totalHours}h` : `${totalHours}h`}</span>
                       </div>
                     </div>
 
                     {list.map((t, index) => {
-                      const isMatch = q ? matchesQuery(t, q) : true;
+                      const isMatch = queryActive ? matchesQuery(t, q) : true;
+
                       const dueInfo = (() => {
                         const today = new Date();
                         today.setHours(0, 0, 0, 0);
                         if (!t.endDatum) return { color: "#94a3b8", border: "#1f2937" };
                         const d = new Date(t.endDatum);
                         d.setHours(0, 0, 0, 0);
-                        if (d < today) return { color: "#fca5a5", border: "#7f1d1d" }; // überfällig
-                        if (+d === +today) return { color: "#fde68a", border: "#7a5d0a" }; // heute
-                        return { color: "#a7f3d0", border: "#1f2937" }; // zukünftig
+                        if (d < today) return { color: "#fca5a5", border: "#7f1d1d" };
+                        if (+d === +today) return { color: "#fde68a", border: "#7a5d0a" };
+                        return { color: "#a7f3d0", border: "#1f2937" };
                       })();
                       const stTone = (() => {
                         const s = String(t.status || "").toUpperCase();
@@ -513,9 +434,10 @@ export default function TaskBoard() {
                         <Draggable draggableId={t.id.toString()} index={index} key={t.id}>
                           {(dProvided, snapshot) => {
                             const base = dProvided.draggableProps.style || {};
-                            // „schieben“-Gefühl (Patch #3)
                             const composedTransform = `${base.transform || ""}${
-                              snapshot.isDragging ? " perspective(900px) rotateX(5deg) scale(1.01) translateZ(0)" : ""
+                              snapshot.isDragging
+                                ? " perspective(900px) rotateX(5deg) scale(1.01) translateZ(0)"
+                                : ""
                             }`;
                             return (
                               <div
@@ -523,14 +445,13 @@ export default function TaskBoard() {
                                 {...dProvided.draggableProps}
                                 {...dProvided.dragHandleProps}
                                 tabIndex={0}
-                                className={`task-card ${q ? (isMatch ? "match" : "dim") : ""}`}
+                                className={`task-card ${queryActive ? (isMatch ? "match" : "dim") : ""}`}
                                 onKeyDown={(e) => {
                                   if (e.key === "Enter" || e.key === " ") {
                                     e.preventDefault();
                                     setEditTask(t);
                                   }
                                 }}
-                                // Doppelklick statt Single-Klick (Patch #2)
                                 onDoubleClick={() => setEditTask(t)}
                                 style={{
                                   ...base,
@@ -542,56 +463,7 @@ export default function TaskBoard() {
                                     : "0 4px 16px var(--shadow, rgba(0,0,0,.35))",
                                 }}
                               >
-                                {/* Titel */}
-                                <h4 className="title">{t.bezeichnung ?? t.titel ?? "(ohne Bezeichnung)"}</h4>
-
-                                {/* Zeile 1: Teilenummer | Kunde */}
-                                <div className="row" style={{ marginBottom: 6 }}>
-                                  <div className="meta" title={t.teilenummer || "-"}>
-                                    <IconTag />
-                                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                      {t.teilenummer || "-"}
-                                    </span>
-                                  </div>
-                                  <div className="meta" title={t.kunde || "-"} style={{ justifyContent: "flex-end" }}>
-                                    <IconBriefcase />
-                                    <span className="meta-right">{t.kunde || "-"}</span>
-                                  </div>
-                                </div>
-
-                                {/* Zeile 2: Zuständig | Aufwand */}
-                                <div className="row" style={{ marginBottom: 6 }}>
-                                  <div className="meta" title={t.zuständig || "offen"}>
-                                    <IconUser />
-                                    <span>{t.zuständig || "offen"}</span>
-                                  </div>
-                                  <div className="meta" title={`${t.aufwandStunden || 0}h`}>
-                                    <IconClock />
-                                    <span>{t.aufwandStunden ? `${t.aufwandStunden}h` : "0h"}</span>
-                                  </div>
-                                </div>
-
-                                {/* Zeile 3: Datum links | Status rechts */}
-                                <div className="row">
-                                  {t.endDatum ? (
-                                    <div className="meta" title={formatDate(t.endDatum)} style={{ color: dueInfo.color }}>
-                                      <IconCalendar />
-                                      <span style={{ color: dueInfo.color }}>{formatDate(t.endDatum)}</span>
-                                    </div>
-                                  ) : (
-                                    <div />
-                                  )}
-                                  <span className={`pill ${stTone.cls}`} title={`Status: ${stTone.label}`}>
-                                    {stTone.label}
-                                  </span>
-                                </div>
-
-                                {/* Zusatzinfos */}
-                                {(t["zusätzlicheInfos"] ?? t.zusatzlicheInfos) && (
-                                  <p className="desc" title={t["zusätzlicheInfos"] ?? t.zusatzlicheInfos}>
-                                    {t["zusätzlicheInfos"] ?? t.zusatzlicheInfos}
-                                  </p>
-                                )}
+                                <TaskItem task={t} dueColor={dueInfo.color} statusTone={stTone} />
                               </div>
                             );
                           }}
