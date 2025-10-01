@@ -1,4 +1,4 @@
-// frontend/src/components/TaskBoard.jsx
+// src/components/TaskBoard.jsx
 import React, { useEffect, useRef, useState } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import useToast from "./ui/useToast";
@@ -6,7 +6,15 @@ import TaskCreationModal from "./modals/TaskCreationModal";
 import TaskEditModal from "./modals/TaskEditModal";
 import TaskItem from "./TaskItem";
 
-// ---------- helpers ----------
+/** ---------- Shared helpers ---------- */
+const STATUS_COLORS = {
+  NEU: "#6366f1",          // indigo
+  TO_DO: "#f59e0b",        // amber
+  IN_PROGRESS: "#22c55e",  // green
+  DONE: "#10b981",         // emerald
+  GESPERRT: "#ef4444",     // red
+};
+
 function normalizeStationLabel(v) {
   const s = String(v ?? "Unassigned");
   return s.replace(/\u00A0/g, " ")
@@ -62,26 +70,29 @@ function buildSortPayload(columns, keys) {
 function matchesQuery(task, q) {
   const s = (q || "").trim().toLowerCase();
   if (!s) return true;
-  const fields = [task?.bezeichnung, task?.teilenummer, task?.kunde, task?.zuständig, task?.["zusätzlicheInfos"], task?.arbeitsstation, task?.status].filter(Boolean);
+  const fields = [
+    task?.bezeichnung, task?.teilenummer, task?.kunde, task?.zuständig,
+    task?.["zusätzlicheInfos"], task?.arbeitsstation, task?.status,
+  ].filter(Boolean);
   return fields.some((v) => String(v).toLowerCase().includes(s));
 }
 
-// ---------- status & due coloring ----------
+/** ---------- status & due ---------- */
 function getStatusTone(statusRaw) {
   const s = String(statusRaw || "").toUpperCase();
-  if (s.includes("GESPERR")) return { label: "GESPERRT", bg: "#ef4444", border: "#7f1d1d" };
-  if (s.includes("DONE") || s.includes("ERLED")) return { label: "DONE", bg: "#10b981", border: "#065f46" };
-  if (s.includes("PROG")) return { label: "IN PROGRESS", bg: "#22c55e", border: "#166534" };
-  if (s.includes("TO_DO") || s === "TODO" || s.includes("TO-DO")) return { label: "TO_DO", bg: "#f59e0b", border: "#7a5d0a" };
-  if (s.includes("NEU") || s.includes("NEW")) return { label: "NEU", bg: "#6366f1", border: "#3730a3" };
+  if (s.includes("GESPERR")) return { label: "GESPERRT", bg: STATUS_COLORS.GESPERRT, border: "#7f1d1d" };
+  if (s.includes("DONE") || s.includes("ERLED")) return { label: "DONE", bg: STATUS_COLORS.DONE, border: "#065f46" };
+  if (s.includes("PROG")) return { label: "IN_PROGRESS", bg: STATUS_COLORS.IN_PROGRESS, border: "#166534" };
+  if (s.includes("TO_DO") || s === "TODO" || s.includes("TO-DO")) return { label: "TO_DO", bg: STATUS_COLORS.TO_DO, border: "#7a5d0a" };
+  if (s.includes("NEU") || s.includes("NEW")) return { label: "NEU", bg: STATUS_COLORS.NEU, border: "#3730a3" };
   return { label: s || "TO DO", bg: "#64748b", border: "#334155" };
 }
 function getDueInfo(task) {
-  // Glow +10% & helleres Gelb für „morgen“
+  // Glow +10% & helleres Gelb für „morgen“, ohne Layout-Shift (Border bleibt 1px – wir nutzen outline/shadow)
   const noColor = { state: "none", dateColor: "#94a3b8", border: "#1f2937", glow: "" };
   const v = task?.endDatum; if (!v) return noColor;
   const today = new Date(); today.setHours(0,0,0,0);
-  const d = new Date(v); d.setHours(0,0,0,0);
+  const d = new Date(v); if (Number.isNaN(d)) return noColor; d.setHours(0,0,0,0);
   const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
   const rgba = (hex, a) => { const m=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex); if(!m) return `rgba(0,0,0,${a})`; const r=parseInt(m[1],16),g=parseInt(m[2],16),b=parseInt(m[3],16); return `rgba(${r},${g},${b},${a})`; };
 
@@ -91,7 +102,7 @@ function getDueInfo(task) {
   return noColor;
 }
 
-// =======================================================
+/** ======================================================= */
 export default function TaskBoard() {
   const toast = useToast();
   const pendingRef = useRef(new Map());
@@ -107,7 +118,7 @@ export default function TaskBoard() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editTask, setEditTask] = useState(null);
 
-  // ESC leeren — immer montiert
+  // ESC leert Filter
   useEffect(() => {
     const onKey = (ev) => { if (ev.key === "Escape") setQuery((prev) => (prev ? "" : prev)); };
     window.addEventListener("keydown", onKey);
@@ -140,7 +151,7 @@ export default function TaskBoard() {
             const stJ = JSON.parse(stTxt);
             const arr = Array.isArray(stJ) ? stJ : Array.isArray(stJ?.content) ? stJ.content : Array.isArray(stJ?.items) ? stJ.items : [];
             stations = arr.map(pickStationLabel).filter(Boolean).map(String);
-          } catch { /* optional */ }
+          } catch { /* ignore */ }
         }
 
         const labels = {};
@@ -167,7 +178,7 @@ export default function TaskBoard() {
     })();
   }, []);
 
-  // DnD Ende — ohne 3D/Rotate/Scale-Effekt
+  // DnD Ende – keine eigenen transforms/3D Effekte
   async function onDragEnd(result) {
     const { destination, source } = result;
     if (!destination) return;
@@ -280,37 +291,33 @@ export default function TaskBoard() {
     <div style={{ padding: 16, background: "var(--bg)", minHeight: "100vh" }}>
       <style>{`
         :root {
-          --bg: #0b1220; --panel: #0f172a; --card: #111827; --card-2: #0b1220;
-          --text: #e5e7eb; --muted: #94a3b8; --border: #1f2937; --shadow: rgba(0,0,0,0.35);
-          --brand: #3b82f6; --ok: #22c55e; --warn: #f59e0b; --danger: #ef4444; --info: #38bdf8; --match-bg: rgba(59,130,246,0.12);
+          --bg:#0b1220; --panel:#0f172a; --card:#111827;
+          --text:#e5e7eb; --muted:#94a3b8; --border:#1f2937; --shadow:rgba(0,0,0,.35);
+          --brand:#3b82f6; --match-bg:rgba(59,130,246,.12);
         }
-        .toolbar-input, .toolbar-select { padding: 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); }
-        .toolbar-input::placeholder { color: var(--muted); }
-        .btn-primary { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--brand); background: var(--brand); color: white; }
+        .toolbar-input,.toolbar-select{padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);}
+        .toolbar-input::placeholder{color:var(--muted);}
+        .btn-primary{padding:8px 12px;border-radius:8px;border:1px solid var(--brand);background:var(--brand);color:#fff;}
 
-        .cols-row { display: flex; gap: 16px; align-items: flex-start; overflow-x: auto; padding-bottom: 8px; }
-        .cols-row::-webkit-scrollbar { height: 8px; }
-        .cols-row::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 8px; }
+        .cols-row{display:flex;gap:16px;align-items:flex-start;overflow-x:auto;padding-bottom:8px;}
+        .col{background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 24px var(--shadow);padding:12px;minHeight:80px;min-width:320px;width:360px;flex:0 0 auto;}
+        .col-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin:0 0 8px 0;}
+        .col h2{color:var(--text);margin:0;font-size:16px;}
+        .stats{color:var(--muted);font-size:12px;display:flex;gap:8px;white-space:nowrap;}
 
-        .col { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 8px 24px var(--shadow); padding: 12px; minHeight: 80px; min-width: 320px; width: 360px; flex: 0 0 auto; }
-        .col-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 0 0 8px 0; }
-        .col h2 { color: var(--text); margin: 0; font-size: 16px; }
-        .stats { color: var(--muted); font-size: 12px; display: flex; align-items: baseline; gap: 8px; white-space: nowrap; }
-        .stats .sep { opacity: .6; }
-        .badge { font-size: 12px; color: var(--muted); }
+        .task-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px;box-shadow:0 4px 16px var(--shadow);transition:transform .12s ease, box-shadow .12s ease, background .18s ease, opacity .18s ease, filter .18s ease;}
+        .task-card:hover{transform:translateY(-1px) scale(1.02);}
+        .task-card:focus-visible{outline:2px solid var(--brand);outline-offset:2px;}
+        .task-card.match{box-shadow:0 0 0 2px var(--brand) inset, 0 8px 24px var(--shadow);background:linear-gradient(0deg,var(--match-bg),var(--card));}
+        .task-card.dim{opacity:.45;filter:grayscale(.5) blur(.2px);}
 
-        .task-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 10px; box-shadow: 0 4px 16px var(--shadow); transition: transform .12s ease, box-shadow .12s ease, background .18s ease, opacity .18s ease, filter .18s ease; }
-        .task-card:hover { transform: translateY(-1px) scale(1.02); }
-        .task-card:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
-        .task-card.match { box-shadow: 0 0 0 2px var(--brand) inset, 0 8px 24px var(--shadow); background: linear-gradient(0deg, var(--match-bg), var(--card)); }
-        .task-card.dim { opacity: .45; filter: grayscale(.5) blur(.2px); }
+        .search-wrap{position:relative;display:inline-flex;align-items:center;}
+        .search-wrap input{padding-right:28px;}
+        .search-clear{position:absolute;right:6px;background:transparent;border:0;color:#9ca3af;cursor:pointer;font-size:16px;line-height:1;border-radius:6px;padding:2px 4px;}
+        .search-clear:hover{color:#e5e7eb;}
 
-        .pill { padding: 4px 10px; border-radius: 999px; font-size: 11px; border: 1px solid var(--border); color: #fff; text-transform: uppercase; font-weight: 700; }
-
-        .search-wrap { position: relative; display: inline-flex; align-items: center; }
-        .search-wrap input { padding-right: 28px; }
-        .search-clear { position: absolute; right: 6px; background: transparent; border: 0; color: #9ca3af; cursor: pointer; font-size: 16px; line-height: 1; border-radius: 6px; padding: 2px 4px; }
-        .search-clear:hover { color: #e5e7eb; }
+        /* Placeholder auf gleichen Abstand wie Karten bringen -> kein "Schnapper" */
+        [data-rbd-placeholder-context-id]{margin-bottom:10px;}
       `}</style>
 
       {/* Toolbar */}
@@ -326,11 +333,9 @@ export default function TaskBoard() {
             style={{ minWidth: 260 }}
             aria-label="Aufgaben filtern"
           />
-          {queryActive && (
-            <button className="search-clear" onClick={() => setQuery("")} aria-label="Filter löschen">×</button>
-          )}
+          {queryActive && <button className="search-clear" onClick={() => setQuery("")} aria-label="Filter löschen">×</button>}
         </div>
-        {queryActive && <span className="badge">Treffer gehighlighted, andere gedimmt</span>}
+        {queryActive && <span style={{ fontSize: 12, color: "var(--muted)" }}>Treffer gehighlighted, andere gedimmt</span>}
 
         <select
           className="toolbar-select"
@@ -368,7 +373,7 @@ export default function TaskBoard() {
                       <h2>{title}</h2>
                       <div className="stats">
                         <span>Tasks {queryActive ? `${matchesInCol}/${list.length}` : `${list.length}`}</span>
-                        <span className="sep">|</span>
+                        <span>|</span>
                         <span>Aufwand {queryActive ? `${matchedHours}/${totalHours}h` : `${totalHours}h`}</span>
                       </div>
                     </div>
@@ -382,15 +387,10 @@ export default function TaskBoard() {
                         <Draggable draggableId={t.id.toString()} index={index} key={t.id}>
                           {(dProvided, snapshot) => {
                             const base = dProvided.draggableProps.style || {};
-
                             const normalShadow = snapshot.isDragging
                               ? "0 18px 40px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.25)"
                               : "0 4px 16px var(--shadow, rgba(0,0,0,.35))";
                             const shadowWithGlow = due.glow ? `${normalShadow}, ${due.glow}` : normalShadow;
-
-                            // WICHTIG: kein eigenes transform setzen -> Bibliothek steuert Position alleine
-                            const borderStyle =
-                              due.state === "none" ? "1px solid var(--border)" : `2px solid ${due.border}`;
 
                             return (
                               <div
@@ -402,13 +402,15 @@ export default function TaskBoard() {
                                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setEditTask(t); } }}
                                 onDoubleClick={() => setEditTask(t)}
                                 style={{
-                                  ...base,
-                                  border: borderStyle,
+                                  ...base, // transform/transition kommen von der DnD-Lib
                                   cursor: snapshot.isDragging ? "grabbing" : "grab",
+                                  // Border bleibt 1px -> keine Höhen-Sprünge
+                                  outline: due.state === "none" ? undefined : `2px solid ${due.border}`,
+                                  outlineOffset: "-1px",
                                   boxShadow: due.state === "none" ? normalShadow : shadowWithGlow,
                                 }}
                               >
-                                <TaskItem task={t} dueColor={due.dateColor} statusTone={tone} />
+                                <TaskItem task={t} statusTone={tone} dueColor={due.dateColor} />
                               </div>
                             );
                           }}
@@ -417,7 +419,7 @@ export default function TaskBoard() {
                     })}
 
                     {provided.placeholder}
-                    {list.length === 0 && <div className="badge" style={{ fontSize: 12 }}>keine Tasks</div>}
+                    {list.length === 0 && <div style={{ fontSize: 12, color: "var(--muted)" }}>keine Tasks</div>}
                   </div>
                 )}
               </Droppable>
