@@ -1,5 +1,5 @@
-// frontend/src/components/TaskBoard.stations-managed.styled.search.toggle.top.jsx
-// Same as ".toggle" version, but root container is a full-height flex column anchored to the top
+// frontend/src/components/TaskBoard.lintclean.jsx
+// Lint-cleaned version: no unused vars, no empty blocks. Keeps stations-managed + search + hard filter + top anchor.
 import React, { useEffect, useState } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import TaskCreationModal from "./TaskCreationModal";
@@ -153,10 +153,13 @@ export default function TaskBoard() {
 
   // Search state
   const [query, setQuery] = useState(() => {
-    try { return localStorage.getItem("taskboard:query") || ""; } catch { return ""; }
+    try { return localStorage.getItem("taskboard:query") || ""; }
+    catch { /* storage unavailable */ return ""; }
   });
+  
   const [hardFilter, setHardFilter] = useState(() => {
-    try { return localStorage.getItem("taskboard:hardFilter") === "1"; } catch { return false; }
+    try { return localStorage.getItem("taskboard:hardFilter") === "1"; }
+    catch { /* storage unavailable */ return false; }
   });
 
   async function fetchAll() {
@@ -267,12 +270,12 @@ export default function TaskBoard() {
   // Toolbar helpers
   const clearQuery = () => {
     setQuery("");
-    try { localStorage.setItem("taskboard:query", ""); } catch {}
+    try { localStorage.setItem("taskboard:query", ""); } catch (_E) { /* ignore */ void _E; }
   };
   const toggleHardFilter = () => {
     const next = !hardFilter;
     setHardFilter(next);
-    try { localStorage.setItem("taskboard:hardFilter", next ? "1" : "0"); } catch {}
+    try { localStorage.setItem("taskboard:hardFilter", next ? "1" : "0"); } catch (_E) { /* ignore */ void _E; }
   };
 
   if (loading) return <div style={{ padding: 24 }}>Lade…</div>;
@@ -282,8 +285,8 @@ export default function TaskBoard() {
     <div style={{
       padding: 16,
       background: "#0b1220",
-      minHeight: "100vh",            // ensure full viewport height
-      display: "flex",               // and anchor to the top
+      minHeight: "100vh",
+      display: "flex",
       flexDirection: "column",
       justifyContent: "flex-start"
     }}>
@@ -344,7 +347,11 @@ export default function TaskBoard() {
             className="toolbar-input"
             placeholder="Suchen… (Bezeichnung, Kunde, Teilenummer, Status …)"
             value={query}
-            onChange={(e) => { const v = e.target.value; setQuery(v); try { localStorage.setItem("taskboard:query", v); } catch {} }}
+            onChange={(e) => {
+              const v = e.target.value;
+              setQuery(v);
+              try { localStorage.setItem("taskboard:query", v); } catch (_ERR) { /* ignore */ void _ERR; }
+            }}
             onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); clearQuery(); } }}
             style={{ minWidth: 260, paddingRight: 28 }}
           />
@@ -371,7 +378,7 @@ export default function TaskBoard() {
 
         <button className="btn-primary" onClick={() => setIsCreateOpen(true)}>+ Neuer Task</button>
         <button className="btn-ghost" onClick={() => setIsStationsOpen(true)}>Stationen verwalten</button>
-        {hardFilter && query.trim() && <span style={{ fontSize: 12, color: "var(--muted)" }}>Hinweis: Drag & Drop ist bei hartem Filter deaktiviert.</span>}
+        {hardFilter && queryActive && <span style={{ fontSize: 12, color: "var(--muted)" }}>Hinweis: Drag & Drop ist bei hartem Filter deaktiviert.</span>}
       </div>
 
       {/* Columns */}
@@ -380,9 +387,8 @@ export default function TaskBoard() {
           {orderIds.map((colId) => {
             const title = idToLabel[colId] || colId;
             const list = columnsById[colId] || [];
-            const queryActive = !!(query || "").trim();
-            const visibleList = hardFilter && queryActive ? list.filter((t) => matchesQuery(t, (query || "").trim().toLowerCase())) : list;
-            const matchesInCol = queryActive ? list.filter((t) => matchesQuery(t, (query || "").trim().toLowerCase())).length : list.length;
+            const visibleList = hardFilter && queryActive ? list.filter((t) => matchesQuery(t, q)) : list;
+            const matchesInCol = queryActive ? list.filter((t) => matchesQuery(t, q)).length : list.length;
 
             return (
               <Droppable droppableId={String(colId)} key={String(colId)} isDropDisabled={hardFilter && queryActive}>
@@ -403,7 +409,7 @@ export default function TaskBoard() {
                     {visibleList.map((t, index) => {
                       const due = getDueVisual(t);
                       const st = getStatusTone(t.status);
-                      const isMatch = matchesQuery(t, (query || "").trim().toLowerCase());
+                      const isMatch = matchesQuery(t, q);
 
                       const baseStyle = {
                         borderColor: "var(--frame-default)",
@@ -415,7 +421,7 @@ export default function TaskBoard() {
                           draggableId={String(t.id)}
                           index={index}
                           key={t.id}
-                          isDragDisabled={hardFilter && queryActive} // block drag starts when hard filtering
+                          isDragDisabled={hardFilter && queryActive}
                         >
                           {(dProvided, snapshot) => {
                             const base = dProvided.draggableProps.style || {};
