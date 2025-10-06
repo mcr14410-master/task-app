@@ -1,5 +1,5 @@
-// frontend/src/components/TaskBoard.lintclean.jsx
-// Lint-cleaned version: no unused vars, no empty blocks. Keeps stations-managed + search + hard filter + top anchor.
+// frontend/src/components/TaskBoard.header-effort.jsx
+// Adds total effort per column (to the right of task count), counting only matches when a search is active.
 import React, { useEffect, useState } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import TaskCreationModal from "./TaskCreationModal";
@@ -115,6 +115,69 @@ function matchesQuery(task, q) {
   return fields.some((v) => String(v).toLowerCase().includes(needle));
 }
 
+/** ====== Effort helpers (robust to varied schemas) ====== */
+function num(v) { const n = Number(v); return Number.isFinite(n) ? n : NaN; }
+
+function parseEffortString(s) {
+  if (!s) return NaN;
+  const str = String(s).trim().toLowerCase();
+  // "2:30" -> 150 min
+  const time = str.match(/^(\d+):(\d{1,2})$/);
+  if (time) return (+time[1]) * 60 + (+time[2]);
+  // "2,5h" or "2.5h"
+  const hdec = str.match(/^(\d+(?:[.,]\d+)?)\s*h$/);
+  if (hdec) return Math.round(parseFloat(hdec[1].replace(",", ".")) * 60);
+  // "150m" or "150 min"
+  const mins = str.match(/^(\d+)\s*(m|min|minutes?)$/);
+  if (mins) return +mins[1];
+  // "2h 30m"
+  const hm = str.match(/^(\d+)\s*h(?:\s*(\d+)\s*m)?$/);
+  if (hm) return (+hm[1]) * 60 + (hm[2] ? +hm[2] : 0);
+  // plain number: heuristic (<=24 => hours, else minutes)
+  const plain = str.match(/^\d+(?:[.,]\d+)?$/);
+  if (plain) {
+    const v = parseFloat(str.replace(",", "."));
+    if (!Number.isFinite(v)) return NaN;
+    return v <= 24 ? Math.round(v * 60) : Math.round(v); // <=24 as hours, else minutes
+  }
+  return NaN;
+}
+
+function getEffortMinutes(t) {
+  // Prefer explicit minute fields
+  const minuteFields = ["gesamtaufwandMinuten", "aufwandMinuten", "aufwand_minuten", "minutes", "dauerMinuten", "dauer_minuten", "estimatedMinutes", "estimated_min", "zeitaufwandMinuten"];
+  for (const f of minuteFields) {
+    const v = t?.[f];
+    if (Number.isFinite(v)) return Math.max(0, v);
+    const parsed = num(v);
+    if (Number.isFinite(parsed)) return Math.max(0, parsed);
+  }
+  // Hours fields
+  const hourFields = ["gesamtaufwandStunden", "aufwandStunden", "aufwand_stunden", "stunden", "estimatedHours", "estimated_hours", "zeitaufwandStunden"];
+  for (const f of hourFields) {
+    const v = t?.[f];
+    const parsed = num(v);
+    if (Number.isFinite(parsed)) return Math.max(0, Math.round(parsed * 60));
+  }
+  // String-ish fields
+  const stringFields = ["gesamtaufwand", "aufwand", "dauer", "zeitaufwand", "estimate", "estimation", "geschaetzteDauer"];
+  for (const f of stringFields) {
+    const v = t?.[f];
+    const parsed = parseEffortString(v);
+    if (Number.isFinite(parsed)) return Math.max(0, parsed);
+  }
+  return 0;
+}
+
+function formatEffort(mins) {
+  const m = Math.max(0, Math.round(mins || 0));
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  if (h > 0 && mm > 0) return `${h}h ${mm}m`;
+  if (h > 0) return `${h}h`;
+  return `${mm}m`;
+}
+
 /** ====================== Modal wrapper (simple) ====================== */
 function Modal({ open, onClose, title, children, width = 760 }) {
   if (!open) return null;
@@ -154,12 +217,11 @@ export default function TaskBoard() {
   // Search state
   const [query, setQuery] = useState(() => {
     try { return localStorage.getItem("taskboard:query") || ""; }
-    catch { /* storage unavailable */ return ""; }
+    catch { return ""; }
   });
-  
   const [hardFilter, setHardFilter] = useState(() => {
     try { return localStorage.getItem("taskboard:hardFilter") === "1"; }
-    catch { /* storage unavailable */ return false; }
+    catch { return false; }
   });
 
   async function fetchAll() {
@@ -270,12 +332,12 @@ export default function TaskBoard() {
   // Toolbar helpers
   const clearQuery = () => {
     setQuery("");
-    try { localStorage.setItem("taskboard:query", ""); } catch (_E) { /* ignore */ void _E; }
+    try { localStorage.setItem("taskboard:query", ""); } catch { /* ignore */ }
   };
   const toggleHardFilter = () => {
     const next = !hardFilter;
     setHardFilter(next);
-    try { localStorage.setItem("taskboard:hardFilter", next ? "1" : "0"); } catch (_E) { /* ignore */ void _E; }
+    try { localStorage.setItem("taskboard:hardFilter", next ? "1" : "0"); } catch { /* ignore */ }
   };
 
   if (loading) return <div style={{ padding: 24 }}>Lade…</div>;
@@ -350,7 +412,7 @@ export default function TaskBoard() {
             onChange={(e) => {
               const v = e.target.value;
               setQuery(v);
-              try { localStorage.setItem("taskboard:query", v); } catch (_ERR) { /* ignore */ void _ERR; }
+              try { localStorage.setItem("taskboard:query", v); } catch { /* ignore */ }
             }}
             onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); clearQuery(); } }}
             style={{ minWidth: 260, paddingRight: 28 }}
@@ -387,8 +449,10 @@ export default function TaskBoard() {
           {orderIds.map((colId) => {
             const title = idToLabel[colId] || colId;
             const list = columnsById[colId] || [];
-            const visibleList = hardFilter && queryActive ? list.filter((t) => matchesQuery(t, q)) : list;
-            const matchesInCol = queryActive ? list.filter((t) => matchesQuery(t, q)).length : list.length;
+            const matches = queryActive ? list.filter((t) => matchesQuery(t, q)) : list;
+            const visibleList = (hardFilter && queryActive) ? matches : list;
+            const matchesInCol = matches.length;
+            const totalEffortMins = matches.reduce((sum, t) => sum + getEffortMinutes(t), 0);
 
             return (
               <Droppable droppableId={String(colId)} key={String(colId)} isDropDisabled={hardFilter && queryActive}>
@@ -402,7 +466,7 @@ export default function TaskBoard() {
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
                       <h2 style={{ margin: 0, color: "var(--text)", fontSize: 16 }}>{title}</h2>
                       <span style={{ fontSize: 12, color: "var(--muted)" }}>
-                        Tasks {queryActive ? `${matchesInCol}/${list.length}` : String(list.length)}
+                        Tasks {queryActive ? `${matchesInCol}/${list.length}` : String(list.length)} | Aufwand {formatEffort(totalEffortMins)}
                       </span>
                     </div>
 
