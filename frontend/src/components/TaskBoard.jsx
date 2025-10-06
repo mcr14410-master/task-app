@@ -528,7 +528,14 @@ export default function TaskBoard() {
       {isCreateOpen && (
         <TaskCreationModal
           stations={stations.map((s) => ({ id: String(pickStationId(s)), name: pickStationName(s) }))}
-          onTaskCreated={() => { setIsCreateOpen(false); fetchAll(); }}
+		      onTaskCreated={(opts) => {
+		        // Immer Daten aktualisieren …
+		        fetchAll();
+		       // … aber nur schließen, wenn keepOpen NICHT gesetzt ist
+		        if (!opts || !opts.keepOpen) {
+		          setIsCreateOpen(false);
+		        }
+		      }}         
           onClose={() => setIsCreateOpen(false)}
         />
       )}
