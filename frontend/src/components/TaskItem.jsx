@@ -1,5 +1,8 @@
 // frontend/src/components/TaskItem.jsx
 import React from "react";
+import "@/config/TaskStatusTheme.css"; // zentrale Status-Pill-Farben
+import "@/config/DueDateTheme.css";    // zentrale Fälligkeits-Farben
+import { dueClassForDate } from "@/config/DueDateConfig"; // zentrale Schwellen-Logik
 
 const Icon = ({ size = 16, stroke = "#9ca3af", path }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size}
@@ -43,16 +46,32 @@ function formatDate(d) {
   }
 }
 
-/**
- * Nur der Inhalt der Karte. Styling-Klassen (.title, .row, .meta, .pill …)
- * kommen aus dem Board (TaskBoard) <style>-Block.
- */
-export default function TaskItem({ task, dueColor = "#94a3b8", statusTone = { cls: "warn", label: "TO DO" } }) {
+function statusKey(raw) {
+  const s = String(raw || "").toUpperCase().replaceAll("-", "_").replaceAll(" ", "_");
+  switch (s) {
+    case "NEU": return "NEU";
+    case "TO_DO":
+    case "TODO": return "TO_DO";
+    case "IN_BEARBEITUNG":
+    case "IN_PROGRESS": return "IN_BEARBEITUNG";
+    case "FERTIG":
+    case "DONE": return "FERTIG";
+    default: return "NEU";
+  }
+}
+
+export default function TaskItem({ task }) {
   const {
     bezeichnung, titel,
     teilenummer, kunde, zuständig,
     aufwandStunden, endDatum,
   } = task || {};
+
+  const key = statusKey(task?.status);
+  const pillClass = `pill st-${key.toLowerCase()}`;
+
+  // Fälligkeitsklasse anhand zentraler Logik
+  const dueCls = endDatum ? dueClassForDate(endDatum) : "due-future";
 
   return (
     <>
@@ -85,17 +104,17 @@ export default function TaskItem({ task, dueColor = "#94a3b8", statusTone = { cl
         </div>
       </div>
 
-      {/* Zeile 3: Datum links | Status rechts */}
+      {/* Zeile 3: Datum links (mit Due-Klasse) | Status rechts */}
       <div className="row">
         {endDatum ? (
-          <div className="meta" title={formatDate(endDatum)} style={{ color: dueColor }}>
+          <div className={`meta date ${dueCls}`} title={formatDate(endDatum)}>
             <IconCalendar />
-            <span style={{ color: dueColor }}>{formatDate(endDatum)}</span>
+            <span className="date-text">{formatDate(endDatum)}</span>
           </div>
         ) : <div />}
 
-        <span className={`pill ${statusTone.cls}`} title={`Status: ${statusTone.label}`}>
-          {statusTone.label}
+        <span className={pillClass} data-status={key} title={`Status: ${key}`}>
+          {key}
         </span>
       </div>
 

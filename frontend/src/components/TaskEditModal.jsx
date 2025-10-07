@@ -1,109 +1,93 @@
-// TaskEditModal.jsx
+// frontend/src/components/TaskEditModal.jsx
+// Uses centralized CSS classes for status pills (see TaskStatusTheme.css)
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import '@/config/TaskStatusTheme.css'; // zentraler Import (Pfad ggf. anpassen)
 
 const API_BASE_URL = 'http://localhost:8080/api/tasks';
 
-// ======================================================================
-// STYLES – identisch zur TaskCreationModal
-// ======================================================================
 const modalStyles = {
   modalOverlay: {
-    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    position: 'fixed', inset: 0,
+    backgroundColor: 'rgba(0,0,0,.5)',
     display: 'flex', justifyContent: 'center', alignItems: 'center',
     zIndex: 1000,
   },
   modalContent: {
-    backgroundColor: '#2e2e2e',
-    color: '#f0f0f0',
-    padding: '20px 30px',
-    borderRadius: '10px',
-    width: '500px',
-    maxWidth: '600px',
-    maxHeight: '85vh',
-    overflowY: 'auto',
-    boxShadow: '0 8px 20px rgba(0, 0, 0, 0.6)',
+    backgroundColor: '#0f172a', color: '#e5e7eb',
+    padding: '20px 24px',
+    borderRadius: 12,
+    width: 720, maxWidth: '96vw',
+    maxHeight: '88vh', overflowY: 'auto',
+    border: '1px solid #1f2937',
+    boxShadow: '0 24px 64px rgba(0,0,0,.5)',
     zIndex: 1001,
   },
   header: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    paddingBottom: '10px', marginBottom: '15px',
+    paddingBottom: 10, marginBottom: 16, borderBottom: '1px solid #1f2937',
   },
-  title: { fontSize: '1.4rem', color: '#5865f2', margin: 0 },
+  title: { fontSize: '1.1rem', color: '#3b82f6', margin: 0, fontWeight: 700 },
   headerRight: { display: 'flex', alignItems: 'center', gap: 10 },
   closeButton: {
-    background: 'none', border: 'none', fontSize: '1.4rem',
-    color: '#b9bbbe', cursor: 'pointer', transition: 'color 0.2s', padding: '5px',
+    background: 'transparent', border: '1px solid #334155',
+    color: '#cbd5e1', borderRadius: 8,
+    fontSize: '1rem', padding: '6px 10px', cursor: 'pointer',
   },
+
   sectionContainer: {
-    backgroundColor: '#383838', padding: '15px',
-    borderRadius: '6px', marginBottom: '15px',
+    backgroundColor: '#111827', padding: 14,
+    borderRadius: 10, marginBottom: 14, border: '1px solid #1f2937',
   },
   sectionTitle: {
-    color: '#90a4ae', fontSize: '0.9em', fontWeight: 'normal',
-    marginBottom: '10px', borderBottom: '1px solid #4f545c',
-    paddingBottom: '5px', marginTop: 0, textTransform: 'uppercase',
+    color: '#94a3b8', fontSize: '0.82rem', fontWeight: 600,
+    margin: '0 0 10px 0', borderBottom: '1px solid #1f2937',
+    paddingBottom: 6, textTransform: 'uppercase', letterSpacing: '.04em',
   },
-  formGroup: { marginBottom: '10px' },
+  formGroup: { marginBottom: 10 },
   input: {
-    width: '100%', padding: '10px',
-    borderWidth: 1, borderStyle: 'solid', borderColor: '#5c626e',
-    borderRadius: '4px', backgroundColor: '#3c3f46', color: '#dcddde',
-    boxSizing: 'border-box', fontSize: '0.95em',
+    width: '100%', padding: '10px 12px',
+    border: '1px solid #1f2937',
+    borderRadius: 10, backgroundColor: '#111827', color: '#e5e7eb',
+    boxSizing: 'border-box', fontSize: '0.95rem',
   },
-  textarea: { minHeight: '80px', resize: 'vertical' },
-  label: { display: 'block', marginBottom: '4px', fontWeight: 600, color: '#dcddde', fontSize: '0.9em' },
+  textarea: { minHeight: 100, resize: 'vertical' },
+  label: { display: 'block', marginBottom: 6, fontWeight: 600, color: '#e5e7eb', fontSize: '0.9rem' },
+
   buttonContainer: {
-    marginTop: '10px', display: 'flex', justifyContent: 'space-between',
-    gap: '8px', paddingTop: '10px', borderTop: '1px solid #4f545c',
+    marginTop: 12, display: 'flex', justifyContent: 'space-between',
+    gap: 8, paddingTop: 12, borderTop: '1px solid #1f2937',
   },
   buttonPrimary: {
-    padding: '10px 20px', background: '#43b581', color: 'white', border: 'none',
-    borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.95em',
+    padding: '10px 16px', background: '#3b82f6', color: '#fff',
+    border: '1px solid #3b82f6', borderRadius: 10, cursor: 'pointer', fontWeight: 700
   },
   buttonSecondary: {
-    padding: '10px 20px', background: '#4f545c', color: '#dcddde', border: 'none',
-    borderRadius: '4px', cursor: 'pointer', fontSize: '0.95em',
+    padding: '10px 16px', background: 'transparent', color: '#cbd5e1',
+    border: '1px solid #334155', borderRadius: 10, cursor: 'pointer', fontWeight: 600
   },
   buttonDanger: {
-    padding: '10px 20px', background: '#f04747', color: 'white', border: 'none',
-    borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.95em',
-  },
-  // Status-Badges
-  badgeRow: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: 6 },
-  badgeBase: (bg, selected) => ({
-    backgroundColor: bg,
-    color: '#fff',
-    padding: '4px 10px',
-    borderRadius: 12,
-    fontSize: '0.8em',
-    fontWeight: 700,
-    cursor: 'pointer',
-    outline: 'none',
-    userSelect: 'none',
-    borderWidth: 2,
-    borderStyle: 'solid',
-    borderColor: selected ? '#ffffff' : 'transparent',
-  }),
-};
-
-// ======================================================================
-// Hilfsfunktionen
-// ======================================================================
-const STATUSES = ['NEU', 'TO_DO', 'DONE'];
-const getStatusColor = (status) => {
-  switch (status) {
-    case 'NEU': return '#7289da';
-    case 'TO_DO': return '#faa61a';
-    case 'DONE': return '#43b581';
-    default: return '#747f8d';
+    padding: '10px 16px', background: '#ef4444', color: '#fff',
+    border: '1px solid #ef4444', borderRadius: 10, cursor: 'pointer', fontWeight: 700
   }
 };
 
-// ======================================================================
-// TaskEditModal
-// ======================================================================
+const STATUSES = ['NEU', 'TO_DO', 'IN_BEARBEITUNG', 'FERTIG'];
+
+function statusKey(raw) {
+  const s = String(raw || '').toUpperCase().replaceAll('-', '_').replaceAll(' ', '_');
+  switch (s) {
+    case 'NEU': return 'NEU';
+    case 'TO_DO':
+    case 'TODO': return 'TO_DO';
+    case 'IN_BEARBEITUNG':
+    case 'IN_PROGRESS': return 'IN_BEARBEITUNG';
+    case 'FERTIG':
+    case 'DONE': return 'FERTIG';
+    default: return 'NEU';
+  }
+}
+
 const TaskEditModal = ({ task, stations, onSave, onClose }) => {
   const [taskData, setTaskData] = useState({
     bezeichnung: '', teilenummer: '', kunde: '', endDatum: '',
@@ -138,6 +122,12 @@ const TaskEditModal = ({ task, stations, onSave, onClose }) => {
 
   const setStatus = (status) => setTaskData((p) => ({ ...p, status }));
 
+  const buildPayload = () => {
+    const p = { ...taskData };
+    if (!p.endDatum) delete p.endDatum;
+    return p;
+  };
+
   const handleSave = async () => {
     if (!taskData.bezeichnung.trim()) {
       setSubmitError('Die Bezeichnung ist ein Pflichtfeld!');
@@ -146,13 +136,15 @@ const TaskEditModal = ({ task, stations, onSave, onClose }) => {
     setIsSaving(true);
     setSubmitError(null);
     try {
-      const dataToSend = { ...taskData };
-      await axios.patch(`${API_BASE_URL}/${task.id}`, dataToSend);
-      onSave(dataToSend);
+      const dataToSend = buildPayload();
+      await axios.patch(`${API_BASE_URL}/${task.id}`, dataToSend, {
+        headers: { 'Content-Type': 'application/json' }
+      });
+      onSave?.(dataToSend);
       onClose();
     } catch (err) {
-      console.error('Fehler beim Speichern der Aufgabe:', err.response?.data || err.message);
-      const serverMessage = err.response?.data?.message || 'Unbekannter Fehler beim Server.';
+      console.error('Fehler beim Speichern der Aufgabe:', err?.response?.data || err?.message);
+      const serverMessage = err?.response?.data?.message || 'Unbekannter Fehler beim Server.';
       setSubmitError(`Fehler beim Speichern: ${serverMessage}`);
     } finally {
       setIsSaving(false);
@@ -166,7 +158,7 @@ const TaskEditModal = ({ task, stations, onSave, onClose }) => {
       await axios.delete(`${API_BASE_URL}/${task.id}`);
       onClose();
     } catch (err) {
-      console.error('Fehler beim Löschen der Aufgabe:', err.response?.data || err.message);
+      console.error('Fehler beim Löschen der Aufgabe:', err?.response?.data || err?.message);
       setSubmitError('Fehler beim Löschen der Aufgabe.');
     } finally {
       setIsSaving(false);
@@ -181,136 +173,94 @@ const TaskEditModal = ({ task, stations, onSave, onClose }) => {
         <div style={modalStyles.header}>
           <h2 style={modalStyles.title}>Aufgabe bearbeiten ✏️ (#ID {task.id})</h2>
           <div style={modalStyles.headerRight}>
-            <button onClick={onClose} style={modalStyles.closeButton}>&times;</button>
+            <button onClick={onClose} style={modalStyles.closeButton}>✕</button>
           </div>
         </div>
 
-        {submitError && <p style={{ color: '#f04747' }}>{submitError}</p>}
+        {submitError && <p style={{ color: '#ef4444' }}>{submitError}</p>}
 
         <form onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
-          {/* Basisdaten & Zuweisung */}
           <div style={modalStyles.sectionContainer}>
             <h3 style={modalStyles.sectionTitle}>Basisdaten & Zuweisung</h3>
 
             <div style={modalStyles.formGroup}>
               <label style={modalStyles.label} htmlFor="bezeichnung">Bezeichnung *</label>
-              <input
-                style={modalStyles.input}
-                type="text" id="bezeichnung" name="bezeichnung"
-                value={taskData.bezeichnung} onChange={handleChange}
-                required disabled={isSaving}
-              />
+              <input style={modalStyles.input} type="text" id="bezeichnung" name="bezeichnung" value={taskData.bezeichnung} onChange={handleChange} required disabled={isSaving} />
             </div>
 
-            {/* Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
               <div style={modalStyles.formGroup}>
                 <label style={modalStyles.label} htmlFor="teilenummer">Teilenummer</label>
-                <input
-                  style={modalStyles.input}
-                  type="text" id="teilenummer" name="teilenummer"
-                  value={taskData.teilenummer} onChange={handleChange}
-                  disabled={isSaving}
-                />
+                <input style={modalStyles.input} type="text" id="teilenummer" name="teilenummer" value={taskData.teilenummer} onChange={handleChange} disabled={isSaving} />
               </div>
               <div style={modalStyles.formGroup}>
                 <label style={modalStyles.label} htmlFor="kunde">Kunde</label>
-                <input
-                  style={modalStyles.input}
-                  type="text" id="kunde" name="kunde"
-                  value={taskData.kunde} onChange={handleChange}
-                  disabled={isSaving}
-                />
+                <input style={modalStyles.input} type="text" id="kunde" name="kunde" value={taskData.kunde} onChange={handleChange} disabled={isSaving} />
               </div>
               <div style={modalStyles.formGroup}>
                 <label style={modalStyles.label} htmlFor="endDatum">Enddatum</label>
-                <input
-                  style={modalStyles.input}
-                  type="date" id="endDatum" name="endDatum"
-                  value={taskData.endDatum} onChange={handleChange}
-                  disabled={isSaving}
-                />
+                <input style={modalStyles.input} type="date" id="endDatum" name="endDatum" value={taskData.endDatum} onChange={handleChange} disabled={isSaving} />
               </div>
               <div style={modalStyles.formGroup}>
                 <label style={modalStyles.label} htmlFor="aufwandStunden">Aufwand (Std.)</label>
-                <input
-                  style={modalStyles.input}
-                  type="number" id="aufwandStunden" name="aufwandStunden"
-                  value={taskData.aufwandStunden} onChange={handleChange}
-                  disabled={isSaving}
-                />
+                <input style={modalStyles.input} type="number" id="aufwandStunden" name="aufwandStunden" value={taskData.aufwandStunden} onChange={handleChange} disabled={isSaving} />
               </div>
               <div style={modalStyles.formGroup}>
                 <label style={modalStyles.label} htmlFor="zuständig">Zuständigkeit</label>
-                <input
-                  style={modalStyles.input}
-                  type="text" id="zuständig" name="zuständig"
-                  value={taskData.zuständig} onChange={handleChange}
-                  disabled={isSaving}
-                />
+                <input style={modalStyles.input} type="text" id="zuständig" name="zuständig" value={taskData.zuständig} onChange={handleChange} disabled={isSaving} />
               </div>
               <div style={modalStyles.formGroup}>
                 <label style={modalStyles.label} htmlFor="arbeitsstation">Station</label>
-                <select
-                  style={modalStyles.input}
-                  id="arbeitsstation" name="arbeitsstation"
-                  value={taskData.arbeitsstation} onChange={handleChange}
-                  disabled={isSaving}
-                >
-                  {stations.map((s) => (
-                    <option key={s.id} value={s.name}>{s.name}</option>
-                  ))}
+                <select style={modalStyles.input} id="arbeitsstation" name="arbeitsstation" value={taskData.arbeitsstation} onChange={handleChange} disabled={isSaving}>
+                  {stations.map((s) => (<option key={s.id ?? s.name} value={s.name}>{s.name}</option>))}
                 </select>
               </div>
             </div>
 
-            {/* Status-Badges */}
             <div style={modalStyles.formGroup}>
               <label style={modalStyles.label}>Status</label>
-              <div style={modalStyles.badgeRow}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {STATUSES.map((s) => {
+                  const key = statusKey(s);
                   const selected = taskData.status === s;
                   return (
-                    <span
+                    <button
                       key={s}
-                      role="button"
-                      tabIndex={0}
+                      type="button"
+                      className={`pill st-${key.toLowerCase()} ${selected ? 'is-selected' : ''}`}
                       aria-pressed={selected}
                       onClick={() => setStatus(s)}
-                      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setStatus(s)}
-                      style={modalStyles.badgeBase(getStatusColor(s), selected)}
+                      disabled={isSaving}
+                      title={s}
                     >
                       {s}
-                    </span>
+                    </button>
                   );
                 })}
               </div>
             </div>
           </div>
 
-          {/* Infos */}
           <div style={modalStyles.sectionContainer}>
             <h3 style={modalStyles.sectionTitle}>Infos</h3>
-            <textarea
-              style={{ ...modalStyles.input, ...modalStyles.textarea }}
-              id="zusätzlicheInfos" name="zusätzlicheInfos"
-              value={taskData.zusätzlicheInfos} onChange={handleChange}
-              disabled={isSaving}
-            />
+            <textarea style={{ ...modalStyles.input, ...modalStyles.textarea }} id="zusätzlicheInfos" name="zusätzlicheInfos" value={taskData.zusätzlicheInfos} onChange={handleChange} disabled={isSaving} />
           </div>
 
-          {/* Footer */}
           <div style={modalStyles.buttonContainer}>
-            <button type="button" style={modalStyles.buttonDanger} onClick={handleDelete} disabled={isSaving}>
+            <button type="button" style={modalStyles.buttonDanger} onClick={() => {
+              if (!window.confirm('Möchten Sie diese Aufgabe wirklich löschen?')) return;
+              (async () => {
+                setIsSaving(true);
+                try { await axios.delete(`${API_BASE_URL}/${task.id}`); onClose(); }
+                catch (err) { console.error(err); setSubmitError('Fehler beim Löschen der Aufgabe.'); }
+                finally { setIsSaving(false); }
+              })();
+            }} disabled={isSaving}>
               🗑 Löschen
             </button>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button type="button" style={modalStyles.buttonSecondary} onClick={onClose} disabled={isSaving}>
-                Abbrechen
-              </button>
-              <button type="submit" style={modalStyles.buttonPrimary} disabled={isSaving}>
-                {isSaving ? 'Speichern...' : 'Speichern'}
-              </button>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" style={modalStyles.buttonSecondary} onClick={onClose} disabled={isSaving}>Abbrechen</button>
+              <button type="submit" style={modalStyles.buttonPrimary} disabled={isSaving}>{isSaving ? 'Speichern…' : 'Speichern'}</button>
             </div>
           </div>
         </form>

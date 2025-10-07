@@ -1,50 +1,37 @@
-package com.pp.taskmanagementbackend.model;
+package com.pp.taskmanagementbackend.api.dto;
 
-import jakarta.persistence.*;
+import com.pp.taskmanagementbackend.model.TaskStatus;
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.time.LocalDate;
 
-@Entity
-@Table(name = "tasks")
-public class Task {
+@JsonInclude(JsonInclude.Include.NON_NULL)
+public class TaskDto {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
-    @Column(nullable = false, length = 255)
     private String bezeichnung;
-
-    @Column(length = 120)
     private String teilenummer;
-
-    @Column(length = 255)
     private String kunde;
 
-    // ASCII-Feldname, falls DB-Spalte anders heißt: @Column(name = "zustaendig")
-    @Column(length = 255)
+    @JsonProperty("zuständig")
     private String zustaendig;
 
     private Double aufwandStunden;
 
-    // Optional: bei anderer Spaltenbenennung anpassen, z. B. @Column(name = "zusaetzliche_infos")
-    @Column(length = 4000)
+    @JsonProperty("zusätzlicheInfos")
     private String zusaetzlicheInfos;
 
+    @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
     private LocalDate endDatum;
 
-    // Hinweis: aktuell wird der Stationsname gespeichert. Bei FK auf Station-Entity entsprechend anpassen.
-    @Column(length = 255)
     private String arbeitsstation;
+    private TaskStatus status;
+    private Integer prioritaet;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 40)
-    private TaskStatus status = TaskStatus.NEU;
+    public TaskDto() {}
 
-    private Integer prioritaet = 9999;
-
-    public Task() {}
-
-    // --- getters & setters ---
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 

@@ -1,0 +1,43 @@
+:root {
+/* zentrale Farben für Fälligkeit */
+  --due-overdue: #ef4444;   /* überfällig */
+  --due-today:   rgb(245, 86, 10);   /* heute */
+  --due-soon:    rgb(255, 255, 0);   /* <= 3 Tage */
+  --due-week:    #0ea5e9;   /* <= 7 Tage */
+  --due-future:  #94a3b8;   /* > 7 Tage */
+  --due-text:    currentColor;
+}
+
+/* Basisklasse für Datumsanzeige */
+.meta.date .date-text {
+  color: var(--due-text);
+}
+
+/* Mapping der Buckets -> CSS-Variable für Farbe */
+.due-overdue  { --due-text: var(--due-overdue); }
+.due-today    { --due-text: var(--due-today); }
+.due-soon     { --due-text: var(--due-soon); }
+.due-week     { --due-text: var(--due-week); }
+.due-future   { --due-text: var(--due-future); }
+
+/* ==== Left stripe on cards (controlled by due-* class on .task-card) ==== */
+.task-card { position: relative; }
+.task-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;               /* stripe width */
+  background: var(--due-future);
+  border-top-left-radius: 10px;
+  border-bottom-left-radius: 10px;
+  pointer-events: none;     /* don't interfere with DnD */
+}
+
+/* bucket -> color */
+.task-card.due-overdue::before  { background: var(--due-overdue); }
+.task-card.due-today::before    { background: var(--due-today); }
+.task-card.due-soon::before     { background: var(--due-soon); }
+.task-card.due-week::before     { background: var(--due-week); }
+.task-card.due-future::before   { background: var(--due-future); }

@@ -1,0 +1,54 @@
+:root {
+/* Customize these to change colors app-wide */
+  --pill-bg-neu:            #3b82f6;
+  --pill-bg-to_do:          #f59e0b;
+  --pill-bg-in_bearbeitung: #0ea5e9;
+  --pill-bg-fertig:         #22c55e;
+
+  --pill-text: #ffffff;
+  --pill-border: transparent;
+}
+
+/* Optional: light/dark theme overrides
+body[data-theme="light"] {
+  --pill-text: #ffffff;
+}
+body[data-theme="dark"] {
+  --pill-text: #ffffff;
+} */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: .8em;
+  font-weight: 700;
+  color: var(--pill-text);
+  border: 1px solid var(--pill-border);
+  user-select: none;
+}
+
+/* Status mappings via CSS variables */
+.pill.st-neu            { background-color: var(--pill-bg-neu); }
+.pill.st-to_do          { background-color: var(--pill-bg-to_do); }
+.pill.st-in_bearbeitung { background-color: var(--pill-bg-in_bearbeitung); }
+.pill.st-fertig         { background-color: var(--pill-bg-fertig); }
+
+/* Optional hover/focus styles */
+.pill:is(:hover, :focus-visible) { filter: brightness(1.05); }
+
+/* If you want border rings per status (uncomment)
+.pill.st-neu            { box-shadow: 0 0 0 1px color-mix(in oklab, var(--pill-bg-neu), #000 20%); }
+.pill.st-to_do          { box-shadow: 0 0 0 1px color-mix(in oklab, var(--pill-bg-to_do), #000 20%); }
+.pill.st-in_bearbeitung { box-shadow: 0 0 0 1px color-mix(in oklab, var(--pill-bg-in_bearbeitung), #000 20%); }
+.pill.st-fertig         { box-shadow: 0 0 0 1px color-mix(in oklab, var(--pill-bg-fertig), #000 20%); }
+*/
+
+
+/* Selected state (no inline colors needed) */
+.pill.is-selected {
+  outline: 2px solid rgba(255,255,255,0.8);
+  outline-offset: 0;
+}
