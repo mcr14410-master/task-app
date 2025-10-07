@@ -1,0 +1,26 @@
+/* frontend/src/config/AdditionalWorkTheme.css */
+:root{
+  /* Dark orange for FAI */
+  --pill-add-fai-bg: #9a3412;   /* dark orange */
+  --pill-add-fai-fg: #fff7ed;   /* warm white */
+  --pill-add-off-bg: #1f2937;   /* slate-800 */
+  --pill-add-off-fg: #cbd5e1;   /* slate-300 */
+}
+
+.pill-add{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:6px 10px;border-radius:999px;
+  font-size:12px;font-weight:700;letter-spacing:.02em;
+  border:1px solid transparent; user-select:none; cursor:default;
+}
+.pill-add.is-clickable{ cursor:pointer; }
+.pill-add.add-fai{ background:var(--pill-add-off-bg); color:var(--pill-add-off-fg); border-color:#334155; }
+.pill-add.add-fai.is-active{ background:var(--pill-add-fai-bg); color:var(--pill-add-fai-fg); border-color:var(--pill-add-fai-bg); }
+
+/* QS (Qualitätssicherung) */
+:root{
+  --pill-add-qs-bg: #1e3a8a;   /* blue-800 */
+  --pill-add-qs-fg: #dbeafe;   /* blue-100 */
+}
+.pill-add.add-qs{ background:var(--pill-add-off-bg); color:var(--pill-add-off-fg); border-color:#334155; }
+.pill-add.add-qs.is-active{ background:var(--pill-add-qs-bg); color:var(--pill-add-qs-fg); border-color:var(--pill-add-qs-bg); }

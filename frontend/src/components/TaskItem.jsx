@@ -2,6 +2,7 @@
 import React from "react";
 import "@/config/TaskStatusTheme.css"; // zentrale Status-Pill-Farben
 import "@/config/DueDateTheme.css";    // zentrale Fälligkeits-Farben
+import "@/config/AdditionalWorkTheme.css"; // Zusatzarbeiten (FAI/QS)
 import { dueClassForDate } from "@/config/DueDateConfig"; // zentrale Schwellen-Logik
 
 const Icon = ({ size = 16, stroke = "#9ca3af", path }) => (
@@ -60,6 +61,16 @@ function statusKey(raw) {
   }
 }
 
+/** Zusatzarbeiten-Pills (nur sichtbar, wenn aktiv) */
+function AddPills({ task }) {
+  const pills = [];
+  if (task?.fai) pills.push(<span key="fai" className="pill-add add-fai is-active">FAI</span>);
+  if (task?.qs)  pills.push(<span key="qs"  className="pill-add add-qs  is-active">QS</span>);
+  return pills.length ? (
+    <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>{pills}</span>
+  ) : null;
+}
+
 export default function TaskItem({ task }) {
   const {
     bezeichnung, titel,
@@ -104,7 +115,7 @@ export default function TaskItem({ task }) {
         </div>
       </div>
 
-      {/* Zeile 3: Datum links (mit Due-Klasse) | Status rechts */}
+      {/* Zeile 3: Datum links (mit Due-Klasse) | Zusatzarbeiten + Status rechts */}
       <div className="row">
         {endDatum ? (
           <div className={`meta date ${dueCls}`} title={formatDate(endDatum)}>
@@ -113,9 +124,13 @@ export default function TaskItem({ task }) {
           </div>
         ) : <div />}
 
-        <span className={pillClass} data-status={key} title={`Status: ${key}`}>
-          {key}
-        </span>
+        {/* Rechtsbündiger Block: Zusatzarbeiten-Pills vor Status */}
+        <div style={{ marginLeft: "auto", display: "inline-flex", gap: 6, alignItems: "center" }}>
+          <AddPills task={task} />
+          <span className={pillClass} data-status={key} title={`Status: ${key}`}>
+            {key}
+          </span>
+        </div>
       </div>
 
       {/* Zusatzinfos */}
