@@ -136,4 +136,16 @@ public class GlobalExceptionHandler {
         );
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
     }
+    
+    @ExceptionHandler(org.springframework.web.server.ResponseStatusException.class)
+    public ResponseEntity<ApiError> handleRSE(org.springframework.web.server.ResponseStatusException ex,
+                                              jakarta.servlet.http.HttpServletRequest req) {
+        ApiError body = new ApiError(
+                ex.getStatusCode().value(),
+                ex.getReason() != null ? ex.getReason() : ex.getStatusCode().toString(),
+                ex.getMessage(),
+                req.getRequestURI()
+        );
+        return ResponseEntity.status(ex.getStatusCode()).body(body);
+    }
 }

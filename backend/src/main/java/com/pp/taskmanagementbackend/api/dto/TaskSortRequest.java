@@ -5,6 +5,9 @@ public class TaskSortRequest {
     private Integer toIndex;
     private String from; // station name (optional)
     private String to;   // station name (preferred)
+    // Optional akzeptieren (werden ignoriert):
+    private String toId;
+    private String fromId;
 
     public Long getTaskId() { return taskId; }
     public void setTaskId(Long taskId) { this.taskId = taskId; }
