@@ -278,13 +278,11 @@ export default function TaskBoard() {
     });
 
     try {
-      const payload = {
-        taskId: Number(draggableId),
-        fromId: srcId,
-        toId: dstId,
-        toIndex: destination.index,
-        from: idToLabel[srcId] ?? null,
-        to: idToLabel[dstId] ?? null,
+		 const payload = {
+		   taskId: Number(draggableId),
+		   toIndex: destination.index,
+		   // Station als Name (falls Mapping fehlt, nimm die aktuelle Station – Move innerhalb derselben Spalte)
+		   to: idToLabel[dstId] ?? idToLabel[srcId] ?? null,
       };
       await fetch(`/api/tasks/sort`, {
         method: "PUT",
