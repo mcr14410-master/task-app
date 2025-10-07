@@ -1,10 +1,11 @@
-// TaskEditModal.jsx
+// frontend/src/components/TaskEditModal.jsx
+// Clean version: saves the edited task via PATCH with canonical statuses (NEU, TO_DO, IN_BEARBEITUNG, FERTIG).
+// No UI<->API mapping or fallback variants.
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
 const API_BASE_URL = 'http://localhost:8080/api/tasks';
 
-// Farben & Größen ans Board angepasst (nur Styles)
 const modalStyles = {
   modalOverlay: {
     position: 'fixed', inset: 0,
@@ -87,12 +88,13 @@ const modalStyles = {
   }),
 };
 
-const STATUSES = ['NEU', 'TO_DO', 'DONE'];
+const STATUSES = ['NEU', 'TO_DO', 'IN_BEARBEITUNG', 'FERTIG'];
 const getStatusColor = (status) => {
   switch (status) {
-    case 'NEU': return '#7289da';
-    case 'TO_DO': return '#faa61a';
-    case 'DONE': return '#43b581';
+    case 'NEU': return '#3b82f6';
+    case 'TO_DO': return '#f59e0b';
+    case 'IN_BEARBEITUNG': return '#0ea5e9';
+    case 'FERTIG': return '#22c55e';
     default: return '#747f8d';
   }
 };
@@ -131,6 +133,12 @@ const TaskEditModal = ({ task, stations, onSave, onClose }) => {
 
   const setStatus = (status) => setTaskData((p) => ({ ...p, status }));
 
+  const buildPayload = () => {
+    const p = { ...taskData };
+    if (!p.endDatum) delete p.endDatum;
+    return p;
+  };
+
   const handleSave = async () => {
     if (!taskData.bezeichnung.trim()) {
       setSubmitError('Die Bezeichnung ist ein Pflichtfeld!');
@@ -139,13 +147,15 @@ const TaskEditModal = ({ task, stations, onSave, onClose }) => {
     setIsSaving(true);
     setSubmitError(null);
     try {
-      const dataToSend = { ...taskData };
-      await axios.patch(`${API_BASE_URL}/${task.id}`, dataToSend);
-      onSave(dataToSend);
+      const dataToSend = buildPayload();
+      await axios.patch(`${API_BASE_URL}/${task.id}`, dataToSend, {
+        headers: { 'Content-Type': 'application/json' }
+      });
+      onSave?.(dataToSend);
       onClose();
     } catch (err) {
-      console.error('Fehler beim Speichern der Aufgabe:', err.response?.data || err.message);
-      const serverMessage = err.response?.data?.message || 'Unbekannter Fehler beim Server.';
+      console.error('Fehler beim Speichern der Aufgabe:', err?.response?.data || err?.message);
+      const serverMessage = err?.response?.data?.message || 'Unbekannter Fehler beim Server.';
       setSubmitError(`Fehler beim Speichern: ${serverMessage}`);
     } finally {
       setIsSaving(false);
@@ -159,7 +169,7 @@ const TaskEditModal = ({ task, stations, onSave, onClose }) => {
       await axios.delete(`${API_BASE_URL}/${task.id}`);
       onClose();
     } catch (err) {
-      console.error('Fehler beim Löschen der Aufgabe:', err.response?.data || err.message);
+      console.error('Fehler beim Löschen der Aufgabe:', err?.response?.data || err?.message);
       setSubmitError('Fehler beim Löschen der Aufgabe.');
     } finally {
       setIsSaving(false);
@@ -251,7 +261,7 @@ const TaskEditModal = ({ task, stations, onSave, onClose }) => {
                   disabled={isSaving}
                 >
                   {stations.map((s) => (
-                    <option key={s.id} value={s.name}>{s.name}</option>
+                    <option key={s.id ?? s.name} value={s.name}>{s.name}</option>
                   ))}
                 </select>
               </div>

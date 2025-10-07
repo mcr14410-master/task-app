@@ -1,5 +1,7 @@
-// TaskCreationModal.jsx
-import React, { useEffect, useMemo, useState } from 'react';
+// frontend/src/components/TaskCreationModal.jsx
+// Clean version: uses canonical UI statuses (NEU, TO_DO, IN_BEARBEITUNG, FERTIG) directly.
+// No UI<->API mapping needed; backend accepts these as Enum values.
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import axios from 'axios';
 
 const API_BASE_URL = 'http://localhost:8080/api/tasks';
@@ -79,17 +81,16 @@ const styles = {
 };
 
 const STATUS_COLORS = {
-  NEU: '#5865f2',
-  TO_DO: '#faa61a',
-  IN_PROGRESS: '#43b581',
-  DONE: '#2ecc71'
+  NEU: '#3b82f6',
+  TO_DO: '#f59e0b',
+  IN_BEARBEITUNG: '#0ea5e9',
+  FERTIG: '#22c55e'
 };
-const STATUS_ORDER = ['NEU', 'TO_DO', 'IN_PROGRESS', 'DONE'];
+const STATUS_ORDER = ['NEU', 'TO_DO', 'IN_BEARBEITUNG', 'FERTIG'];
 
 const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
   const defaultStationName = useMemo(() => (stations[0]?.name ?? ''), [stations]);
-
-  const initialForm = React.useCallback(() => ({
+  const makeInitial = useCallback(() => ({
     bezeichnung: '',
     teilenummer: '',
     kunde: '',
@@ -101,12 +102,11 @@ const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
     status: 'NEU'
   }), [defaultStationName]);
 
-  const [form, setForm] = useState(initialForm());
+  const [form, setForm] = useState(makeInitial());
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
 
   useEffect(() => {
-    // falls beim Öffnen noch keine Station drin war, auf Default setzen
     setForm(f => ({ ...f, arbeitsstation: f.arbeitsstation || defaultStationName }));
   }, [defaultStationName]);
 
@@ -145,7 +145,7 @@ const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
     return null;
   };
 
-  // Standard-Speichern (schließt wie gehabt via onTaskCreated in TaskBoard)
+  // Standard-Speichern (schließt via TaskBoard onTaskCreated)
   const handleCreate = async (e) => {
     e?.preventDefault?.();
     setErrorMsg(null);
@@ -156,7 +156,7 @@ const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
     setSubmitting(true);
     try {
       await axios.post(API_BASE_URL, buildPayload());
-      onTaskCreated?.(); // TaskBoard schließt Modal & refresht
+      onTaskCreated?.(); // TaskBoard: refresh + close
     } catch (err) {
       const status = err?.response?.status;
       const srvMsg = err?.response?.data?.message;
@@ -170,7 +170,7 @@ const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
     }
   };
 
-  // Speichern & Neu (Modal bleibt offen, Formular wird geleert)
+  // Speichern & Neu (Modal bleibt offen, Formular wird geleert), Board-Refresh via keepOpen
   const handleCreateAndNew = async () => {
     if (submitting) return;
     setErrorMsg(null);
@@ -180,11 +180,9 @@ const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
 
     setSubmitting(true);
     try {
-		 await axios.post(API_BASE_URL, buildPayload());
-		 // Board informieren: refresh, aber Modal offen lassen
-		 onTaskCreated?.({ keepOpen: true });
-		 // Formular auf Defaults zurücksetzen
-      setForm(initialForm());
+      await axios.post(API_BASE_URL, buildPayload());
+      onTaskCreated?.({ keepOpen: true }); // Board refresh, Modal bleibt offen
+      setForm(makeInitial());
     } catch (err) {
       const status = err?.response?.status;
       const srvMsg = err?.response?.data?.message;
@@ -202,7 +200,7 @@ const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
   const handleReset = () => {
     if (submitting) return;
     setErrorMsg(null);
-    setForm(initialForm());
+    setForm(makeInitial());
   };
 
   return (
@@ -301,7 +299,7 @@ const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
             <div>
               <label style={styles.label}>Status</label>
               <div style={styles.statusRow}>
-                {['NEU','TO_DO','IN_PROGRESS','DONE'].map(key => (
+                {STATUS_ORDER.map(key => (
                   <button
                     key={key} type="button" title={key}
                     onClick={() => setValue('status', key)}
@@ -329,7 +327,7 @@ const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
             />
           </div>
 
-          {/* Footer: links Reset, rechts Abbrechen | Speichern & Neu | Erstellen */}
+          {/* Footer */}
           <div style={styles.footer}>
             <button type="button" style={styles.btnSecondary} onClick={handleReset} disabled={submitting}>
               Zurücksetzen

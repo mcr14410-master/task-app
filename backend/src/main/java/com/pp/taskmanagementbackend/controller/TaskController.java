@@ -1,131 +1,95 @@
 package com.pp.taskmanagementbackend.controller;
 
+import com.pp.taskmanagementbackend.api.dto.TaskDto;
+import com.pp.taskmanagementbackend.mapper.TaskMapper;
 import com.pp.taskmanagementbackend.model.Task;
-import com.pp.taskmanagementbackend.repository.TaskRepository;
+import com.pp.taskmanagementbackend.model.TaskStatus;
 import com.pp.taskmanagementbackend.service.TaskService;
-import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
-import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
+@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173"})
 @RestController
 @RequestMapping("/api/tasks")
 public class TaskController {
 
-    private final TaskService taskService;
-    private final TaskRepository taskRepository;
+    private final TaskService service;
 
-    public TaskController(TaskService taskService, TaskRepository taskRepository) {
-        this.taskService = taskService;
-        this.taskRepository = taskRepository;
+    public TaskController(TaskService service) {
+        this.service = service;
     }
 
-    // --- 0) Alle Tasks (NEU) ---
+    // --- Helpers ---
+    private Task requireTask(Long id) {
+        Task t = service.findById(id);
+        if (t == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Task " + id + " not found");
+        return t;
+    }
+
+    // --- CRUD ---
+
     @GetMapping
-    public List<Task> getAllTasks() {
-        return taskRepository.findAll();
+    public List<TaskDto> list() {
+        return service.findAll().stream().map(TaskMapper::toDto).collect(Collectors.toList());
     }
 
-    // --- 0b) Einzel-Task lesen (optional, sinnvoll für Details) ---
     @GetMapping("/{id}")
-    public ResponseEntity<Task> getOne(@PathVariable Long id) {
-        return taskRepository.findById(id)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+    public TaskDto get(@PathVariable Long id) {
+        return TaskMapper.toDto(requireTask(id));
     }
 
-    // --- 1) Bulk-Sortierung / Stationswechsel ---
-    @PutMapping("/sort")
-    public ResponseEntity<Void> updateTasksSorting(@RequestBody List<@Valid Task> tasksToUpdate) {
-        taskService.updateTasksSorting(tasksToUpdate);
-        return ResponseEntity.ok().build();
-    }
-
-    // --- 2a) Tasks pro Station (robust; expliziter Pfad) ---
-    @GetMapping("/by-station/{station}")
-    public List<Task> getTasksByStationExplicit(@PathVariable String station) {
-        return taskService.findByStationNormalized(station);
-    }
-
-    // --- 2b) (ENTFERNT/DEAKTIVIERT) Legacy-Route war kollisionsgefährdet:
-    // @GetMapping("/{station}")
-    // public List<Task> getTasksByStation(@PathVariable String station) {
-    //     return taskService.findByStationNormalized(station);
-    // }
-
-    // --- 3) Task anlegen (Validation + Fallbacks) ---
     @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    public Task createTask(@Valid @RequestBody Task task) {
-        if (task.getPrioritaet() == null) {
-            task.setPrioritaet(9999);
+    public ResponseEntity<TaskDto> create(@RequestBody TaskDto dto) {
+        if (dto.getBezeichnung() == null || dto.getBezeichnung().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Bezeichnung ist erforderlich");
         }
-        if (task.getZusätzlicheInfos() != null && task.getZusätzlicheInfos().trim().isEmpty()) {
-            task.setZusätzlicheInfos(null);
+        if (dto.getArbeitsstation() == null || dto.getArbeitsstation().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Arbeitsstation ist erforderlich");
         }
-        if (task.getArbeitsstation() != null) {
-            task.setArbeitsstation(task.getArbeitsstation().trim().replaceAll("\\s+", " "));
+        if (dto.getStatus() == null) {
+            dto.setStatus(TaskStatus.NEU);
         }
 
-        ensureDefaultStatus(task);
-        return taskRepository.save(task);
+        Task entity = TaskMapper.toEntity(dto);
+        Task saved = service.save(entity);
+        return ResponseEntity.status(HttpStatus.CREATED).body(TaskMapper.toDto(saved));
     }
 
-    // --- 4) Task löschen ---
+    @PatchMapping("/{id}")
+    public TaskDto patch(@PathVariable Long id, @RequestBody TaskDto dto) {
+        Task entity = requireTask(id);
+        TaskMapper.updateEntityFromDto(dto, entity);
+        Task saved = service.save(entity);
+        return TaskMapper.toDto(saved);
+    }
+
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteTask(@PathVariable Long id) {
-        if (taskRepository.existsById(id)) {
-            taskRepository.deleteById(id);
-            return new ResponseEntity<>(HttpStatus.NO_CONTENT);
-        } else {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        requireTask(id);
+        service.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    // Optional: dedizierter Status-Endpoint
+    @PatchMapping("/{id}/status")
+    public TaskDto patchStatus(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        Task entity = requireTask(id);
+        String raw = body.get("status");
+        if (raw == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "status fehlt");
         }
-    }
-
-    // --- 5) Einzel-Update (PUT/PATCH) ---
-    @RequestMapping(method = {RequestMethod.PUT, RequestMethod.PATCH}, value = "/{id}")
-    public ResponseEntity<Task> updateTaskDetails(@PathVariable Long id, @Valid @RequestBody Task updatedTask) {
-        Task savedTask = taskService.updateTaskDetails(id, updatedTask);
-        return ResponseEntity.ok(savedTask);
-    }
-
-    // --- Default-Status setzen (String/Enum-agnostisch) ---
-    private void ensureDefaultStatus(Task task) {
         try {
-            Method getter = Task.class.getMethod("getStatus");
-            Object current = getter.invoke(task);
-            if (current != null) return;
-
-            Method setter = null;
-            Class<?> paramType = null;
-            for (Method m : Task.class.getMethods()) {
-                if (m.getName().equals("setStatus") && m.getParameterCount() == 1) {
-                    setter = m; paramType = m.getParameterTypes()[0]; break;
-                }
-            }
-            if (setter == null || paramType == null) return;
-
-            if (String.class.equals(paramType)) {
-                setter.invoke(task, "NEU");
-                return;
-            }
-            if (paramType.isEnum()) {
-                Object value = null;
-                try {
-                    @SuppressWarnings({"rawtypes", "unchecked"})
-                    Object candidate = Enum.valueOf((Class<Enum>) paramType, "NEU");
-                    value = candidate;
-                } catch (IllegalArgumentException ignored) {
-                    Object[] constants = paramType.getEnumConstants();
-                    if (constants != null && constants.length > 0) value = constants[0];
-                }
-                if (value != null) setter.invoke(task, value);
-            }
-        } catch (Exception ignored) {
-            // Fallback darf keine Exception werfen
+            entity.setStatus(TaskStatus.valueOf(raw));
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ungültiger Status: " + raw);
         }
+        Task saved = service.save(entity);
+        return TaskMapper.toDto(saved);
     }
 }
