@@ -1,11 +1,13 @@
-// frontend/src/components/TaskBoard.header-effort.jsx
-// Adds total effort per column (to the right of task count), counting only matches when a search is active.
+// frontend/src/components/TaskBoard.jsx
+// Wire up due-* stripe classes via central DueDateConfig/DueDateTheme and remove inline due-color logic.
 import React, { useEffect, useState } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import TaskCreationModal from "./TaskCreationModal";
 import TaskEditModal from "./TaskEditModal";
 import StationManagementContent from "./StationManagementContent";
 import TaskItem from "./TaskItem";
+import "@/config/DueDateTheme.css";           // zentrale Farben/Stripe pro Fälligkeit
+import { dueClassForDate } from "@/config/DueDateConfig"; // zentrale Schwellen → Klasse
 
 /** ====================== Utilities ====================== */
 const norm = (v) =>
@@ -65,37 +67,6 @@ function resolveTaskStationId(task, maps, fallbackId) {
     if (id) return id;
   }
   return fallbackId ?? null;
-}
-
-/** ====== Visual helpers for TaskItem (status pill + due color/class) ====== */
-function getStatusTone(statusRaw) {
-  const s = String(statusRaw || "").toUpperCase();
-  if (s.includes("DONE") || s.includes("ERLEDIGT") || s.includes("FERTIG")) {
-    return { cls: "ok", label: "DONE", statusClass: "status-ok" };
-  }
-  if (s.includes("BLOCK") || s.includes("WARTET") || s.includes("WAIT") || s.includes("HOLD")) {
-    return { cls: "danger", label: "BLOCKED", statusClass: "status-danger" };
-  }
-  if ((s.includes("IN") && s.includes("PROG")) || s.includes("BEARBEIT") || s.includes("DOING") || s.includes("WORK")) {
-    return { cls: "info", label: "IN PROGRESS", statusClass: "status-info" };
-  }
-  if (s.includes("REVIEW") || s.includes("QA") || s.includes("TEST")) {
-    return { cls: "warn", label: "REVIEW", statusClass: "status-warn" };
-  }
-  return { cls: "warn", label: "OPEN", statusClass: "status-warn" };
-}
-
-function getDueVisual(t) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const noDue = { frame: "#1f2937", accent: "transparent", dueClass: "", text: "#94a3b8" };
-  if (!t?.endDatum) return noDue;
-  const d = new Date(t.endDatum);
-  if (isNaN(+d)) return noDue;
-  d.setHours(0, 0, 0, 0);
-  if (d < today) return { frame: "#7f1d1d", accent: "#ef4444", dueClass: "due-overdue", text: "#fca5a5" };
-  if (+d === +today) return { frame: "#7a5d0a", accent: "#f59e0b", dueClass: "due-today", text: "#fde68a" };
-  return { frame: "#0f3d25", accent: "#22c55e", dueClass: "due-future", text: "#a7f3d0" };
 }
 
 /** ====== Search helper ====== */
@@ -358,8 +329,6 @@ export default function TaskBoard() {
           --text: #e5e7eb; --muted: #94a3b8;
           --border: #1f2937; --shadow: rgba(0,0,0,0.35);
           --brand: #3b82f6; --ok: #22c55e; --warn: #f59e0b; --danger: #ef4444; --info: #38bdf8;
-          --frame-default: #1f2937; --frame-overdue: #7f1d1d; --frame-today: #7a5d0a; --frame-future: #0f3d25;
-          --accent-overdue: #ef4444; --accent-today: #f59e0b; --accent-future: #22c55e;
           --match-bg: rgba(59,130,246,0.12);
         }
         .toolbar-input, .toolbar-select { padding: 8px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--text); }
@@ -367,15 +336,10 @@ export default function TaskBoard() {
         .btn-primary { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--brand); background: var(--brand); color: white; }
         .btn-ghost { padding: 8px 12px; border-radius: 8px; border: 1px solid #334155; background: transparent; color: #cbd5e1; }
         .col { background: var(--panel); border: 1px solid var(--border); padding: 12px; border-radius: 12px; box-shadow: 0 8px 24px var(--shadow) }
-        /* Task Card */
-        .task-card { position: relative; background: var(--card); border: 1px solid var(--frame-default); border-radius: 12px; padding: 12px 12px 12px 16px; box-shadow: 0 4px 16px var(--shadow); transition: box-shadow .12s ease, background .18s ease, opacity .18s ease, filter .18s ease; user-select: none; }
+        /* Task Card (keine due-spezifischen Farben hier; Stripe & Textfarbe kommen zentral aus DueDateTheme.css) */
+        .task-card { position: relative; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 12px 12px 16px; box-shadow: 0 4px 16px var(--shadow); transition: box-shadow .12s ease, background .18s ease, opacity .18s ease, filter .18s ease; user-select: none; }
         .task-card:hover { box-shadow: 0 10px 24px var(--shadow); }
-        .task-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; border-top-left-radius: 12px; border-bottom-left-radius: 12px; background: var(--accent, transparent); }
-        .task-card.due-overdue { border-color: var(--frame-overdue); }
-        .task-card.due-overdue::before { background: var(--accent-overdue); }
-        .task-card.due-today { border-color: var(--frame-today); }
-        .task-card.due-today::before { background: var(--accent-today); }
-        .task-card.due-future { border-color: var(--frame-future); }
+
         /* Search highlighting */
         .task-card.match { box-shadow: 0 0 0 2px var(--brand) inset, 0 8px 24px var(--shadow); background: linear-gradient(0deg, var(--match-bg), var(--card)); }
         .task-card.dim { opacity: .45; filter: grayscale(.5) blur(.2px); }
@@ -387,12 +351,7 @@ export default function TaskBoard() {
         .title { color: var(--text); font-size: 14px; font-weight: 700; line-height: 1.2; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .desc { margin: 8px 0 0 0; font-size: 12.5px; color: #cbd5e1; line-height: 1.25; max-width: 460px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-        /* Status pills */
-        .pill { padding: 4px 10px; border-radius: 999px; font-size: 10px; letter-spacing: .12em; border: 1px solid var(--border); color: #fff; text-transform: uppercase; font-weight: 700; }
-        .pill.ok { background: var(--ok); border-color: var(--ok); }
-        .pill.warn { background: var(--warn); border-color: var(--warn); color: #111827; }
-        .pill.danger { background: var(--danger); border-color: var(--danger); }
-        .pill.info { background: var(--info); border-color: var(--info); }
+        /* (Status-Pill-Farben sind zentral in TaskStatusTheme.css) */
 
         /* Search input wrapper */
         .search-wrap { position: relative; display: inline-flex; align-items: center; }
@@ -471,14 +430,8 @@ export default function TaskBoard() {
                     </div>
 
                     {visibleList.map((t, index) => {
-                      const due = getDueVisual(t);
-                      const st = getStatusTone(t.status);
+                      const dueCls = dueClassForDate(t?.endDatum); // "due-overdue" | "due-today" | "due-soon" | "due-week" | "due-future"
                       const isMatch = matchesQuery(t, q);
-
-                      const baseStyle = {
-                        borderColor: "var(--frame-default)",
-                        "--accent": due.accent,
-                      };
 
                       return (
                         <Draggable
@@ -494,9 +447,8 @@ export default function TaskBoard() {
                                 ref={dProvided.innerRef}
                                 {...dProvided.draggableProps}
                                 {...dProvided.dragHandleProps}
-                                className={`task-card ${due.dueClass} ${st.statusClass} ${!hardFilter && queryActive ? (isMatch ? "match" : "dim") : ""}`}
+                                className={`task-card ${dueCls} ${!hardFilter && queryActive ? (isMatch ? "match" : "dim") : ""}`}
                                 style={{
-                                  ...baseStyle,
                                   ...base,
                                   boxShadow: snapshot.isDragging
                                     ? "0 18px 40px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.25)"
@@ -506,7 +458,7 @@ export default function TaskBoard() {
                                 }}
                                 onDoubleClick={() => setEditTask(t)}
                               >
-                                <TaskItem task={t} dueColor={due.text} statusTone={st} />
+                                <TaskItem task={t} />
                               </div>
                             );
                           }}
@@ -528,14 +480,10 @@ export default function TaskBoard() {
       {isCreateOpen && (
         <TaskCreationModal
           stations={stations.map((s) => ({ id: String(pickStationId(s)), name: pickStationName(s) }))}
-		      onTaskCreated={(opts) => {
-		        // Immer Daten aktualisieren …
-		        fetchAll();
-		       // … aber nur schließen, wenn keepOpen NICHT gesetzt ist
-		        if (!opts || !opts.keepOpen) {
-		          setIsCreateOpen(false);
-		        }
-		      }}         
+          onTaskCreated={(opts) => {
+            fetchAll();
+            if (!opts || !opts.keepOpen) setIsCreateOpen(false);
+          }}
           onClose={() => setIsCreateOpen(false)}
         />
       )}

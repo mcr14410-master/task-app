@@ -1,8 +1,8 @@
 // frontend/src/components/TaskCreationModal.jsx
-// Clean version: uses canonical UI statuses (NEU, TO_DO, IN_BEARBEITUNG, FERTIG) directly.
-// No UI<->API mapping needed; backend accepts these as Enum values.
+// Uses centralized CSS classes for status pills (see TaskStatusTheme.css)
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import axios from 'axios';
+import '@/config/TaskStatusTheme.css'; // zentraler Import (Pfad ggf. anpassen)
 
 const API_BASE_URL = 'http://localhost:8080/api/tasks';
 
@@ -59,34 +59,24 @@ const styles = {
     border: '1px solid #334155', borderRadius: 10, cursor: 'pointer', fontWeight: 600
   },
 
-  statusRow: { display: 'flex', gap: 8, flexWrap: 'wrap' },
-  pill: (active, color) => ({
-    padding: '6px 10px',
-    borderRadius: 14,
-    fontSize: '0.78rem',
-    fontWeight: 700,
-    cursor: 'pointer',
-    userSelect: 'none',
-    backgroundColor: active ? color : '#4f545c',
-    color: '#fff',
-    transition: 'transform .08s ease',
-    transform: active ? 'scale(1.02)' : 'scale(1.0)'
-  }),
-
-  errorBox: {
-    marginBottom: 10, padding: '10px 12px',
-    backgroundColor: '#4f2b2b', color: '#ffdcdc',
-    borderRadius: 10, fontSize: '0.92rem', border: '1px solid #1f2937'
-  }
+  statusRow: { display: 'flex', gap: 8, flexWrap: 'wrap' }
 };
 
-const STATUS_COLORS = {
-  NEU: '#3b82f6',
-  TO_DO: '#f59e0b',
-  IN_BEARBEITUNG: '#0ea5e9',
-  FERTIG: '#22c55e'
-};
 const STATUS_ORDER = ['NEU', 'TO_DO', 'IN_BEARBEITUNG', 'FERTIG'];
+
+function statusKey(raw) {
+  const s = String(raw || '').toUpperCase().replaceAll('-', '_').replaceAll(' ', '_');
+  switch (s) {
+    case 'NEU': return 'NEU';
+    case 'TO_DO':
+    case 'TODO': return 'TO_DO';
+    case 'IN_BEARBEITUNG':
+    case 'IN_PROGRESS': return 'IN_BEARBEITUNG';
+    case 'FERTIG':
+    case 'DONE': return 'FERTIG';
+    default: return 'NEU';
+  }
+}
 
 const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
   const defaultStationName = useMemo(() => (stations[0]?.name ?? ''), [stations]);
@@ -145,18 +135,15 @@ const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
     return null;
   };
 
-  // Standard-Speichern (schließt via TaskBoard onTaskCreated)
   const handleCreate = async (e) => {
     e?.preventDefault?.();
     setErrorMsg(null);
-
     const v = validate();
     if (v) { setErrorMsg(v); return; }
-
     setSubmitting(true);
     try {
       await axios.post(API_BASE_URL, buildPayload());
-      onTaskCreated?.(); // TaskBoard: refresh + close
+      onTaskCreated?.();
     } catch (err) {
       const status = err?.response?.status;
       const srvMsg = err?.response?.data?.message;
@@ -170,18 +157,15 @@ const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
     }
   };
 
-  // Speichern & Neu (Modal bleibt offen, Formular wird geleert), Board-Refresh via keepOpen
   const handleCreateAndNew = async () => {
     if (submitting) return;
     setErrorMsg(null);
-
     const v = validate();
     if (v) { setErrorMsg(v); return; }
-
     setSubmitting(true);
     try {
       await axios.post(API_BASE_URL, buildPayload());
-      onTaskCreated?.({ keepOpen: true }); // Board refresh, Modal bleibt offen
+      onTaskCreated?.({ keepOpen: true });
       setForm(makeInitial());
     } catch (err) {
       const status = err?.response?.status;
@@ -196,7 +180,6 @@ const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
     }
   };
 
-  // Formular zurücksetzen (ohne Speichern)
   const handleReset = () => {
     if (submitting) return;
     setErrorMsg(null);
@@ -211,85 +194,49 @@ const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
           <button style={styles.closeBtn} onClick={onClose} aria-label="Schließen">✕</button>
         </div>
 
-        {errorMsg && <div style={styles.errorBox}>🚨 {errorMsg}</div>}
+        {errorMsg && <div style={{ marginBottom: 10, padding: '10px 12px', backgroundColor: '#4f2b2b', color: '#ffdcdc', borderRadius: 10, border: '1px solid #1f2937' }}>🚨 {errorMsg}</div>}
 
         <form onSubmit={handleCreate}>
-          {/* Basisdaten */}
           <div style={styles.section}>
             <h3 style={styles.sectionTitle}>Basisdaten</h3>
 
             <label style={styles.label} htmlFor="bezeichnung">Bezeichnung *</label>
-            <input
-              id="bezeichnung" type="text" style={styles.input}
-              value={form.bezeichnung} onChange={(e) => setValue('bezeichnung', e.target.value)}
-              disabled={submitting} required
-            />
+            <input id="bezeichnung" type="text" style={styles.input} value={form.bezeichnung} onChange={(e) => setValue('bezeichnung', e.target.value)} disabled={submitting} required />
 
             <div style={{ height: 10 }} />
 
             <div style={styles.grid2}>
               <div>
                 <label style={styles.label} htmlFor="teilenummer">Teilenummer</label>
-                <input
-                  id="teilenummer" type="text" style={styles.input}
-                  value={form.teilenummer} onChange={(e) => setValue('teilenummer', e.target.value)}
-                  disabled={submitting}
-                />
+                <input id="teilenummer" type="text" style={styles.input} value={form.teilenummer} onChange={(e) => setValue('teilenummer', e.target.value)} disabled={submitting} />
               </div>
-
               <div>
                 <label style={styles.label} htmlFor="kunde">Kunde</label>
-                <input
-                  id="kunde" type="text" style={styles.input}
-                  value={form.kunde} onChange={(e) => setValue('kunde', e.target.value)}
-                  disabled={submitting}
-                />
+                <input id="kunde" type="text" style={styles.input} value={form.kunde} onChange={(e) => setValue('kunde', e.target.value)} disabled={submitting} />
               </div>
-
               <div>
                 <label style={styles.label} htmlFor="endDatum">Enddatum</label>
-                <input
-                  id="endDatum" type="date" style={styles.input}
-                  value={form.endDatum} onChange={(e) => setValue('endDatum', e.target.value)}
-                  disabled={submitting}
-                />
+                <input id="endDatum" type="date" style={styles.input} value={form.endDatum} onChange={(e) => setValue('endDatum', e.target.value)} disabled={submitting} />
               </div>
-
               <div>
                 <label style={styles.label} htmlFor="aufwandStunden">Aufwand (Std.)</label>
-                <input
-                  id="aufwandStunden" type="number" min="0" step="0.25" style={styles.input}
-                  value={form.aufwandStunden} onChange={(e) => setValue('aufwandStunden', e.target.value)}
-                  disabled={submitting}
-                />
+                <input id="aufwandStunden" type="number" min="0" step="0.25" style={styles.input} value={form.aufwandStunden} onChange={(e) => setValue('aufwandStunden', e.target.value)} disabled={submitting} />
               </div>
             </div>
           </div>
 
-          {/* Zuweisung & Status */}
           <div style={styles.section}>
             <h3 style={styles.sectionTitle}>Zuweisung & Status</h3>
 
             <div style={styles.grid2}>
               <div>
                 <label style={styles.label} htmlFor="zuständig">Zuständigkeit</label>
-                <input
-                  id="zuständig" type="text" style={styles.input}
-                  value={form.zuständig} onChange={(e) => setValue('zuständig', e.target.value)}
-                  disabled={submitting}
-                />
+                <input id="zuständig" type="text" style={styles.input} value={form.zuständig} onChange={(e) => setValue('zuständig', e.target.value)} disabled={submitting} />
               </div>
-
               <div>
                 <label style={styles.label} htmlFor="arbeitsstation">Arbeitsstation *</label>
-                <select
-                  id="arbeitsstation" style={styles.input}
-                  value={form.arbeitsstation} onChange={(e) => setValue('arbeitsstation', e.target.value)}
-                  disabled={submitting} required
-                >
-                  {stations.map(s => (
-                    <option key={s.id ?? s.name} value={s.name}>{s.name}</option>
-                  ))}
+                <select id="arbeitsstation" style={styles.input} value={form.arbeitsstation} onChange={(e) => setValue('arbeitsstation', e.target.value)} disabled={submitting} required>
+                  {stations.map(s => (<option key={s.id ?? s.name} value={s.name}>{s.name}</option>))}
                 </select>
               </div>
             </div>
@@ -299,49 +246,39 @@ const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
             <div>
               <label style={styles.label}>Status</label>
               <div style={styles.statusRow}>
-                {STATUS_ORDER.map(key => (
-                  <button
-                    key={key} type="button" title={key}
-                    onClick={() => setValue('status', key)}
-                    style={styles.pill(form.status === key, STATUS_COLORS[key])}
-                    disabled={submitting}
-                  >
-                    {key}
-                  </button>
-                ))}
+                {STATUS_ORDER.map(st => {
+                  const key = statusKey(st);
+                  const selected = form.status === st;
+                  return (
+                    <button
+                      key={st}
+                      type="button"
+                      className={`pill st-${key.toLowerCase()} ${selected ? 'is-selected' : ''}`}
+                      aria-pressed={selected}
+                      onClick={() => setValue('status', st)}
+                      disabled={submitting}
+                      title={st}
+                    >
+                      {st}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>
 
-          {/* Beschreibung */}
           <div style={styles.section}>
             <h3 style={styles.sectionTitle}>Beschreibung</h3>
             <label style={styles.label} htmlFor="zusätzlicheInfos">Zusätzliche Infos</label>
-            <textarea
-              id="zusätzlicheInfos"
-              style={{ ...styles.input, ...styles.textarea }}
-              value={form.zusätzlicheInfos}
-              onChange={(e) => setValue('zusätzlicheInfos', e.target.value)}
-              disabled={submitting}
-              placeholder="Optional: Kurzbeschreibung"
-            />
+            <textarea id="zusätzlicheInfos" style={{ ...styles.input, ...styles.textarea }} value={form.zusätzlicheInfos} onChange={(e) => setValue('zusätzlicheInfos', e.target.value)} disabled={submitting} placeholder="Optional: Kurzbeschreibung" />
           </div>
 
-          {/* Footer */}
           <div style={styles.footer}>
-            <button type="button" style={styles.btnSecondary} onClick={handleReset} disabled={submitting}>
-              Zurücksetzen
-            </button>
+            <button type="button" style={styles.btnSecondary} onClick={handleReset} disabled={submitting}>Zurücksetzen</button>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button type="button" style={styles.btnSecondary} onClick={onClose} disabled={submitting}>
-                Abbrechen
-              </button>
-              <button type="button" style={styles.btnPrimary} onClick={handleCreateAndNew} disabled={submitting}>
-                Speichern &amp; Neu
-              </button>
-              <button type="submit" style={styles.btnPrimary} disabled={submitting}>
-                {submitting ? 'Erstelle…' : 'Erstellen'}
-              </button>
+              <button type="button" style={styles.btnSecondary} onClick={onClose} disabled={submitting}>Abbrechen</button>
+              <button type="button" style={styles.btnPrimary} onClick={handleCreateAndNew} disabled={submitting}>Speichern &amp; Neu</button>
+              <button type="submit" style={styles.btnPrimary} disabled={submitting}>{submitting ? 'Erstelle…' : 'Erstellen'}</button>
             </div>
           </div>
         </form>

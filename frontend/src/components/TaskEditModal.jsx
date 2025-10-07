@@ -1,8 +1,8 @@
 // frontend/src/components/TaskEditModal.jsx
-// Clean version: saves the edited task via PATCH with canonical statuses (NEU, TO_DO, IN_BEARBEITUNG, FERTIG).
-// No UI<->API mapping or fallback variants.
+// Uses centralized CSS classes for status pills (see TaskStatusTheme.css)
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import '@/config/TaskStatusTheme.css'; // zentraler Import (Pfad ggf. anpassen)
 
 const API_BASE_URL = 'http://localhost:8080/api/tasks';
 
@@ -69,35 +69,24 @@ const modalStyles = {
   buttonDanger: {
     padding: '10px 16px', background: '#ef4444', color: '#fff',
     border: '1px solid #ef4444', borderRadius: 10, cursor: 'pointer', fontWeight: 700
-  },
-
-  badgeRow: { display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 },
-  badgeBase: (bg, selected) => ({
-    backgroundColor: bg,
-    color: '#fff',
-    padding: '4px 10px',
-    borderRadius: 12,
-    fontSize: '0.8em',
-    fontWeight: 700,
-    cursor: 'pointer',
-    outline: 'none',
-    userSelect: 'none',
-    borderWidth: 2,
-    borderStyle: 'solid',
-    borderColor: selected ? '#ffffff' : 'transparent',
-  }),
+  }
 };
 
 const STATUSES = ['NEU', 'TO_DO', 'IN_BEARBEITUNG', 'FERTIG'];
-const getStatusColor = (status) => {
-  switch (status) {
-    case 'NEU': return '#3b82f6';
-    case 'TO_DO': return '#f59e0b';
-    case 'IN_BEARBEITUNG': return '#0ea5e9';
-    case 'FERTIG': return '#22c55e';
-    default: return '#747f8d';
+
+function statusKey(raw) {
+  const s = String(raw || '').toUpperCase().replaceAll('-', '_').replaceAll(' ', '_');
+  switch (s) {
+    case 'NEU': return 'NEU';
+    case 'TO_DO':
+    case 'TODO': return 'TO_DO';
+    case 'IN_BEARBEITUNG':
+    case 'IN_PROGRESS': return 'IN_BEARBEITUNG';
+    case 'FERTIG':
+    case 'DONE': return 'FERTIG';
+    default: return 'NEU';
   }
-};
+}
 
 const TaskEditModal = ({ task, stations, onSave, onClose }) => {
   const [taskData, setTaskData] = useState({
@@ -191,129 +180,87 @@ const TaskEditModal = ({ task, stations, onSave, onClose }) => {
         {submitError && <p style={{ color: '#ef4444' }}>{submitError}</p>}
 
         <form onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
-          {/* Basisdaten & Zuweisung */}
           <div style={modalStyles.sectionContainer}>
             <h3 style={modalStyles.sectionTitle}>Basisdaten & Zuweisung</h3>
 
             <div style={modalStyles.formGroup}>
               <label style={modalStyles.label} htmlFor="bezeichnung">Bezeichnung *</label>
-              <input
-                style={modalStyles.input}
-                type="text" id="bezeichnung" name="bezeichnung"
-                value={taskData.bezeichnung} onChange={handleChange}
-                required disabled={isSaving}
-              />
+              <input style={modalStyles.input} type="text" id="bezeichnung" name="bezeichnung" value={taskData.bezeichnung} onChange={handleChange} required disabled={isSaving} />
             </div>
 
-            {/* Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
               <div style={modalStyles.formGroup}>
                 <label style={modalStyles.label} htmlFor="teilenummer">Teilenummer</label>
-                <input
-                  style={modalStyles.input}
-                  type="text" id="teilenummer" name="teilenummer"
-                  value={taskData.teilenummer} onChange={handleChange}
-                  disabled={isSaving}
-                />
+                <input style={modalStyles.input} type="text" id="teilenummer" name="teilenummer" value={taskData.teilenummer} onChange={handleChange} disabled={isSaving} />
               </div>
               <div style={modalStyles.formGroup}>
                 <label style={modalStyles.label} htmlFor="kunde">Kunde</label>
-                <input
-                  style={modalStyles.input}
-                  type="text" id="kunde" name="kunde"
-                  value={taskData.kunde} onChange={handleChange}
-                  disabled={isSaving}
-                />
+                <input style={modalStyles.input} type="text" id="kunde" name="kunde" value={taskData.kunde} onChange={handleChange} disabled={isSaving} />
               </div>
               <div style={modalStyles.formGroup}>
                 <label style={modalStyles.label} htmlFor="endDatum">Enddatum</label>
-                <input
-                  style={modalStyles.input}
-                  type="date" id="endDatum" name="endDatum"
-                  value={taskData.endDatum} onChange={handleChange}
-                  disabled={isSaving}
-                />
+                <input style={modalStyles.input} type="date" id="endDatum" name="endDatum" value={taskData.endDatum} onChange={handleChange} disabled={isSaving} />
               </div>
               <div style={modalStyles.formGroup}>
                 <label style={modalStyles.label} htmlFor="aufwandStunden">Aufwand (Std.)</label>
-                <input
-                  style={modalStyles.input}
-                  type="number" id="aufwandStunden" name="aufwandStunden"
-                  value={taskData.aufwandStunden} onChange={handleChange}
-                  disabled={isSaving}
-                />
+                <input style={modalStyles.input} type="number" id="aufwandStunden" name="aufwandStunden" value={taskData.aufwandStunden} onChange={handleChange} disabled={isSaving} />
               </div>
               <div style={modalStyles.formGroup}>
                 <label style={modalStyles.label} htmlFor="zuständig">Zuständigkeit</label>
-                <input
-                  style={modalStyles.input}
-                  type="text" id="zuständig" name="zuständig"
-                  value={taskData.zuständig} onChange={handleChange}
-                  disabled={isSaving}
-                />
+                <input style={modalStyles.input} type="text" id="zuständig" name="zuständig" value={taskData.zuständig} onChange={handleChange} disabled={isSaving} />
               </div>
               <div style={modalStyles.formGroup}>
                 <label style={modalStyles.label} htmlFor="arbeitsstation">Station</label>
-                <select
-                  style={modalStyles.input}
-                  id="arbeitsstation" name="arbeitsstation"
-                  value={taskData.arbeitsstation} onChange={handleChange}
-                  disabled={isSaving}
-                >
-                  {stations.map((s) => (
-                    <option key={s.id ?? s.name} value={s.name}>{s.name}</option>
-                  ))}
+                <select style={modalStyles.input} id="arbeitsstation" name="arbeitsstation" value={taskData.arbeitsstation} onChange={handleChange} disabled={isSaving}>
+                  {stations.map((s) => (<option key={s.id ?? s.name} value={s.name}>{s.name}</option>))}
                 </select>
               </div>
             </div>
 
-            {/* Status-Badges */}
             <div style={modalStyles.formGroup}>
               <label style={modalStyles.label}>Status</label>
-              <div style={modalStyles.badgeRow}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {STATUSES.map((s) => {
+                  const key = statusKey(s);
                   const selected = taskData.status === s;
                   return (
-                    <span
+                    <button
                       key={s}
-                      role="button"
-                      tabIndex={0}
+                      type="button"
+                      className={`pill st-${key.toLowerCase()} ${selected ? 'is-selected' : ''}`}
                       aria-pressed={selected}
                       onClick={() => setStatus(s)}
-                      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setStatus(s)}
-                      style={modalStyles.badgeBase(getStatusColor(s), selected)}
+                      disabled={isSaving}
+                      title={s}
                     >
                       {s}
-                    </span>
+                    </button>
                   );
                 })}
               </div>
             </div>
           </div>
 
-          {/* Infos */}
           <div style={modalStyles.sectionContainer}>
             <h3 style={modalStyles.sectionTitle}>Infos</h3>
-            <textarea
-              style={{ ...modalStyles.input, ...modalStyles.textarea }}
-              id="zusätzlicheInfos" name="zusätzlicheInfos"
-              value={taskData.zusätzlicheInfos} onChange={handleChange}
-              disabled={isSaving}
-            />
+            <textarea style={{ ...modalStyles.input, ...modalStyles.textarea }} id="zusätzlicheInfos" name="zusätzlicheInfos" value={taskData.zusätzlicheInfos} onChange={handleChange} disabled={isSaving} />
           </div>
 
-          {/* Footer */}
           <div style={modalStyles.buttonContainer}>
-            <button type="button" style={modalStyles.buttonDanger} onClick={handleDelete} disabled={isSaving}>
+            <button type="button" style={modalStyles.buttonDanger} onClick={() => {
+              if (!window.confirm('Möchten Sie diese Aufgabe wirklich löschen?')) return;
+              (async () => {
+                setIsSaving(true);
+                try { await axios.delete(`${API_BASE_URL}/${task.id}`); onClose(); }
+                catch (err) { console.error(err); setSubmitError('Fehler beim Löschen der Aufgabe.'); }
+                finally { setIsSaving(false); }
+              })();
+            }} disabled={isSaving}>
               🗑 Löschen
             </button>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button type="button" style={modalStyles.buttonSecondary} onClick={onClose} disabled={isSaving}>
-                Abbrechen
-              </button>
-              <button type="submit" style={modalStyles.buttonPrimary} disabled={isSaving}>
-                {isSaving ? 'Speichern…' : 'Speichern'}
-              </button>
+              <button type="button" style={modalStyles.buttonSecondary} onClick={onClose} disabled={isSaving}>Abbrechen</button>
+              <button type="submit" style={modalStyles.buttonPrimary} disabled={isSaving}>{isSaving ? 'Speichern…' : 'Speichern'}</button>
             </div>
           </div>
         </form>
