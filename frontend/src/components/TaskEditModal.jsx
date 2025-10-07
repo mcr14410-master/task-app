@@ -1,8 +1,8 @@
 // frontend/src/components/TaskEditModal.jsx
-// Uses centralized CSS classes for status pills (see TaskStatusTheme.css)
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import '@/config/TaskStatusTheme.css'; // zentraler Import (Pfad ggf. anpassen)
+import '../config/TaskStatusTheme.css';
+import '../config/AdditionalWorkTheme.css';
 
 const API_BASE_URL = 'http://localhost:8080/api/tasks';
 
@@ -93,6 +93,8 @@ const TaskEditModal = ({ task, stations, onSave, onClose }) => {
     bezeichnung: '', teilenummer: '', kunde: '', endDatum: '',
     zuständig: '', aufwandStunden: 0, zusätzlicheInfos: '',
     arbeitsstation: '', id: null, status: 'NEU',
+    // Zusatzarbeiten
+    fai: false, qs: false,
   });
   const [isSaving, setIsSaving] = useState(false);
   const [submitError, setSubmitError] = useState(null);
@@ -107,9 +109,12 @@ const TaskEditModal = ({ task, stations, onSave, onClose }) => {
         aufwandStunden: task.aufwandStunden ?? 0,
         zuständig: task.zuständig || '',
         endDatum: task.endDatum ? task.endDatum.split('T')[0] : '',
-        arbeitsstation: task.arbeitsstation || (stations.length > 0 ? stations[0].name : ''),
+        arbeitsstation: task.arbeitsstation || (stations?.length ? stations[0].name : ''),
         id: task.id,
         status: task.status || 'NEU',
+        // Zusatzarbeiten
+        fai: !!task.fai,
+        qs: !!task.qs,
       });
     }
   }, [task, stations]);
@@ -125,6 +130,9 @@ const TaskEditModal = ({ task, stations, onSave, onClose }) => {
   const buildPayload = () => {
     const p = { ...taskData };
     if (!p.endDatum) delete p.endDatum;
+    // booleans sicherstellen
+    p.fai = !!p.fai;
+    p.qs = !!p.qs;
     return p;
   };
 
@@ -212,14 +220,14 @@ const TaskEditModal = ({ task, stations, onSave, onClose }) => {
               <div style={modalStyles.formGroup}>
                 <label style={modalStyles.label} htmlFor="arbeitsstation">Station</label>
                 <select style={modalStyles.input} id="arbeitsstation" name="arbeitsstation" value={taskData.arbeitsstation} onChange={handleChange} disabled={isSaving}>
-                  {stations.map((s) => (<option key={s.id ?? s.name} value={s.name}>{s.name}</option>))}
+                  {stations?.map((s) => (<option key={s.id ?? s.name} value={s.name}>{s.name}</option>))}
                 </select>
               </div>
             </div>
 
             <div style={modalStyles.formGroup}>
               <label style={modalStyles.label}>Status</label>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                 {STATUSES.map((s) => {
                   const key = statusKey(s);
                   const selected = taskData.status === s;
@@ -237,6 +245,25 @@ const TaskEditModal = ({ task, stations, onSave, onClose }) => {
                     </button>
                   );
                 })}
+
+                {/* Zusatzarbeiten rechts neben den Status-Pills */}
+                <div style={{marginLeft:'auto', display:'inline-flex', gap:8, alignItems:'center'}}>
+                  <span style={{fontSize:12, color:'#94a3b8'}}>Zusatzarbeiten:</span>
+                  <button
+                    type="button"
+                    className={`pill-add add-fai ${taskData.fai ? 'is-active' : ''} is-clickable`}
+                    onClick={() => setTaskData(p => ({...p, fai: !p.fai}))}
+                    disabled={isSaving}
+                    title="FAI aktivieren/deaktivieren"
+                  >FAI</button>
+                  <button
+                    type="button"
+                    className={`pill-add add-qs ${taskData.qs ? 'is-active' : ''} is-clickable`}
+                    onClick={() => setTaskData(p => ({...p, qs: !p.qs}))}
+                    disabled={isSaving}
+                    title="QS aktivieren/deaktivieren"
+                  >QS</button>
+                </div>
               </div>
             </div>
           </div>
@@ -247,15 +274,7 @@ const TaskEditModal = ({ task, stations, onSave, onClose }) => {
           </div>
 
           <div style={modalStyles.buttonContainer}>
-            <button type="button" style={modalStyles.buttonDanger} onClick={() => {
-              if (!window.confirm('Möchten Sie diese Aufgabe wirklich löschen?')) return;
-              (async () => {
-                setIsSaving(true);
-                try { await axios.delete(`${API_BASE_URL}/${task.id}`); onClose(); }
-                catch (err) { console.error(err); setSubmitError('Fehler beim Löschen der Aufgabe.'); }
-                finally { setIsSaving(false); }
-              })();
-            }} disabled={isSaving}>
+            <button type="button" style={modalStyles.buttonDanger} onClick={handleDelete} disabled={isSaving}>
               🗑 Löschen
             </button>
             <div style={{ display: 'flex', gap: 8 }}>

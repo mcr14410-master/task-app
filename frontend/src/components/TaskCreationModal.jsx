@@ -1,8 +1,8 @@
 // frontend/src/components/TaskCreationModal.jsx
-// Uses centralized CSS classes for status pills (see TaskStatusTheme.css)
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import axios from 'axios';
-import '@/config/TaskStatusTheme.css'; // zentraler Import (Pfad ggf. anpassen)
+import '../config/TaskStatusTheme.css';
+import '../config/AdditionalWorkTheme.css';
 
 const API_BASE_URL = 'http://localhost:8080/api/tasks';
 
@@ -59,7 +59,7 @@ const styles = {
     border: '1px solid #334155', borderRadius: 10, cursor: 'pointer', fontWeight: 600
   },
 
-  statusRow: { display: 'flex', gap: 8, flexWrap: 'wrap' }
+  statusRow: { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }
 };
 
 const STATUS_ORDER = ['NEU', 'TO_DO', 'IN_BEARBEITUNG', 'FERTIG'];
@@ -89,7 +89,10 @@ const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
     zuständig: '',
     zusätzlicheInfos: '',
     arbeitsstation: defaultStationName,
-    status: 'NEU'
+    status: 'NEU',
+    // Zusatzarbeiten
+    fai: false,
+    qs: false
   }), [defaultStationName]);
 
   const [form, setForm] = useState(makeInitial());
@@ -122,6 +125,9 @@ const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
       zusätzlicheInfos: sanitize(form.zusätzlicheInfos),
       arbeitsstation: sanitize(form.arbeitsstation),
       status: sanitize(form.status) ?? 'NEU',
+      // Zusatzarbeiten
+      fai: !!form.fai,
+      qs: !!form.qs,
       prioritaet: 9999
     };
     Object.keys(payload).forEach(k => { if (payload[k] === null) delete payload[k]; });
@@ -263,6 +269,25 @@ const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
                     </button>
                   );
                 })}
+
+                {/* Zusatzarbeiten rechts neben den Status-Pills */}
+                <div style={{marginLeft:'auto', display:'inline-flex', gap:8, alignItems:'center'}}>
+                  <span style={{fontSize:12, color:'#94a3b8'}}>Zusatzarbeiten:</span>
+                  <button
+                    type="button"
+                    className={`pill-add add-fai ${form.fai ? 'is-active' : ''} is-clickable`}
+                    onClick={() => setForm(prev => ({...prev, fai: !prev.fai}))}
+                    disabled={submitting}
+                    title="FAI aktivieren/deaktivieren"
+                  >FAI</button>
+                  <button
+                    type="button"
+                    className={`pill-add add-qs ${form.qs ? 'is-active' : ''} is-clickable`}
+                    onClick={() => setForm(prev => ({...prev, qs: !prev.qs}))}
+                    disabled={submitting}
+                    title="QS aktivieren/deaktivieren"
+                  >QS</button>
+                </div>
               </div>
             </div>
           </div>
