@@ -6,15 +6,19 @@ import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
- * CORS nur für Entwicklung/Docker.
- * Aktivieren via SPRING_PROFILES_ACTIVE=docker (oder dev).
+ * Entwicklungs-/Docker-CORS (ohne Spring Security).
+ * Robustes Mapping auf "/**", funktioniert sowohl mit context-path="/api"
+ * als auch mit Controller-Mappings unter "/api".
+ *
+ * Aktivierung: SPRING_PROFILES_ACTIVE=docker (oder "dev")
  */
 @Configuration
 @Profile({ "dev", "docker" })
 public class CorsConfig implements WebMvcConfigurer {
+
     @Override
     public void addCorsMappings(CorsRegistry registry) {
-        registry.addMapping("/api/**")
+        registry.addMapping("/**")
                 .allowedOriginPatterns("http://localhost:*", "http://127.0.0.1:*")
                 .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                 .allowedHeaders("*")
