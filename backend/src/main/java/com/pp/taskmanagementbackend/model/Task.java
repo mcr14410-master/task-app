@@ -18,6 +18,7 @@ public class Task {
     @Column private Integer prioritaet = 0;
     @Column(name="fai", nullable=false) private boolean fai = false;
     @Column(name="qs",  nullable=false) private boolean qs  = false;
+    @Version @Column(name = "version", nullable = false) private Integer version = 0;
 
     public Long getId(){return id;} public void setId(Long id){this.id=id;}
     public String getBezeichnung(){return bezeichnung;} public void setBezeichnung(String v){this.bezeichnung=v;}
@@ -32,4 +33,7 @@ public class Task {
     public Integer getPrioritaet(){return prioritaet;} public void setPrioritaet(Integer v){this.prioritaet=v;}
     public boolean isFai(){return fai;} public void setFai(boolean v){this.fai=v;}
     public boolean isQs(){return qs;}  public void setQs(boolean v){this.qs=v;}
+    public Integer getVersion() {return version;}
+    public void setVersion(Integer version) {this.version = version;}
+    
 }

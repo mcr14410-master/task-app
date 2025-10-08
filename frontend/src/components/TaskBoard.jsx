@@ -63,6 +63,7 @@ function resolveTaskStationId(task, maps, fallbackId) {
     task?.arbeitsplatz,
     task?.kunde,
     task?.zuständig,
+    task?.arbeitsstationName,
   ].filter(Boolean);
   for (const nm of nameCandidates) {
     const id = labelToId[norm(nm).toLowerCase()];
@@ -294,13 +295,14 @@ export default function TaskBoard() {
       return next;
     });
 
-    // Persist
-    try {
-      const payload = {
-        taskId: Number(draggableId),
-        toIndex: destination.index,
-        to: idToLabel[dstId] ?? idToLabel[srcId] ?? null,
-      };
+    // Persist mit 409-Retry
+    const payload = {
+      taskId: Number(draggableId),
+      toIndex: destination.index,
+      to: idToLabel[dstId] ?? idToLabel[srcId] ?? null,
+    };
+
+    const persist = async () => {
       const res = await fetch(`/api/tasks/sort`, {
         method: "PUT",
         headers: { "Content-Type": "application/json", "Accept": "application/json" },
@@ -308,12 +310,29 @@ export default function TaskBoard() {
       });
       if (!res.ok) {
         let body; try { body = await res.json(); } catch {}
-        const err = new Error(res.statusText); err.body = body; throw err;
+        const err = new Error(res.statusText);
+        err.status = res.status;
+        err.body = body;
+        throw err;
       }
+    };
+
+    try {
+      await persist();
     } catch (err) {
-      console.warn("Persist sort failed:", err);
-      toast.error("Sortierung fehlgeschlagen: " + apiErrorMessage(err));
-      // Optional: hier könntest du fetchAll() rufen oder UI zurückrollen
+      if (err?.status === 409) {
+        // Einmal automatisch neu laden und erneut versuchen
+        await fetchAll();
+        try {
+          await persist();
+        } catch (err2) {
+          console.warn("Persist sort retry failed:", err2);
+          toast.error("Sortierung Konflikt: " + (apiErrorMessage(err2) || "Bitte erneut versuchen."));
+        }
+      } else {
+        console.warn("Persist sort failed:", err);
+        toast.error("Sortierung fehlgeschlagen: " + (apiErrorMessage(err) || "Unbekannt"));
+      }
     }
   };
 
