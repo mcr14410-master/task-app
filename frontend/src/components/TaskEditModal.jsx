@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import '../config/TaskStatusTheme.css';
 import '../config/AdditionalWorkTheme.css';
+import useToast from "@/components/ui/useToast";
+import apiErrorMessage from "@/utils/apiErrorMessage";
 
 const API_BASE_URL = '/api/tasks';
 
@@ -88,7 +90,8 @@ function statusKey(raw) {
   }
 }
 
-const TaskEditModal = ({ task, stations, onSave, onClose }) => {
+const TaskEditModal = ({ task, stations, onSave, onClose, onDeleted }) => {
+	const toast = useToast();
   const [taskData, setTaskData] = useState({
     bezeichnung: '', teilenummer: '', kunde: '', endDatum: '',
     zuständig: '', aufwandStunden: 0, zusätzlicheInfos: '',
@@ -145,11 +148,16 @@ const TaskEditModal = ({ task, stations, onSave, onClose }) => {
     setSubmitError(null);
     try {
       const dataToSend = buildPayload();
-      await axios.patch(`${API_BASE_URL}/${task.id}`, dataToSend, {
-        headers: { 'Content-Type': 'application/json' }
-      });
-      onSave?.(dataToSend);
-      onClose();
+	   try {
+	     await axios.patch(`${API_BASE_URL}/${task.id}`, dataToSend, { headers: { 'Content-Type': 'application/json' } });
+	     toast.success("Änderungen gespeichert");
+	     onSave?.(dataToSend);
+	     onClose();
+	   } catch (err) {
+	     const serverMessage = err?.response?.data?.message || err?.message;
+	     setSubmitError(`Fehler beim Speichern: ${serverMessage}`);
+	     toast.error("Speichern fehlgeschlagen: " + (serverMessage || apiErrorMessage(err)));
+	   }
     } catch (err) {
       console.error('Fehler beim Speichern der Aufgabe:', err?.response?.data || err?.message);
       const serverMessage = err?.response?.data?.message || 'Unbekannter Fehler beim Server.';
@@ -163,11 +171,14 @@ const TaskEditModal = ({ task, stations, onSave, onClose }) => {
     if (!window.confirm('Möchten Sie diese Aufgabe wirklich löschen?')) return;
     setIsSaving(true);
     try {
-      await axios.delete(`${API_BASE_URL}/${task.id}`);
+		await axios.delete(`${API_BASE_URL}/${task.id}`);
+		toast.success("Aufgabe gelöscht");
+		onDeleted?.(task.id);    // <— Board informieren
       onClose();
     } catch (err) {
       console.error('Fehler beim Löschen der Aufgabe:', err?.response?.data || err?.message);
-      setSubmitError('Fehler beim Löschen der Aufgabe.');
+	   setSubmitError('Fehler beim Löschen der Aufgabe.');
+	   toast.error("Löschen fehlgeschlagen: " + apiErrorMessage(err));
     } finally {
       setIsSaving(false);
     }
