@@ -1,6 +1,6 @@
 // frontend/src/components/TaskBoard.jsx
 // Wire up due-* stripe classes via central DueDateConfig/DueDateTheme and remove inline due-color logic.
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import TaskCreationModal from "./TaskCreationModal";
 import TaskEditModal from "./TaskEditModal";
@@ -8,6 +8,8 @@ import StationManagementContent from "./StationManagementContent";
 import TaskItem from "./TaskItem";
 import "@/config/DueDateTheme.css";           // zentrale Farben/Stripe pro Fälligkeit
 import { dueClassForDate } from "@/config/DueDateConfig"; // zentrale Schwellen → Klasse
+import useToast from "@/components/ui/useToast";
+import apiErrorMessage from "@/utils/apiErrorMessage";
 
 /** ====================== Utilities ====================== */
 const norm = (v) =>
@@ -175,6 +177,7 @@ function Modal({ open, onClose, title, children, width = 760 }) {
 
 /** ====================== Component ====================== */
 export default function TaskBoard() {
+  const toast = useToast();
   const [stations, setStations] = useState([]);              // [{id, name, sort_order}]
   const [idToLabel, setIdToLabel] = useState({});           // {id: name}
   const [orderIds, setOrderIds] = useState([]);             // [id, id, ...]
@@ -252,6 +255,19 @@ export default function TaskBoard() {
 
   useEffect(() => { fetchAll(); /* eslint-disable-line */ }, []);
 
+  // --- NEU: Handler top-level, nicht in onDragEnd ---
+  const handleTaskDeleted = useCallback((deletedId) => {
+    setColumnsById(prev => {
+      const next = {};
+      for (const colId of Object.keys(prev || {})) {
+        const arr = Array.isArray(prev[colId]) ? prev[colId] : [];
+        next[colId] = arr.filter(t => String(t.id) !== String(deletedId));
+      }
+      return next;
+    });
+    setEditTask(null); // Modal schließen
+  }, []);
+
   const onDragEnd = async (result) => {
     const { destination, source, draggableId } = result;
     if (!destination) return;
@@ -260,6 +276,7 @@ export default function TaskBoard() {
     if (!srcId || !dstId) return;
     if (srcId === dstId && source.index === destination.index) return;
 
+    // Optimistic UI
     setColumnsById((prev) => {
       const next = { ...prev };
       const srcList = Array.from(next[srcId] || []);
@@ -277,20 +294,26 @@ export default function TaskBoard() {
       return next;
     });
 
+    // Persist
     try {
-		 const payload = {
-		   taskId: Number(draggableId),
-		   toIndex: destination.index,
-		   // Station als Name (falls Mapping fehlt, nimm die aktuelle Station – Move innerhalb derselben Spalte)
-		   to: idToLabel[dstId] ?? idToLabel[srcId] ?? null,
+      const payload = {
+        taskId: Number(draggableId),
+        toIndex: destination.index,
+        to: idToLabel[dstId] ?? idToLabel[srcId] ?? null,
       };
-      await fetch(`/api/tasks/sort`, {
+      const res = await fetch(`/api/tasks/sort`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
         body: JSON.stringify(payload),
       });
-    } catch (e) {
-      console.warn("Persist sort failed:", e);
+      if (!res.ok) {
+        let body; try { body = await res.json(); } catch {}
+        const err = new Error(res.statusText); err.body = body; throw err;
+      }
+    } catch (err) {
+      console.warn("Persist sort failed:", err);
+      toast.error("Sortierung fehlgeschlagen: " + apiErrorMessage(err));
+      // Optional: hier könntest du fetchAll() rufen oder UI zurückrollen
     }
   };
 
@@ -492,6 +515,7 @@ export default function TaskBoard() {
           stations={stations.map((s) => ({ id: String(pickStationId(s)), name: pickStationName(s) }))}
           onSave={() => { setEditTask(null); fetchAll(); }}
           onClose={() => setEditTask(null)}
+          onDeleted={handleTaskDeleted}
         />
       )}
 

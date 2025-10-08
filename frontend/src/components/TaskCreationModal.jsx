@@ -3,6 +3,8 @@ import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import axios from 'axios';
 import '../config/TaskStatusTheme.css';
 import '../config/AdditionalWorkTheme.css';
+import useToast from "@/components/ui/useToast";
+import apiErrorMessage from "@/utils/apiErrorMessage";
 
 const API_BASE_URL = '/api/tasks';
 
@@ -79,7 +81,8 @@ function statusKey(raw) {
 }
 
 const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
-  const defaultStationName = useMemo(() => (stations[0]?.name ?? ''), [stations]);
+	const toast = useToast();
+	const defaultStationName = useMemo(() => (stations[0]?.name ?? ''), [stations]);
   const makeInitial = useCallback(() => ({
     bezeichnung: '',
     teilenummer: '',
@@ -148,8 +151,20 @@ const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
     if (v) { setErrorMsg(v); return; }
     setSubmitting(true);
     try {
-      await axios.post(API_BASE_URL, buildPayload());
-      onTaskCreated?.();
+		 try {
+		   await axios.post(API_BASE_URL, buildPayload());
+		   toast.success("Aufgabe erstellt");
+		   onTaskCreated?.();
+		 } catch (err) {
+		   const status = err?.response?.status;
+		   const srvMsg = err?.response?.data?.message;
+		   setErrorMsg(
+		     status === 409 ? (srvMsg || "Datenintegritätsfehler. Bitte Eingaben prüfen.") :
+		     status === 400 ? (srvMsg || "Ungültige Eingabe.") :
+		                      (srvMsg || "Unbekannter Fehler beim Erstellen der Aufgabe.")
+		   );
+		   toast.error("Erstellen fehlgeschlagen: " + (srvMsg || apiErrorMessage(err)));
+		 }
     } catch (err) {
       const status = err?.response?.status;
       const srvMsg = err?.response?.data?.message;
@@ -170,9 +185,21 @@ const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
     if (v) { setErrorMsg(v); return; }
     setSubmitting(true);
     try {
-      await axios.post(API_BASE_URL, buildPayload());
-      onTaskCreated?.({ keepOpen: true });
-      setForm(makeInitial());
+		 try {
+		   await axios.post(API_BASE_URL, buildPayload());
+		   toast.success("Aufgabe erstellt");
+		   onTaskCreated?.({ keepOpen: true });
+		   setForm(makeInitial());
+		 } catch (err) {
+		   const status = err?.response?.status;
+		   const srvMsg = err?.response?.data?.message;
+		   setErrorMsg(
+		     status === 409 ? (srvMsg || "Datenintegritätsfehler. Bitte Eingaben prüfen.") :
+		     status === 400 ? (srvMsg || "Ungültige Eingabe.") :
+		                      (srvMsg || "Unbekannter Fehler beim Erstellen der Aufgabe.")
+		   );
+		   toast.error("Erstellen fehlgeschlagen: " + (srvMsg || apiErrorMessage(err)));
+		 }
     } catch (err) {
       const status = err?.response?.status;
       const srvMsg = err?.response?.data?.message;
