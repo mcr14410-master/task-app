@@ -66,6 +66,13 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+         
+        <!-- Flyway 9.x (von Boot 3.1.6 BOM gemanagt, KEINE Version angeben) -->
+        <dependency>
+  			<groupId>org.flywaydb</groupId>
+  			<artifactId>flyway-core</artifactId>
+		</dependency>
+		
     </dependencies>
 
     <build>

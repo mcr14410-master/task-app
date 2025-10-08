@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
-const API_STATION_URL = 'http://localhost:8080/api/arbeitsstationen'; 
+const API_STATION_URL = '/api/arbeitsstationen'; 
 
 // Hilfsfunktion zum Neuanordnen der Liste
 const reorder = (list, startIndex, endIndex) => {

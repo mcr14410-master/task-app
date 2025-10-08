@@ -4,7 +4,7 @@ import axios from 'axios';
 import '../config/TaskStatusTheme.css';
 import '../config/AdditionalWorkTheme.css';
 
-const API_BASE_URL = 'http://localhost:8080/api/tasks';
+const API_BASE_URL = '/api/tasks';
 
 const modalStyles = {
   modalOverlay: {
