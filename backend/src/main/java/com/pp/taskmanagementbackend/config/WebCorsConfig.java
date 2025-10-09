@@ -15,15 +15,30 @@ public class WebCorsConfig implements WebMvcConfigurer {
 
   @Override
   public void addCorsMappings(CorsRegistry registry) {
-    String[] origins = Arrays.stream(allowedOriginsProp.split("\\s*,\\s*"))
-                             .filter(s -> !s.isBlank())
-                             .toArray(String[]::new);
+    String prop = allowedOriginsProp == null ? "" : allowedOriginsProp.trim();
+
+    // Wenn "*" (oder leer) -> Patterns benutzen (kompatibel mit allowCredentials)
+    if (prop.isEmpty() || "*".equals(prop)) {
+      registry.addMapping("/**")
+          .allowedOriginPatterns("*")
+          .allowedMethods("GET","POST","PUT","PATCH","DELETE","OPTIONS")
+          .allowedHeaders("*")
+          .allowCredentials(true)
+          .maxAge(1800);
+      return;
+    }
+
+    // Sonst exakte Origins
+    String[] origins = Arrays.stream(prop.split("\\s*,\\s*"))
+        .filter(s -> !s.isBlank())
+        .toArray(String[]::new);
 
     registry.addMapping("/**")
-        .allowedOrigins(origins)                // konkrete Origins (siehe application.yml)
+        .allowedOrigins(origins)
         .allowedMethods("GET","POST","PUT","PATCH","DELETE","OPTIONS")
         .allowedHeaders("*")
         .allowCredentials(true)
         .maxAge(1800);
   }
 }
+
