@@ -1,0 +1,5 @@
+app:
+  cors:
+    # Trage hier ALLE Frontend-Origins ein, die dein Backend aufrufen.
+    # Passe Hostname/IP/Port auf deine Umgebung an.
+    allowed-origins: "http://localhost:5173,http://localhost:8081,http://nb01:5173,http://nb01:8081,http://192.168.178.23:5173,http://192.168.178.23:8081"
