@@ -17,6 +17,9 @@ public class TaskDto {
     private Integer prioritaet;
     private Boolean fai;
     private Boolean qs;
+    private Integer stk;
+    private String fa;
+    private String dateipfad;
 
     public Long getId(){return id;} public void setId(Long id){this.id=id;}
     public String getBezeichnung(){return bezeichnung;} public void setBezeichnung(String v){this.bezeichnung=v;}
@@ -31,4 +34,9 @@ public class TaskDto {
     public Integer getPrioritaet(){return prioritaet;} public void setPrioritaet(Integer v){this.prioritaet=v;}
     public Boolean getFai(){return fai;} public void setFai(Boolean v){this.fai=v;}
     public Boolean getQs(){return qs;} public void setQs(Boolean v){this.qs=v;}
+    public Integer getStk(){return stk;} public void setStk(Integer v){this.stk=v;}
+    public String getFa(){return fa;} public void setFa(String v){this.fa=v;}
+    public String getDateipfad(){return dateipfad;} public void setDateipfad(String v){this.dateipfad=v;}
+
+    public Integer attachmentsCount;
 }
