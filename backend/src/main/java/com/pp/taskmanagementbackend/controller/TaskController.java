@@ -7,6 +7,7 @@ import com.pp.taskmanagementbackend.model.Task;
 import com.pp.taskmanagementbackend.model.TaskStatus;
 import com.pp.taskmanagementbackend.service.TaskService;
 import com.pp.taskmanagementbackend.service.TaskSortService;
+import com.pp.taskmanagementbackend.repository.AttachmentRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -27,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.ArrayList;
 
 @CrossOrigin(origins = {"http://localhost:3000", "http://localhost:5173"})
 @RestController
@@ -36,11 +38,16 @@ public class TaskController {
     private final TaskService service;
     private final TaskSortService sortService;
     private static final Logger log = LoggerFactory.getLogger(TaskController.class);
+    private final AttachmentRepository attachmentRepository;
 
-    public TaskController(TaskService service, TaskSortService sortService) {
-        this.service = service;
-        this.sortService = sortService;
-    }
+
+    public TaskController(TaskService service,
+            TaskSortService sortService,
+            AttachmentRepository attachmentRepository) {
+this.service = service;
+this.sortService = sortService;
+this.attachmentRepository = attachmentRepository;
+}
 
     private Task requireTask(Long id) {
         Task t = service.findById(id);
@@ -50,12 +57,25 @@ public class TaskController {
 
     @GetMapping
     public List<TaskDto> list() {
-        return service.findAll().stream().map(TaskMapper::toDto).collect(Collectors.toList());
+        List<Task> entities = service.findAll(); // oder deine bestehende Methode
+        List<TaskDto> out = new ArrayList<>(entities.size());
+        
+        for (Task t : entities) {
+            TaskDto dto = TaskMapper.toDto(t);
+            int cnt = Math.toIntExact(attachmentRepository.countByTaskId(t.getId()));
+            dto.setAttachmentCount(Integer.valueOf(cnt));
+            out.add(dto);
+        }
+        return out;
     }
 
     @GetMapping("/{id:\\d+}")
     public TaskDto get(@PathVariable Long id) {
-        return TaskMapper.toDto(requireTask(id));
+        Task entity = requireTask(id);
+        TaskDto dto = TaskMapper.toDto(entity);
+        int cnt = Math.toIntExact(attachmentRepository.countByTaskId(id));
+        dto.setAttachmentCount(Integer.valueOf(cnt));
+        return dto;
     }
 
     @PostMapping

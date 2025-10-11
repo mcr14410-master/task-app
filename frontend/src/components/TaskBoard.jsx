@@ -189,8 +189,19 @@ export default function TaskBoard() {
   const [error, setError] = useState(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editTask, setEditTask] = useState(null);
+  const [editInitialTab, setEditInitialTab] = useState("details");   // << neu
   const [isStationsOpen, setIsStationsOpen] = useState(false);
   const inFlightByColumn = React.useRef(new Map());
+
+  // Modal opener
+  const openEditModal = useCallback((task, initialTab = "details") => {
+    setEditTask(task);
+    setEditInitialTab(initialTab);
+  }, []);
+  const closeEditModal = useCallback(() => {
+    setEditTask(null);
+    setEditInitialTab("details");
+  }, []);
 
   // persistSort: nur ein Flug pro Spalte zulassen
   const persistSort = React.useCallback(async (dstId, nextMap) => {
@@ -306,10 +317,9 @@ export default function TaskBoard() {
         next[colId] = arr.filter(t => String(t.id) !== String(deletedId));
       }
       return next;
-	  
     });
-    setEditTask(null); // Modal schließen
-  }, []);
+    closeEditModal();
+  }, [closeEditModal]);
 
   const onDragEnd = async ({ source, destination, draggableId }) => {
     if (!destination) return;
@@ -460,11 +470,11 @@ export default function TaskBoard() {
         <div style={{ display: "flex", gap: 16, alignItems: "flex-start", overflowX: "auto", paddingBottom: 8, flex: "1 1 auto" }}>
           {orderIds.map((colId) => {
             const title = idToLabel[colId] || colId;
-			const list = Array.isArray(columnsById[colId]) ? columnsById[colId] : [];
-			const matches = queryActive ? list.filter((t) => matchesQuery(t, q)) : list;
-			const visibleList = (hardFilter && queryActive) ? matches : list;
-			const matchesInCol = matches.length;
-			const totalEffortMins = matches.reduce((sum, t) => sum + getEffortMinutes(t), 0);
+            const list = Array.isArray(columnsById[colId]) ? columnsById[colId] : [];
+            const matches = queryActive ? list.filter((t) => matchesQuery(t, q)) : list;
+            const visibleList = (hardFilter && queryActive) ? matches : list;
+            const matchesInCol = matches.length;
+            const totalEffortMins = matches.reduce((sum, t) => sum + getEffortMinutes(t), 0);
 
             return (
               <Droppable droppableId={String(colId)} key={String(colId)} isDropDisabled={hardFilter && queryActive}>
@@ -509,9 +519,9 @@ export default function TaskBoard() {
                                   cursor: (hardFilter && queryActive) ? "default" : (snapshot.isDragging ? "grabbing" : "grab"),
                                   marginBottom: 10,
                                 }}
-                                onDoubleClick={() => setEditTask(t)}
+                                onDoubleClick={() => openEditModal(t, "details")}
                               >
-                                <TaskItem task={t} />
+                                <TaskItem task={t} openAttachmentsModal={(task) => openEditModal(task, "attachments")} />
                               </div>
                             );
                           }}
@@ -545,9 +555,10 @@ export default function TaskBoard() {
         <TaskEditModal
           task={editTask}
           stations={stations.map((s) => ({ id: String(pickStationId(s)), name: pickStationName(s) }))}
-          onSave={() => { setEditTask(null); fetchAll(); }}
-          onClose={() => setEditTask(null)}
-          onDeleted={handleTaskDeleted}
+          onSave={() => { closeEditModal(); fetchAll(); }}
+          onClose={closeEditModal}
+          onDeleted={(id) => { closeEditModal(); fetchAll(); }}
+          initialTab={editInitialTab}                              // << neu
         />
       )}
 

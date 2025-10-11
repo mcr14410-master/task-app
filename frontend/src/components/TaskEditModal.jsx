@@ -1,321 +1,283 @@
 // frontend/src/components/TaskEditModal.jsx
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import '../config/TaskStatusTheme.css';
-import '../config/AdditionalWorkTheme.css';
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import axios from "axios";
+import "../config/TaskStatusTheme.css";
+import "../config/AdditionalWorkTheme.css";
 import useToast from "@/components/ui/useToast";
 import apiErrorMessage from "@/utils/apiErrorMessage";
-import AttachmentTab from "../components/AttachmentTab";
+import AttachmentTab from "@/components/AttachmentTab";
 
-const API_BASE_URL = '/api/tasks';
+const API_BASE_URL = "/api/tasks";
 
-const modalStyles = {
-  modalOverlay: {
-    position: 'fixed', inset: 0,
-    backgroundColor: 'rgba(0,0,0,.5)',
-    display: 'flex', justifyContent: 'center', alignItems: 'center',
-    zIndex: 1000,
+const UI = {
+  overlay: {
+    position: "fixed", inset: 0,
+    backgroundColor: "rgba(2,6,23,.55)",
+    display: "flex", justifyContent: "center", alignItems: "center",
+    zIndex: 1000
   },
-  modalContent: {
-    backgroundColor: '#0f172a', color: '#e5e7eb',
-    padding: '20px 24px',
-    borderRadius: 12,
-    width: 720, maxWidth: '96vw',
-    maxHeight: '88vh', overflowY: 'auto',
-    border: '1px solid #1f2937',
-    boxShadow: '0 24px 64px rgba(0,0,0,.5)',
-    zIndex: 1001,
+  modal: {
+    backgroundColor: "#0b1220", color: "#e5e7eb",
+    width: 820, maxWidth: "96vw",
+    maxHeight: "90vh", overflowY: "auto",
+    borderRadius: 14, border: "1px solid #1f2937",
+    boxShadow: "0 30px 80px rgba(0,0,0,.6)",
   },
   header: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    paddingBottom: 10, marginBottom: 16, borderBottom: '1px solid #1f2937',
+    display: "flex", justifyContent: "space-between", alignItems: "center",
+    padding: "16px 18px", borderBottom: "1px solid #1f2937"
   },
-  title: { fontSize: '1.1rem', color: '#3b82f6', margin: 0, fontWeight: 700 },
-  headerRight: { display: 'flex', alignItems: 'center', gap: 10 },
-  closeButton: {
-    background: 'transparent', border: '1px solid #334155',
-    color: '#cbd5e1', borderRadius: 8,
-    fontSize: '1rem', padding: '6px 10px', cursor: 'pointer',
-  },
-
-  sectionContainer: {
-    backgroundColor: '#111827', padding: 14,
-    borderRadius: 10, marginBottom: 14, border: '1px solid #1f2937',
-  },
-  sectionTitle: {
-    color: '#94a3b8', fontSize: '0.82rem', fontWeight: 600,
-    margin: '0 0 10px 0', borderBottom: '1px solid #1f2937',
-    paddingBottom: 6, textTransform: 'uppercase', letterSpacing: '.04em',
-  },
-  formGroup: { marginBottom: 10 },
+  title: { margin: 0, fontWeight: 800, color: "#60a5fa", fontSize: "1.05rem" },
+  body: { padding: 18 },
+  grid2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 },
+  label: { display: "block", marginBottom: 6, fontWeight: 600, color: "#d1d5db", fontSize: ".92rem" },
   input: {
-    width: '100%', padding: '10px 12px',
-    border: '1px solid #1f2937',
-    borderRadius: 10, backgroundColor: '#111827', color: '#e5e7eb',
-    boxSizing: 'border-box', fontSize: '0.95rem',
+    width: "100%", padding: "10px 12px",
+    border: "1px solid #1f2937", borderRadius: 10,
+    background: "#0f172a", color: "#e5e7eb",
+    boxSizing: "border-box", outline: "none", fontSize: ".95rem"
   },
-  textarea: { minHeight: 100, resize: 'vertical' },
-  label: { display: 'block', marginBottom: 6, fontWeight: 600, color: '#e5e7eb', fontSize: '0.9rem' },
-
-  buttonContainer: {
-    marginTop: 12, display: 'flex', justifyContent: 'space-between',
-    gap: 8, paddingTop: 12, borderTop: '1px solid #1f2937',
+  textarea: { minHeight: 100, resize: "vertical" },
+  section: { background: "#0f1526", border: "1px solid #1f2937", borderRadius: 12, padding: 14, marginBottom: 12 },
+  sectionTitle: {
+    margin: "0 0 10px 0", color: "#93c5fd", fontSize: ".8rem",
+    letterSpacing: ".06em", textTransform: "uppercase", borderBottom: "1px solid #172033", paddingBottom: 8,
+    fontWeight: 800
   },
-  buttonPrimary: {
-    padding: '10px 16px', background: '#3b82f6', color: '#fff',
-    border: '1px solid #3b82f6', borderRadius: 10, cursor: 'pointer', fontWeight: 700
+  footer: {
+    display: "flex", justifyContent: "space-between", alignItems: "center",
+    padding: "12px 18px", borderTop: "1px solid #1f2937"
   },
-  buttonSecondary: {
-    padding: '10px 16px', background: 'transparent', color: '#cbd5e1',
-    border: '1px solid #334155', borderRadius: 10, cursor: 'pointer', fontWeight: 600
+  btn: {
+    base: { padding: "10px 14px", borderRadius: 10, cursor: "pointer", border: "1px solid transparent", fontWeight: 700 },
+    primary: { background: "#3b82f6", borderColor: "#2563eb", color: "#fff" },
+    secondary: { background: "transparent", borderColor: "#334155", color: "#cbd5e1" },
+    danger: { background: "#ef4444", borderColor: "#dc2626", color: "#fff" }
   },
-  buttonDanger: {
-    padding: '10px 16px', background: '#ef4444', color: '#fff',
-    border: '1px solid #ef4444', borderRadius: 10, cursor: 'pointer', fontWeight: 700
+  tabs: {
+    header: { display: "flex", gap: 8, borderBottom: "1px solid #172033", marginBottom: 12 },
+    tab: (active) => ({
+      padding: "8px 12px",
+      borderRadius: "10px 10px 0 0",
+      background: active ? "#13213a" : "transparent",
+      color: active ? "#e5e7eb" : "#93a5bf",
+      border: active ? "1px solid #1f2c47" : "1px solid transparent",
+      borderBottomColor: active ? "#13213a" : "transparent",
+      cursor: "pointer",
+      fontWeight: 700,
+    }),
   }
 };
 
-const STATUSES = ['NEU', 'TO_DO', 'IN_BEARBEITUNG', 'FERTIG'];
+const STATUSES = ["NEU", "TO_DO", "IN_BEARBEITUNG", "FERTIG"];
+const statusKey = (raw) => String(raw || "").toUpperCase().replaceAll("-", "_").replaceAll(" ", "_");
 
-function statusKey(raw) {
-  const s = String(raw || '').toUpperCase().replaceAll('-', '_').replaceAll(' ', '_');
-  switch (s) {
-    case 'NEU': return 'NEU';
-    case 'TO_DO':
-    case 'TODO': return 'TO_DO';
-    case 'IN_BEARBEITUNG':
-    case 'IN_PROGRESS': return 'IN_BEARBEITUNG';
-    case 'FERTIG':
-    case 'DONE': return 'FERTIG';
-    default: return 'NEU';
-  }
-}
+export default function TaskEditModal({ task, stations = [], onSave, onClose, onDeleted, initialTab = "details" }) {
+  const toast = useToast();
+  const [activeTab, setActiveTab] = useState(initialTab);
+  useEffect(() => { if (initialTab) setActiveTab(initialTab); }, [initialTab]);
 
-const TaskEditModal = ({ task, stations, onSave, onClose, onDeleted }) => {
-	const toast = useToast();
-  const [taskData, setTaskData] = useState({
-    bezeichnung: '', teilenummer: '', kunde: '', endDatum: '',
-    zuständig: '', aufwandStunden: 0, zusätzlicheInfos: '',
-    arbeitsstation: '', id: null, status: 'NEU',
-    // Zusatzarbeiten
-    fai: false, qs: false,stk: 0, fa: '', dateipfad: ''});
-  const [isSaving, setIsSaving] = useState(false);
-  const [submitError, setSubmitError] = useState(null);
+  const [form, setForm] = useState({
+    id: null, bezeichnung: "", teilenummer: "", kunde: "",
+    endDatum: "", aufwandStunden: 0, zuständig: "",
+    zusätzlicheInfos: "", arbeitsstation: "",
+    status: "NEU", fai: false, qs: false,
+    stk: 0, fa: "", dateipfad: ""
+  });
+  const [busy, setBusy] = useState(false);
+  const [errorMsg, setErrorMsg] = useState(null);
+  const firstFieldRef = useRef(null);
 
   useEffect(() => {
     if (task) {
-      setTaskData({
-        bezeichnung: task.bezeichnung || '',
-        teilenummer: task.teilenummer || '',
-        kunde: task.kunde || '',
-        zusätzlicheInfos: task.zusätzlicheInfos || '',
-        aufwandStunden: task.aufwandStunden ?? 0,
-        stk: task.stk ?? 0,
-        fa: task.fa || '',
-        dateipfad: task.dateipfad || '',
-        zuständig: task.zuständig || '',
-        endDatum: task.endDatum ? task.endDatum.split('T')[0] : '',
-        arbeitsstation: task.arbeitsstation || (stations?.length ? stations[0].name : ''),
-        id: task.id,
-        status: task.status || 'NEU',
-        // Zusatzarbeiten
+      setForm({
+        id: task.id ?? null,
+        bezeichnung: task.bezeichnung ?? "",
+        teilenummer: task.teilenummer ?? "",
+        kunde: task.kunde ?? "",
+        endDatum: task.endDatum ? String(task.endDatum).split("T")[0] : "",
+        aufwandStunden: Number.isFinite(task.aufwandStunden) ? task.aufwandStunden : 0,
+        zuständig: task.zuständig ?? "",
+        zusätzlicheInfos: task.zusätzlicheInfos ?? "",
+        arbeitsstation: task.arbeitsstation || (stations[0]?.name ?? ""),
+        status: task.status || "NEU",
         fai: !!task.fai,
         qs: !!task.qs,
+        stk: Number.isFinite(task.stk) ? task.stk : 0,
+        fa: task.fa ?? "",
+        dateipfad: task.dateipfad ?? ""
       });
     }
   }, [task, stations]);
 
-  const handleChange = (e) => {
-    const { name, value, type } = e.target;
-    const newValue = type === 'number' ? (value === '' ? null : Number(value)) : value;
-    setTaskData((prev) => ({ ...prev, [name]: newValue }));
-  };
+  useEffect(() => { firstFieldRef.current?.focus?.(); }, [activeTab]);
 
-  const setStatus = (status) => setTaskData((p) => ({ ...p, status }));
+  const setValue = (name, value) => setForm((p) => ({ ...p, [name]: value }));
 
   const buildPayload = () => {
-    const p = { ...taskData };
+    const p = { ...form };
     if (!p.endDatum) delete p.endDatum;
-    // booleans sicherstellen
-    p.fai = !!p.fai;
-    p.qs = !!p.qs;
+    p.fai = !!p.fai; p.qs = !!p.qs;
     return p;
   };
 
-  const handleSave = async () => {
-    if (!taskData.bezeichnung.trim()) {
-      setSubmitError('Die Bezeichnung ist ein Pflichtfeld!');
-      return;
-    }
-    setIsSaving(true);
-    setSubmitError(null);
+  const submit = async () => {
+    if (!form.bezeichnung.trim()) { setErrorMsg("Bezeichnung ist ein Pflichtfeld."); setActiveTab("details"); return; }
+    setBusy(true); setErrorMsg(null);
     try {
-      const dataToSend = buildPayload();
-	   try {
-	     await axios.patch(`${API_BASE_URL}/${task.id}`, dataToSend, { headers: { 'Content-Type': 'application/json' } });
-	     toast.success("Änderungen gespeichert");
-	     onSave?.(dataToSend);
-	     onClose();
-	   } catch (err) {
-	     const serverMessage = err?.response?.data?.message || err?.message;
-	     setSubmitError(`Fehler beim Speichern: ${serverMessage}`);
-	     toast.error("Speichern fehlgeschlagen: " + (serverMessage || apiErrorMessage(err)));
-	   }
+      await axios.patch(`${API_BASE_URL}/${form.id}`, buildPayload(), { headers: { "Content-Type": "application/json" } });
+      toast.success("Änderungen gespeichert");
+      onSave?.(buildPayload());
+      onClose?.();
     } catch (err) {
-      console.error('Fehler beim Speichern der Aufgabe:', err?.response?.data || err?.message);
-      const serverMessage = err?.response?.data?.message || 'Unbekannter Fehler beim Server.';
-      setSubmitError(`Fehler beim Speichern: ${serverMessage}`);
+      const msg = apiErrorMessage(err) || "Speichern fehlgeschlagen.";
+      setErrorMsg(msg);
+      toast.error(msg);
     } finally {
-      setIsSaving(false);
+      setBusy(false);
     }
   };
 
-  const handleDelete = async () => {
-    if (!window.confirm('Möchten Sie diese Aufgabe wirklich löschen?')) return;
-    setIsSaving(true);
+  const remove = async () => {
+    if (!window.confirm("Aufgabe wirklich löschen?")) return;
+    setBusy(true);
     try {
-		await axios.delete(`${API_BASE_URL}/${task.id}`);
-		toast.success("Aufgabe gelöscht");
-		onDeleted?.(task.id);    // <— Board informieren
-      onClose();
+      await axios.delete(`${API_BASE_URL}/${form.id}`);
+      toast.success("Aufgabe gelöscht");
+      onDeleted?.(form.id);
+      onClose?.();
     } catch (err) {
-      console.error('Fehler beim Löschen der Aufgabe:', err?.response?.data || err?.message);
-	   setSubmitError('Fehler beim Löschen der Aufgabe.');
-	   toast.error("Löschen fehlgeschlagen: " + apiErrorMessage(err));
+      toast.error(apiErrorMessage(err) || "Löschen fehlgeschlagen.");
     } finally {
-      setIsSaving(false);
+      setBusy(false);
     }
   };
 
-  if (!task || !task.id) return null;
+  if (!task?.id) return null;
 
   return (
-    <div style={modalStyles.modalOverlay} onClick={onClose}>
-      <div style={modalStyles.modalContent} onClick={(e) => e.stopPropagation()}>
-        <div style={modalStyles.header}>
-          <h2 style={modalStyles.title}>Aufgabe bearbeiten ✏️ (#ID {task.id})</h2>
-          <div style={modalStyles.headerRight}>
-            <button onClick={onClose} style={modalStyles.closeButton}>✕</button>
-          </div>
+    <div style={UI.overlay} onClick={onClose}>
+      <div style={UI.modal} onClick={(e) => e.stopPropagation()}>
+        <div style={UI.header}>
+          <h2 style={UI.title}>Aufgabe bearbeiten · #{form.id}</h2>
+          <button style={{ ...UI.btn.base, ...UI.btn.secondary }} onClick={onClose}>Schließen</button>
         </div>
 
-        {submitError && <p style={{ color: '#ef4444' }}>{submitError}</p>}
+        <div style={UI.body}>
+          {/* Tabs */}
+          <div style={UI.tabs.header} role="tablist" aria-label="Bearbeiten">
+            <button role="tab" aria-selected={activeTab === "details"} style={UI.tabs.tab(activeTab === "details")} onClick={() => setActiveTab("details")}>Details</button>
+            <button role="tab" aria-selected={activeTab === "attachments"} style={UI.tabs.tab(activeTab === "attachments")} onClick={() => setActiveTab("attachments")}>Anhänge</button>
+          </div>
 
-        <form onSubmit={(e) => { e.preventDefault(); handleSave(); }}>
-          <div style={modalStyles.sectionContainer}>
-            <h3 style={modalStyles.sectionTitle}>Basisdaten & Zuweisung</h3>
-
-            <div style={modalStyles.formGroup}>
-              <label style={modalStyles.label} htmlFor="bezeichnung">Bezeichnung *</label>
-              <input style={modalStyles.input} type="text" id="bezeichnung" name="bezeichnung" value={taskData.bezeichnung} onChange={handleChange} required disabled={isSaving} />
+          {errorMsg && (
+            <div style={{ marginBottom: 12, padding: "10px 12px", background: "#3b2323", color: "#ffd7d7", border: "1px solid #5f2a2a", borderRadius: 10 }}>
+              🚨 {errorMsg}
             </div>
+          )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
-              <div style={modalStyles.formGroup}>
-                <label style={modalStyles.label} htmlFor="teilenummer">Teilenummer</label>
-                <input style={modalStyles.input} type="text" id="teilenummer" name="teilenummer" value={taskData.teilenummer} onChange={handleChange} disabled={isSaving} />
-              </div>
-              <div style={modalStyles.formGroup}>
-                <label style={modalStyles.label} htmlFor="kunde">Kunde</label>
-                <input style={modalStyles.input} type="text" id="kunde" name="kunde" value={taskData.kunde} onChange={handleChange} disabled={isSaving} />
-              </div>
-              <div style={modalStyles.formGroup}>
-                <label style={modalStyles.label} htmlFor="endDatum">Enddatum</label>
-                <input style={modalStyles.input} type="date" id="endDatum" name="endDatum" value={taskData.endDatum} onChange={handleChange} disabled={isSaving} />
-              </div>
-              <div style={modalStyles.formGroup}>
-                <label style={modalStyles.label} htmlFor="aufwandStunden">Aufwand (Std.)</label>
-                <input style={modalStyles.input} type="number" id="aufwandStunden" name="aufwandStunden" value={taskData.aufwandStunden ?? ""} onChange={handleChange} disabled={isSaving} />
-              </div>
-              <div style={modalStyles.formGroup}>
-                <label style={modalStyles.label} htmlFor="stk">Stk</label>
-                <input style={modalStyles.input} type="number" id="stk" name="stk" value={taskData.stk ?? ""} onChange={handleChange} disabled={isSaving} />
-              </div>
-              <div style={modalStyles.formGroup}>
-                <label style={modalStyles.label} htmlFor="fa">FA (Fertigungsauftrag-Nr.)</label>
-                <input style={modalStyles.input} type="text" id="fa" name="fa" value={taskData.fa ?? ""} onChange={handleChange} disabled={isSaving} />
-              </div>
-              <div style={modalStyles.formGroup}>
-                <label style={modalStyles.label} htmlFor="zuständig">Zuständigkeit</label>
-                <input style={modalStyles.input} type="text" id="zuständig" name="zuständig" value={taskData.zuständig} onChange={handleChange} disabled={isSaving} />
-              </div>
-              <div style={modalStyles.formGroup}>
-                <label style={modalStyles.label} htmlFor="arbeitsstation">Station</label>
-                <select style={modalStyles.input} id="arbeitsstation" name="arbeitsstation" value={taskData.arbeitsstation} onChange={handleChange} disabled={isSaving}>
-                  {stations?.map((s) => (<option key={s.id ?? s.name} value={s.name}>{s.name}</option>))}
-                </select>
-              </div>
-            </div>
+          {/* Tab Inhalt */}
+          {activeTab === "details" && (
+            <div>
+              <div style={UI.section}>
+                <h3 style={UI.sectionTitle}>Basisdaten & Zuordnung</h3>
+                <label style={UI.label} htmlFor="bezeichnung">Bezeichnung *</label>
+                <input ref={firstFieldRef} id="bezeichnung" style={UI.input} value={form.bezeichnung} onChange={(e) => setValue("bezeichnung", e.target.value)} disabled={busy} />
 
-            <div style={modalStyles.formGroup}>
-              <label style={modalStyles.label}>Status</label>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                {STATUSES.map((s) => {
-                  const key = statusKey(s);
-                  const selected = taskData.status === s;
-                  return (
-                    <button
-                      key={s}
-                      type="button"
-                      className={`pill st-${key.toLowerCase()} ${selected ? 'is-selected' : ''}`}
-                      aria-pressed={selected}
-                      onClick={() => setStatus(s)}
-                      disabled={isSaving}
-                      title={s}
-                    >
-                      {s}
-                    </button>
-                  );
-                })}
+                <div style={{ height: 10 }} />
 
-                {/* Zusatzarbeiten rechts neben den Status-Pills */}
-                <div style={{marginLeft:'auto', display:'inline-flex', gap:8, alignItems:'center'}}>
-                  <span style={{fontSize:12, color:'#94a3b8'}}>Zusatzarbeiten:</span>
-                  <button
-                    type="button"
-                    className={`pill-add add-fai ${taskData.fai ? 'is-active' : ''} is-clickable`}
-                    onClick={() => setTaskData(p => ({...p, fai: !p.fai}))}
-                    disabled={isSaving}
-                    title="FAI aktivieren/deaktivieren"
-                  >FAI</button>
-                  <button
-                    type="button"
-                    className={`pill-add add-qs ${taskData.qs ? 'is-active' : ''} is-clickable`}
-                    onClick={() => setTaskData(p => ({...p, qs: !p.qs}))}
-                    disabled={isSaving}
-                    title="QS aktivieren/deaktivieren"
-                  >QS</button>
+                <div style={UI.grid2}>
+                  <div>
+                    <label style={UI.label} htmlFor="teilenummer">Teilenummer</label>
+                    <input id="teilenummer" style={UI.input} value={form.teilenummer} onChange={(e) => setValue("teilenummer", e.target.value)} disabled={busy} />
+                  </div>
+                  <div>
+                    <label style={UI.label} htmlFor="kunde">Kunde</label>
+                    <input id="kunde" style={UI.input} value={form.kunde} onChange={(e) => setValue("kunde", e.target.value)} disabled={busy} />
+                  </div>
+                  <div>
+                    <label style={UI.label} htmlFor="endDatum">Enddatum</label>
+                    <input id="endDatum" type="date" style={UI.input} value={form.endDatum} onChange={(e) => setValue("endDatum", e.target.value)} disabled={busy} />
+                  </div>
+                  <div>
+                    <label style={UI.label} htmlFor="aufwandStunden">Aufwand (Std.)</label>
+                    <input id="aufwandStunden" type="number" min="0" step="0.25" style={UI.input} value={form.aufwandStunden} onChange={(e) => setValue("aufwandStunden", Number(e.target.value))} disabled={busy} />
+                  </div>
+                  <div>
+                    <label style={UI.label} htmlFor="stk">Stk</label>
+                    <input id="stk" type="number" min="0" step="1" style={UI.input} value={form.stk} onChange={(e) => setValue("stk", Number(e.target.value))} disabled={busy} />
+                  </div>
+                  <div>
+                    <label style={UI.label} htmlFor="fa">FA (Fertigungsauftrag-Nr.)</label>
+                    <input id="fa" style={UI.input} value={form.fa} onChange={(e) => setValue("fa", e.target.value)} disabled={busy} />
+                  </div>
+                  <div>
+                    <label style={UI.label} htmlFor="zust">Zuständigkeit</label>
+                    <input id="zust" style={UI.input} value={form.zuständig} onChange={(e) => setValue("zuständig", e.target.value)} disabled={busy} />
+                  </div>
+                  <div>
+                    <label style={UI.label} htmlFor="station">Arbeitsstation</label>
+                    <select id="station" style={UI.input} value={form.arbeitsstation} onChange={(e) => setValue("arbeitsstation", e.target.value)} disabled={busy}>
+                      {stations.map((s) => (<option key={s.id ?? s.name} value={s.name}>{s.name}</option>))}
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ height: 10 }} />
+
+                <label style={UI.label}>Status & Zusatzarbeiten</label>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  {STATUSES.map((s) => {
+                    const key = statusKey(s);
+                    const selected = form.status === s;
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        className={`pill st-${key.toLowerCase()} ${selected ? "is-selected" : ""}`}
+                        onClick={() => setValue("status", s)}
+                        disabled={busy}
+                        aria-pressed={selected}
+                        title={s}
+                      >
+                        {s}
+                      </button>
+                    );
+                  })}
+                  <div style={{ marginLeft: "auto", display: "inline-flex", gap: 8 }}>
+                    <button type="button" className={`pill-add add-fai ${form.fai ? "is-active" : ""} is-clickable`} onClick={() => setValue("fai", !form.fai)} disabled={busy}>FAI</button>
+                    <button type="button" className={`pill-add add-qs ${form.qs ? "is-active" : ""} is-clickable`} onClick={() => setValue("qs", !form.qs)} disabled={busy}>QS</button>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
 
-          <div style={modalStyles.sectionContainer}>
-            <h3 style={modalStyles.sectionTitle}>Infos</h3>
-            <div style={modalStyles.formGroup}>
-              <label style={modalStyles.label} htmlFor="dateipfad">Dateipfad</label>
-              <input style={modalStyles.input} type="text" id="dateipfad" name="dateipfad" value={taskData.dateipfad ?? ""} onChange={handleChange} disabled={isSaving} />
+              <div style={UI.section}>
+                <h3 style={UI.sectionTitle}>Beschreibung</h3>
+                <label style={UI.label} htmlFor="dateipfad">Dateipfad</label>
+                <input id="dateipfad" style={UI.input} value={form.dateipfad} onChange={(e) => setValue("dateipfad", e.target.value)} disabled={busy} />
+                <div style={{ height: 10 }} />
+                <label style={UI.label} htmlFor="infos">Zusätzliche Infos</label>
+                <textarea id="infos" style={{ ...UI.input, ...UI.textarea }} value={form.zusätzlicheInfos} onChange={(e) => setValue("zusätzlicheInfos", e.target.value)} disabled={busy} />
+              </div>
             </div>
-			<div style={{ marginTop: 16 }}>
-			  <h3 style={modalStyles.sectionTitle}>Anhänge</h3>
-			  <AttachmentTab taskId={task?.id} toast={toast} />
-			</div>
-            <textarea style={{ ...modalStyles.input, ...modalStyles.textarea }} id="zusätzlicheInfos" name="zusätzlicheInfos" value={taskData.zusätzlicheInfos} onChange={handleChange} disabled={isSaving} />
-          </div>
+          )}
 
-          <div style={modalStyles.buttonContainer}>
-            <button type="button" style={modalStyles.buttonDanger} onClick={handleDelete} disabled={isSaving}>
-              🗑 Löschen
-            </button>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button type="button" style={modalStyles.buttonSecondary} onClick={onClose} disabled={isSaving}>Abbrechen</button>
-              <button type="submit" style={modalStyles.buttonPrimary} disabled={isSaving}>{isSaving ? 'Speichern…' : 'Speichern'}</button>
+          {activeTab === "attachments" && (
+            <div style={UI.section}>
+              <h3 style={UI.sectionTitle}>Anhänge</h3>
+              <AttachmentTab taskId={form.id} toast={toast} />
             </div>
+          )}
+        </div>
+
+        <div style={UI.footer}>
+          <button type="button" style={{ ...UI.btn.base, ...UI.btn.danger }} onClick={remove} disabled={busy}>🗑 Löschen</button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" style={{ ...UI.btn.base, ...UI.btn.secondary }} onClick={onClose} disabled={busy}>Abbrechen</button>
+            <button type="button" style={{ ...UI.btn.base, ...UI.btn.primary }} onClick={submit} disabled={busy}>{busy ? "Speichern…" : "Speichern"}</button>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );
-};
-
-export default TaskEditModal;
+}
