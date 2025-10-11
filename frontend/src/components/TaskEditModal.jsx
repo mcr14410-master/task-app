@@ -5,6 +5,7 @@ import '../config/TaskStatusTheme.css';
 import '../config/AdditionalWorkTheme.css';
 import useToast from "@/components/ui/useToast";
 import apiErrorMessage from "@/utils/apiErrorMessage";
+import AttachmentTab from "../components/AttachmentTab";
 
 const API_BASE_URL = '/api/tasks';
 
@@ -97,8 +98,7 @@ const TaskEditModal = ({ task, stations, onSave, onClose, onDeleted }) => {
     zuständig: '', aufwandStunden: 0, zusätzlicheInfos: '',
     arbeitsstation: '', id: null, status: 'NEU',
     // Zusatzarbeiten
-    fai: false, qs: false,
-  });
+    fai: false, qs: false,stk: 0, fa: '', dateipfad: ''});
   const [isSaving, setIsSaving] = useState(false);
   const [submitError, setSubmitError] = useState(null);
 
@@ -110,6 +110,9 @@ const TaskEditModal = ({ task, stations, onSave, onClose, onDeleted }) => {
         kunde: task.kunde || '',
         zusätzlicheInfos: task.zusätzlicheInfos || '',
         aufwandStunden: task.aufwandStunden ?? 0,
+        stk: task.stk ?? 0,
+        fa: task.fa || '',
+        dateipfad: task.dateipfad || '',
         zuständig: task.zuständig || '',
         endDatum: task.endDatum ? task.endDatum.split('T')[0] : '',
         arbeitsstation: task.arbeitsstation || (stations?.length ? stations[0].name : ''),
@@ -124,7 +127,7 @@ const TaskEditModal = ({ task, stations, onSave, onClose, onDeleted }) => {
 
   const handleChange = (e) => {
     const { name, value, type } = e.target;
-    const newValue = type === 'number' ? (value === '' ? 0 : parseFloat(value)) : value;
+    const newValue = type === 'number' ? (value === '' ? null : Number(value)) : value;
     setTaskData((prev) => ({ ...prev, [name]: newValue }));
   };
 
@@ -222,7 +225,15 @@ const TaskEditModal = ({ task, stations, onSave, onClose, onDeleted }) => {
               </div>
               <div style={modalStyles.formGroup}>
                 <label style={modalStyles.label} htmlFor="aufwandStunden">Aufwand (Std.)</label>
-                <input style={modalStyles.input} type="number" id="aufwandStunden" name="aufwandStunden" value={taskData.aufwandStunden} onChange={handleChange} disabled={isSaving} />
+                <input style={modalStyles.input} type="number" id="aufwandStunden" name="aufwandStunden" value={taskData.aufwandStunden ?? ""} onChange={handleChange} disabled={isSaving} />
+              </div>
+              <div style={modalStyles.formGroup}>
+                <label style={modalStyles.label} htmlFor="stk">Stk</label>
+                <input style={modalStyles.input} type="number" id="stk" name="stk" value={taskData.stk ?? ""} onChange={handleChange} disabled={isSaving} />
+              </div>
+              <div style={modalStyles.formGroup}>
+                <label style={modalStyles.label} htmlFor="fa">FA (Fertigungsauftrag-Nr.)</label>
+                <input style={modalStyles.input} type="text" id="fa" name="fa" value={taskData.fa ?? ""} onChange={handleChange} disabled={isSaving} />
               </div>
               <div style={modalStyles.formGroup}>
                 <label style={modalStyles.label} htmlFor="zuständig">Zuständigkeit</label>
@@ -281,6 +292,14 @@ const TaskEditModal = ({ task, stations, onSave, onClose, onDeleted }) => {
 
           <div style={modalStyles.sectionContainer}>
             <h3 style={modalStyles.sectionTitle}>Infos</h3>
+            <div style={modalStyles.formGroup}>
+              <label style={modalStyles.label} htmlFor="dateipfad">Dateipfad</label>
+              <input style={modalStyles.input} type="text" id="dateipfad" name="dateipfad" value={taskData.dateipfad ?? ""} onChange={handleChange} disabled={isSaving} />
+            </div>
+			<div style={{ marginTop: 16 }}>
+			  <h3 style={modalStyles.sectionTitle}>Anhänge</h3>
+			  <AttachmentTab taskId={task?.id} toast={toast} />
+			</div>
             <textarea style={{ ...modalStyles.input, ...modalStyles.textarea }} id="zusätzlicheInfos" name="zusätzlicheInfos" value={taskData.zusätzlicheInfos} onChange={handleChange} disabled={isSaving} />
           </div>
 

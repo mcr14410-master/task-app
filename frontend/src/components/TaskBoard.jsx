@@ -10,6 +10,7 @@ import "@/config/DueDateTheme.css";           // zentrale Farben/Stripe pro Fäl
 import { dueClassForDate } from "@/config/DueDateConfig"; // zentrale Schwellen → Klasse
 import useToast from "@/components/ui/useToast";
 import apiErrorMessage from "@/utils/apiErrorMessage";
+import { apiGet, apiPatch, apiPut } from "../config/apiClient";
 
 /** ====================== Utilities ====================== */
 const norm = (v) =>
@@ -22,6 +23,7 @@ const norm = (v) =>
 
 const pickStationName = (s) => s?.name ?? s?.bezeichnung ?? null;
 const pickStationId = (s) => (s?.id ?? s?.stationId ?? s?.pk ?? null);
+
 
 const bySortOrder = (a, b) => {
   const sa = Number.isFinite(a?.sort_order) ? a.sort_order : (Number.isFinite(a?.sortOrder) ? a.sortOrder : 1e9);
@@ -188,6 +190,45 @@ export default function TaskBoard() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editTask, setEditTask] = useState(null);
   const [isStationsOpen, setIsStationsOpen] = useState(false);
+  const inFlightByColumn = React.useRef(new Map());
+
+  // persistSort: nur ein Flug pro Spalte zulassen
+  const persistSort = React.useCallback(async (dstId, nextMap) => {
+    const key = String(dstId);
+    if (inFlightByColumn.current.get(key)) return; // skip doppeltes Auslösen
+    inFlightByColumn.current.set(key, true);
+    try {
+      const list = Array.isArray(nextMap?.[dstId]) ? nextMap[dstId] : [];
+      const orderedIds = list.map(t => +t?.id).filter(Number.isFinite);
+      const stationId = +dstId;
+
+      const payload = {
+        arbeitsstationId: stationId,
+        orderedIds,
+        columnId: stationId, // Kompat
+        order: orderedIds,
+      };
+
+      // PATCH -> PUT-Fallback nur bei 405
+      try {
+        await apiPatch("/tasks/sort", payload);
+      } catch (e) {
+        const msg = (e?.message || "").toLowerCase();
+        if (msg.includes("405") || msg.includes("method not allowed")) {
+          await apiPut("/tasks/sort", payload);
+        } else {
+          throw e;
+        }
+      }
+    } catch (e) {
+      console.warn("Persist sort failed:", e);
+      const msg = typeof apiErrorMessage === "function" ? apiErrorMessage(e) : (e?.message || String(e));
+      toast.error(`Sortierung fehlgeschlagen: ${msg}`);
+    } finally {
+      inFlightByColumn.current.set(String(dstId), false);
+    }
+  }, []);
+
 
   // Search state
   const [query, setQuery] = useState(() => {
@@ -203,8 +244,8 @@ export default function TaskBoard() {
     setLoading(true);
     try {
       const [tasksRes, stationsRes] = await Promise.all([
-        fetch("/api/tasks").then((r) => r.json()),
-        fetch("/api/arbeitsstationen").then((r) => r.json()),
+        apiGet("/tasks"),
+        apiGet("/arbeitsstationen"),
       ]);
       const tasks = Array.isArray(tasksRes) ? tasksRes : [];
       const stationsList = Array.isArray(stationsRes) ? stationsRes : [];
@@ -265,76 +306,48 @@ export default function TaskBoard() {
         next[colId] = arr.filter(t => String(t.id) !== String(deletedId));
       }
       return next;
+	  
     });
     setEditTask(null); // Modal schließen
   }, []);
 
-  const onDragEnd = async (result) => {
-    const { destination, source, draggableId } = result;
+  const onDragEnd = async ({ source, destination, draggableId }) => {
     if (!destination) return;
+
     const srcId = source.droppableId;
     const dstId = destination.droppableId;
-    if (!srcId || !dstId) return;
-    if (srcId === dstId && source.index === destination.index) return;
 
-    // Optimistic UI
     setColumnsById((prev) => {
+      const srcList = Array.isArray(prev?.[srcId]) ? [...prev[srcId]] : [];
+      const dstList = Array.isArray(prev?.[dstId]) ? [...prev[dstId]] : [];
+      if (!srcList || !dstList) return prev;
+
       const next = { ...prev };
-      const srcList = Array.from(next[srcId] || []);
-      const dstList = srcId === dstId ? srcList : Array.from(next[dstId] || []);
-      const [moved] = srcList.splice(source.index, 1);
-      const movedPatched = { ...moved, arbeitsstationId: dstId, arbeitsstation: idToLabel[dstId] ?? moved.arbeitsstation };
-      dstList.splice(destination.index, 0, movedPatched);
 
       if (srcId === dstId) {
-        next[srcId] = dstList.map((t, i) => ({ ...t, prioritaet: i }));
+        // innerhalb einer Spalte: Task-Objekt bewegen
+        const from = Math.max(0, Math.min(source.index, srcList.length - 1));
+        const to = Math.max(0, Math.min(destination.index, srcList.length - 1));
+        const [moved] = srcList.splice(from, 1);
+        srcList.splice(to, 0, moved ?? srcList.find(t => String(t.id) === String(draggableId)));
+        next[srcId] = srcList;
       } else {
-        next[srcId] = srcList.map((t, i) => ({ ...t, prioritaet: i }));
-        next[dstId] = dstList.map((t, i) => ({ ...t, prioritaet: i }));
+        // zwischen Spalten: Task-Objekt rüber schieben
+        const from = Math.max(0, Math.min(source.index, srcList.length - 1));
+        const [moved] = srcList.splice(from, 1);
+        const insert = moved ?? srcList.find(t => String(t.id) === String(draggableId));
+        const to = Math.max(0, Math.min(destination.index, dstList.length));
+        dstList.splice(to, 0, insert);
+        next[srcId] = srcList;
+        next[dstId] = dstList;
       }
+
+      // Persist anhand des neuen Arrays (IDs daraus extrahieren)
+      persistSort(dstId, next);
       return next;
     });
-
-    // Persist mit 409-Retry
-    const payload = {
-      taskId: Number(draggableId),
-      toIndex: destination.index,
-      to: idToLabel[dstId] ?? idToLabel[srcId] ?? null,
-    };
-
-    const persist = async () => {
-      const res = await fetch(`/api/tasks/sort`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", "Accept": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        let body; try { body = await res.json(); } catch {}
-        const err = new Error(res.statusText);
-        err.status = res.status;
-        err.body = body;
-        throw err;
-      }
-    };
-
-    try {
-      await persist();
-    } catch (err) {
-      if (err?.status === 409) {
-        // Einmal automatisch neu laden und erneut versuchen
-        await fetchAll();
-        try {
-          await persist();
-        } catch (err2) {
-          console.warn("Persist sort retry failed:", err2);
-          toast.error("Sortierung Konflikt: " + (apiErrorMessage(err2) || "Bitte erneut versuchen."));
-        }
-      } else {
-        console.warn("Persist sort failed:", err);
-        toast.error("Sortierung fehlgeschlagen: " + (apiErrorMessage(err) || "Unbekannt"));
-      }
-    }
   };
+
 
   // Search helpers
   const q = (query || "").trim().toLowerCase();
@@ -447,11 +460,11 @@ export default function TaskBoard() {
         <div style={{ display: "flex", gap: 16, alignItems: "flex-start", overflowX: "auto", paddingBottom: 8, flex: "1 1 auto" }}>
           {orderIds.map((colId) => {
             const title = idToLabel[colId] || colId;
-            const list = columnsById[colId] || [];
-            const matches = queryActive ? list.filter((t) => matchesQuery(t, q)) : list;
-            const visibleList = (hardFilter && queryActive) ? matches : list;
-            const matchesInCol = matches.length;
-            const totalEffortMins = matches.reduce((sum, t) => sum + getEffortMinutes(t), 0);
+			const list = Array.isArray(columnsById[colId]) ? columnsById[colId] : [];
+			const matches = queryActive ? list.filter((t) => matchesQuery(t, q)) : list;
+			const visibleList = (hardFilter && queryActive) ? matches : list;
+			const matchesInCol = matches.length;
+			const totalEffortMins = matches.reduce((sum, t) => sum + getEffortMinutes(t), 0);
 
             return (
               <Droppable droppableId={String(colId)} key={String(colId)} isDropDisabled={hardFilter && queryActive}>

@@ -14,6 +14,9 @@ public class TaskMapper {
         dto.setZusätzlicheInfos(t.getZusätzlicheInfos());
         dto.setEndDatum(t.getEndDatum());
         dto.setAufwandStunden(t.getAufwandStunden());
+        dto.setStk(t.getStk());
+        dto.setFa(t.getFa());
+        dto.setDateipfad(t.getDateipfad());
         dto.setArbeitsstation(t.getArbeitsstation());
         dto.setStatus(t.getStatus());
         dto.setPrioritaet(t.getPrioritaet());
@@ -39,5 +42,8 @@ public class TaskMapper {
         if (dto.getPrioritaet()!=null) t.setPrioritaet(dto.getPrioritaet());
         if (dto.getFai()!=null) t.setFai(dto.getFai());
         if (dto.getQs()!=null) t.setQs(dto.getQs());
+        if (dto.getStk()!=null) t.setStk(dto.getStk());
+        if (dto.getFa()!=null) t.setFa(dto.getFa());
+        if (dto.getDateipfad()!=null) t.setDateipfad(dto.getDateipfad());
     }
 }

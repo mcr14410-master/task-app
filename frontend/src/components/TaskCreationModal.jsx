@@ -1,13 +1,10 @@
 // frontend/src/components/TaskCreationModal.jsx
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import axios from 'axios';
+import { apiPost } from "../config/apiClient";
 import '../config/TaskStatusTheme.css';
 import '../config/AdditionalWorkTheme.css';
 import useToast from "@/components/ui/useToast";
 import apiErrorMessage from "@/utils/apiErrorMessage";
-
-const API_BASE_URL = '/api/tasks';
-
 const styles = {
   overlay: {
     position: 'fixed', inset: 0,
@@ -89,6 +86,9 @@ const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
     kunde: '',
     endDatum: '',
     aufwandStunden: 0,
+    stk: 0,
+    fa: "",
+    dateipfad: "",
     zuständig: '',
     zusätzlicheInfos: '',
     arbeitsstation: defaultStationName,
@@ -131,7 +131,10 @@ const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
       // Zusatzarbeiten
       fai: !!form.fai,
       qs: !!form.qs,
-      prioritaet: 9999
+      prioritaet: 9999,
+      stk: Number.isFinite(Number(form.stk)) ? Number(form.stk) : undefined,
+      fa: sanitize(form.fa),
+      dateipfad: sanitize(form.dateipfad)
     };
     Object.keys(payload).forEach(k => { if (payload[k] === null) delete payload[k]; });
     return payload;
@@ -152,27 +155,17 @@ const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
     setSubmitting(true);
     try {
 		 try {
-		   await axios.post(API_BASE_URL, buildPayload());
+		   await apiPost("/tasks", buildPayload());
 		   toast.success("Aufgabe erstellt");
 		   onTaskCreated?.();
 		 } catch (err) {
-		   const status = err?.response?.status;
-		   const srvMsg = err?.response?.data?.message;
-		   setErrorMsg(
-		     status === 409 ? (srvMsg || "Datenintegritätsfehler. Bitte Eingaben prüfen.") :
-		     status === 400 ? (srvMsg || "Ungültige Eingabe.") :
-		                      (srvMsg || "Unbekannter Fehler beim Erstellen der Aufgabe.")
-		   );
-		   toast.error("Erstellen fehlgeschlagen: " + (srvMsg || apiErrorMessage(err)));
-		 }
+           const msg = (err && err.message) ? err.message : "Unbekannter Fehler beim Erstellen der Aufgabe.";
+           setErrorMsg(msg);
+           toast.error("Erstellen fehlgeschlagen: " + msg);
+         }
     } catch (err) {
-      const status = err?.response?.status;
-      const srvMsg = err?.response?.data?.message;
-      const detail = err?.response?.data?.detail;
-      if (status === 409)      setErrorMsg(srvMsg || 'Datenintegritätsfehler. Bitte Eingaben prüfen.');
-      else if (status === 400) setErrorMsg(srvMsg || 'Ungültige Eingabe.');
-      else                     setErrorMsg(srvMsg || 'Unbekannter Fehler beim Erstellen der Aufgabe.');
-      if (detail) console.warn('Server detail:', detail);
+      const msg = (err && err.message) ? err.message : "Unbekannter Fehler beim Erstellen der Aufgabe.";
+      setErrorMsg(msg);
     } finally {
       setSubmitting(false);
     }
@@ -186,28 +179,18 @@ const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
     setSubmitting(true);
     try {
 		 try {
-		   await axios.post(API_BASE_URL, buildPayload());
+		   await apiPost("/tasks", buildPayload());
 		   toast.success("Aufgabe erstellt");
 		   onTaskCreated?.({ keepOpen: true });
 		   setForm(makeInitial());
 		 } catch (err) {
-		   const status = err?.response?.status;
-		   const srvMsg = err?.response?.data?.message;
-		   setErrorMsg(
-		     status === 409 ? (srvMsg || "Datenintegritätsfehler. Bitte Eingaben prüfen.") :
-		     status === 400 ? (srvMsg || "Ungültige Eingabe.") :
-		                      (srvMsg || "Unbekannter Fehler beim Erstellen der Aufgabe.")
-		   );
-		   toast.error("Erstellen fehlgeschlagen: " + (srvMsg || apiErrorMessage(err)));
-		 }
+           const msg = (err && err.message) ? err.message : "Unbekannter Fehler beim Erstellen der Aufgabe.";
+           setErrorMsg(msg);
+           toast.error("Erstellen fehlgeschlagen: " + msg);
+         }
     } catch (err) {
-      const status = err?.response?.status;
-      const srvMsg = err?.response?.data?.message;
-      const detail = err?.response?.data?.detail;
-      if (status === 409)      setErrorMsg(srvMsg || 'Datenintegritätsfehler. Bitte Eingaben prüfen.');
-      else if (status === 400) setErrorMsg(srvMsg || 'Ungültige Eingabe.');
-      else                     setErrorMsg(srvMsg || 'Unbekannter Fehler beim Erstellen der Aufgabe.');
-      if (detail) console.warn('Server detail:', detail);
+      const msg = (err && err.message) ? err.message : "Unbekannter Fehler beim Erstellen der Aufgabe.";
+      setErrorMsg(msg);
     } finally {
       setSubmitting(false);
     }
@@ -254,6 +237,14 @@ const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
               <div>
                 <label style={styles.label} htmlFor="aufwandStunden">Aufwand (Std.)</label>
                 <input id="aufwandStunden" type="number" min="0" step="0.25" style={styles.input} value={form.aufwandStunden} onChange={(e) => setValue('aufwandStunden', e.target.value)} disabled={submitting} />
+              </div>
+              <div>
+                <label style={styles.label} htmlFor="stk">Stk</label>
+                <input id="stk" type="number" min="0" step="1" style={styles.input} value={form.stk} onChange={(e) => setValue('stk', e.target.value)} disabled={submitting} />
+              </div>
+              <div>
+                <label style={styles.label} htmlFor="fa">FA (Fertigungsauftrag-Nr.)</label>
+                <input id="fa" type="text" style={styles.input} value={form.fa} onChange={(e) => setValue('fa', e.target.value)} disabled={submitting} />
               </div>
             </div>
           </div>
@@ -321,6 +312,9 @@ const TaskCreationModal = ({ stations = [], onTaskCreated, onClose }) => {
 
           <div style={styles.section}>
             <h3 style={styles.sectionTitle}>Beschreibung</h3>
+            <label style={styles.label} htmlFor="dateipfad">Dateipfad</label>
+            <input id="dateipfad" type="text" style={styles.input} value={form.dateipfad} onChange={(e) => setValue('dateipfad', e.target.value)} disabled={submitting} />
+            <div style={{ height: 10 }} />
             <label style={styles.label} htmlFor="zusätzlicheInfos">Zusätzliche Infos</label>
             <textarea id="zusätzlicheInfos" style={{ ...styles.input, ...styles.textarea }} value={form.zusätzlicheInfos} onChange={(e) => setValue('zusätzlicheInfos', e.target.value)} disabled={submitting} placeholder="Optional: Kurzbeschreibung" />
           </div>

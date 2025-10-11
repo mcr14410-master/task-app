@@ -25,6 +25,10 @@ const IconClock = (p) => (
 const IconCalendar = (p) => (
   <Icon {...p} path={<g><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></g>} />
 );
+const IconPaperclip = (p) => (
+  <Icon {...p} path={<g><path d="M21.44 11.05l-8.49 8.49a5.5 5.5 0 0 1-7.78-7.78l9.19-9.19a4 4 0 1 1 5.66 5.66l-9.19 9.19a2.5 2.5 0 0 1-3.54-3.54l8.49-8.49"/></g>} />
+);
+
 const IconBriefcase = (p) => (
   <Icon {...p} path={<path d="M20 7h-5V6a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v1H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z" />} />
 );
@@ -87,15 +91,20 @@ export default function TaskItem({ task }) {
   return (
     <>
       {/* Titel */}
-      <h4 className="title">{bezeichnung ?? titel ?? "(ohne Bezeichnung)"}</h4>
-
+	  <h4 className="title" style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+	    <span>{bezeichnung ?? titel ?? "(ohne Bezeichnung)"}</span>
+	    {(task?.attachmentsCount ?? 0) > 0 && (
+	      <span className="badge">📎 {task.attachmentsCount}</span>
+	    )}
+	  </h4>
+	  
+	  
       {/* Zeile 1: Teilenummer | Kunde */}
       <div className="row" style={{ marginBottom: 6 }}>
         <div className="meta" title={teilenummer || "-"}>
           <IconTag />
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {teilenummer || "-"}
-          </span>
+            {teilenummer || "-"}{task?.fa ? <span className="badge" style={{ marginLeft: 8 }}>FA: {task.fa}</span> : null}{(Number.isFinite(task?.stk) && task.stk > 0) ? <span className="badge" style={{ marginLeft: 8 }}>Stk × {task.stk}</span> : null}</span>
         </div>
         <div className="meta" title={kunde || "-"} style={{ justifyContent: "flex-end" }}>
           <IconBriefcase />

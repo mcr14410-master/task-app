@@ -11,6 +11,18 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 
 import java.util.List;
 import java.util.Map;
@@ -23,6 +35,7 @@ public class TaskController {
 
     private final TaskService service;
     private final TaskSortService sortService;
+    private static final Logger log = LoggerFactory.getLogger(TaskController.class);
 
     public TaskController(TaskService service, TaskSortService sortService) {
         this.service = service;
@@ -40,7 +53,7 @@ public class TaskController {
         return service.findAll().stream().map(TaskMapper::toDto).collect(Collectors.toList());
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/{id:\\d+}")
     public TaskDto get(@PathVariable Long id) {
         return TaskMapper.toDto(requireTask(id));
     }
@@ -61,7 +74,7 @@ public class TaskController {
         return ResponseEntity.status(HttpStatus.CREATED).body(TaskMapper.toDto(saved));
     }
 
-    @PatchMapping("/{id}")
+    @PatchMapping("/{id:\\d+}")
     public TaskDto patch(@PathVariable Long id, @RequestBody TaskDto dto) {
         Task entity = requireTask(id);
         TaskMapper.updateEntityFromDto(dto, entity);
@@ -69,7 +82,7 @@ public class TaskController {
         return TaskMapper.toDto(saved);
     }
 
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/{id:\\d+}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         requireTask(id);
         service.delete(id);
@@ -92,10 +105,62 @@ public class TaskController {
         return TaskMapper.toDto(saved);
     }
 
-    /** Delegiert an Service mit @Transactional */
-    @PutMapping("/sort")
-    public ResponseEntity<Void> sort(@RequestBody TaskSortRequest req) {
-        sortService.sort(req);
-        return ResponseEntity.ok().build();
+ // Akzeptiert BEIDE Frontend-Varianten
+    public static class SortRequest {
+      public Long arbeitsstationId;       // neue Variante
+      public java.util.List<Long> orderedIds;
+      public Long columnId;               // alte Variante
+      public java.util.List<Long> order;
+
+      public Long stationId() { return arbeitsstationId != null ? arbeitsstationId : columnId; }
+      public java.util.List<Long> ids() { return orderedIds != null ? orderedIds : order; }
     }
+    
+    
+    @PatchMapping("/sort")
+    @Transactional
+    public ResponseEntity<Void> sortPatch(@RequestBody SortRequest req) {
+      log.info("DnD PATCH /sort payload: arbeitsstationId={}, orderedIds={}, columnId={}, order={}",
+          req.arbeitsstationId, req.orderedIds, req.columnId, req.order);
+
+      final Long station = req != null ? req.stationId() : null;
+      final java.util.List<Long> ids = req != null ? req.ids() : null;
+
+      if (station == null || ids == null || ids.isEmpty()) {
+        log.warn("BadRequest /sort: station={} ids={}", station, ids);
+        return ResponseEntity.badRequest().build();
+      }
+
+      try {
+        sortService.applyOrder(station, ids);
+        log.info("DnD /sort OK: station={} ids={}", station, ids);
+        return ResponseEntity.noContent().build();
+      } catch (Exception ex) {
+        // Wichtig: KEIN 400 hier – wir wollen sehen, was passiert (Stacktrace im Log)
+        log.error("DnD /sort FAILED: station={} ids={}", station, ids, ex);
+        return ResponseEntity.status(500).build();
+      }
+    }
+    
+    @PutMapping("/sort") // Fallback
+    @Transactional
+    public ResponseEntity<Void> sortPut(@RequestBody SortRequest req) {
+      log.info("DnD PUT /sort payload: arbeitsstationId={}, orderedIds={}, columnId={}, order={}",
+          req.arbeitsstationId, req.orderedIds, req.columnId, req.order);
+
+      Long station = req != null ? req.stationId() : null;
+      java.util.List<Long> ids = req != null ? req.ids() : null;
+
+      if (station == null || ids == null || ids.isEmpty()) {
+        log.warn("BadRequest /sort (PUT): station={} ids={}", station, ids);
+        return ResponseEntity.badRequest().build();
+      }
+
+      sortService.applyOrder(station, ids);
+      log.info("DnD /sort OK: station={} ids={}", station, ids);
+      return ResponseEntity.noContent().build();
+    }
+    
+    
+    
 }
