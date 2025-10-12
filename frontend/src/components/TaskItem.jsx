@@ -28,9 +28,12 @@ const IconCalendar = (p) => (
 const IconPaperclip = (p) => (
   <Icon {...p} path={<g><path d="M21.44 11.05l-8.49 8.49a5.5 5.5 0 0 1-7.78-7.78l9.19-9.19a4 4 0 1 1 5.66 5.66l-9.19 9.19a2.5 2.5 0 0 1-3.54-3.54l8.49-8.49"/></g>} />
 );
-
 const IconBriefcase = (p) => (
   <Icon {...p} path={<path d="M20 7h-5V6a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v1H4a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z" />} />
+);
+// Ordner-Icon (lokalen Pfad kopieren/öffnen)
+const IconFolderOpen = (p) => (
+  <Icon {...p} path={<g><path d="M3 7h5l2 2h11v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 7v10"/><path d="M21 9H10L8 7H3"/></g>} />
 );
 
 function formatDate(d) {
@@ -75,7 +78,7 @@ function AddPills({ task }) {
   ) : null;
 }
 
-export default function TaskItem({ task }) {
+export default function TaskItem({ task, openAttachmentsModal }) {
   const {
     bezeichnung, titel,
     teilenummer, kunde, zuständig,
@@ -88,23 +91,70 @@ export default function TaskItem({ task }) {
   // Fälligkeitsklasse anhand zentraler Logik
   const dueCls = endDatum ? dueClassForDate(endDatum) : "due-future";
 
+  // robust: singular & plural unterstützen (attachmentCount vs attachmentsCount)
+  const attachCount = Number.isFinite(task?.attachmentCount)
+    ? task.attachmentCount
+    : (Number.isFinite(task?.attachmentsCount) ? task.attachmentsCount : 0);
+  const hasAttachments = attachCount > 0;
+  const hasPath = typeof task?.dateipfad === "string" && task.dateipfad.trim().length > 0;
+
+  const iconBtnStyle = { border: "none", background: "transparent", padding: 4, cursor: "pointer", opacity: 0.85 };
+
   return (
     <>
-      {/* Titel */}
-	  <h4 className="title" style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-	    <span>{bezeichnung ?? titel ?? "(ohne Bezeichnung)"}</span>
-	    {(task?.attachmentsCount ?? 0) > 0 && (
-	      <span className="badge">📎 {task.attachmentsCount}</span>
-	    )}
-	  </h4>
-	  
-	  
+      {/* Titel-Zeile mit Icons rechts */}
+      <h4 className="title" style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+        <span>{bezeichnung ?? titel ?? "(ohne Bezeichnung)"}</span>
+
+        <span style={{display:"inline-flex",gap:8,alignItems:"center"}}>
+          {hasAttachments ? (
+            <button
+              className="icon-btn"
+              style={iconBtnStyle}
+              title={`${attachCount} Anhang${attachCount === 1 ? "" : "e"} anzeigen`}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (typeof openAttachmentsModal === "function") {
+                  openAttachmentsModal(task);
+                } else {
+                  window.open(`/api/tasks/${task.id}/attachments`, "_blank", "noopener");
+                }
+              }}
+            >
+              <IconPaperclip />
+              <span style={{fontSize:12, marginLeft:4}}>{attachCount}</span>
+            </button>
+          ) : null}
+
+          {hasPath ? (
+            <button
+              className="icon-btn"
+              style={iconBtnStyle}
+              title={`Dateipfad kopieren: ${task.dateipfad}`}
+              onClick={async (e) => {
+                e.stopPropagation();
+                try {
+                  await navigator.clipboard.writeText(task.dateipfad);
+                } catch {
+                  try { window.open(task.dateipfad, "_blank", "noopener"); } catch {}
+                }
+              }}
+            >
+              <IconFolderOpen />
+            </button>
+          ) : null}
+        </span>
+      </h4>
+
       {/* Zeile 1: Teilenummer | Kunde */}
       <div className="row" style={{ marginBottom: 6 }}>
         <div className="meta" title={teilenummer || "-"}>
           <IconTag />
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {teilenummer || "-"}{task?.fa ? <span className="badge" style={{ marginLeft: 8 }}>FA: {task.fa}</span> : null}{(Number.isFinite(task?.stk) && task.stk > 0) ? <span className="badge" style={{ marginLeft: 8 }}>Stk × {task.stk}</span> : null}</span>
+            {teilenummer || "-"}
+            {task?.fa ? <span className="badge" style={{ marginLeft: 8 }}>FA: {task.fa}</span> : null}
+            {(Number.isFinite(task?.stk) && task.stk > 0) ? <span className="badge" style={{ marginLeft: 8 }}>Stk × {task.stk}</span> : null}
+          </span>
         </div>
         <div className="meta" title={kunde || "-"} style={{ justifyContent: "flex-end" }}>
           <IconBriefcase />
@@ -133,7 +183,6 @@ export default function TaskItem({ task }) {
           </div>
         ) : <div />}
 
-        {/* Rechtsbündiger Block: Zusatzarbeiten-Pills vor Status */}
         <div style={{ marginLeft: "auto", display: "inline-flex", gap: 6, alignItems: "center" }}>
           <AddPills task={task} />
           <span className={pillClass} data-status={key} title={`Status: ${key}`}>
