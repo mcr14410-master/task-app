@@ -17,3 +17,4 @@ export const taskService = {
 export const stationService = {
   getAll: () => api.get("/arbeitsstationen").then(res => res.data),
 };
+
