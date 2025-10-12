@@ -5,8 +5,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.*;
 
-import java.io.IOException;
-import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -14,7 +12,6 @@ import java.util.Map;
 public class FilePickerController {
 
     private static final Logger log = LoggerFactory.getLogger(FilePickerController.class);
-
     private final FilePickerService service;
 
     public FilePickerController(FilePickerService service) {
@@ -22,44 +19,45 @@ public class FilePickerController {
         log.info("FilePicker aktiv. Base: {}", service.getBase());
     }
 
-    /** Kompakter Health/Info-Endpunkt (optional). */
-    @GetMapping("/info")
-    public Map<String, Object> info() {
-        return Map.of(
-                "base", service.getBase().toString()
-        );
-    }
-
-    /** Liste der Unterordner als { folders: [...] } */
     @GetMapping("/subfolders")
-    public Map<String, Object> subfolders(@RequestParam(required = false) String sub) throws IOException {
-        log.debug("FS subfolders: sub='{}'", sub);
-        List<String> folders = service.listSubfolders(sub);
-        return Map.of("folders", folders);
+    public Map<String, Object> subfolders(@RequestParam(required = false) String sub) throws Exception {
+        return Map.of("folders", service.listSubfolders(sub));
     }
 
-    /** Alias für ältere Frontends: /list -> wie /subfolders */
-    @GetMapping("/list")
-    public Map<String, Object> list(@RequestParam(required = false) String sub) throws IOException {
-        log.debug("FS list (alias): sub='{}'", sub);
-        List<String> folders = service.listSubfolders(sub);
-        return Map.of("folders", folders);
-    }
-
-    /** Existenzcheck als { exists: true|false } */
     @GetMapping("/exists")
     public Map<String, Object> exists(@RequestParam(required = false) String sub) {
-        boolean ex = service.exists(sub);
-        log.debug("FS exists: sub='{}' -> {}", sub, ex);
-        return Map.of("exists", ex);
+        return Map.of("exists", service.exists(sub));
     }
 
-    /** Ordner anlegen; Parameter via Query: sub (optional), name (required). */
     @PostMapping("/mkdir")
     public Map<String, Object> mkdir(@RequestParam(required = false) String sub,
                                      @RequestParam String name) throws Exception {
-        log.debug("FS mkdir: sub='{}', name='{}'", sub, name);
         service.mkdir(sub, name);
+        return Map.of("ok", true);
+    }
+
+    @PostMapping("/rename")
+    public Map<String, Object> rename(@RequestParam(required = false) String sub,
+                                      @RequestParam String from,
+                                      @RequestParam String to) throws Exception {
+        service.rename(sub, from, to);
+        return Map.of("ok", true);
+    }
+
+    // NEU: Empty-Check (für deaktivierte Mülltonne)
+    @GetMapping("/empty")
+    public Map<String, Object> empty(@RequestParam(required = false) String sub,
+                                     @RequestParam String name) throws Exception {
+        boolean empty = service.isEmpty(sub, name);
+        return Map.of("empty", empty);
+    }
+
+    // NEU: Nur-leer-Löschen
+    @DeleteMapping("/rmdir")
+    public Map<String, Object> rmdir(@RequestParam(required = false) String sub,
+                                     @RequestParam String name) throws Exception {
+        log.debug("FS rmdir(empty-only): sub='{}', name='{}'", sub, name);
+        service.rmdirEmpty(sub, name);
         return Map.of("ok", true);
     }
 }
