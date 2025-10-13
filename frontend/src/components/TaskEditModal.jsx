@@ -5,7 +5,7 @@ import "../config/TaskStatusTheme.css";
 import "../config/AdditionalWorkTheme.css";
 import useToast from "@/components/ui/useToast";
 import FolderPickerModal from "./FolderPickerModal";
-import { fsExists } from "@/api/fsApi";
+import { fsExists, fsBaseLabel } from "@/api/fsApi";
 import AttachmentTab from "./AttachmentTab";
 
 const styles = {
@@ -27,15 +27,12 @@ const styles = {
   tabsRow: { display: "flex", gap: 8, marginBottom: 12 },
   tabBtn: (active) => ({ padding: "8px 12px", borderRadius: 8, border: "1px solid #334155", background: active ? "#1f2937" : "transparent", color: "#e5e7eb", cursor: "pointer", fontWeight: 600 }),
 
-  // kleine Chips für Breadcrumbs
   crumbBtn: { background: "#24282e", border: "1px solid #2a2d33", color: "#c6c9cf", padding: "4px 8px", borderRadius: 999, cursor: "pointer" },
   crumbSep: { color: "#6d7480", margin: "0 4px" },
   muted: { color: "#9ca3af", fontSize: 12 }
 };
 
 const STATUS_ORDER = ["NEU", "TO_DO", "IN_BEARBEITUNG", "FERTIG"];
-
-/** Fallback für die Anzeige, falls der Server kein baseLabel liefert (rein optisch) */
 const DEFAULT_BASE_LABEL = "\\\\server\\share\\";
 
 export default function TaskEditModal({
@@ -51,29 +48,25 @@ export default function TaskEditModal({
   const [submitting, setSubmitting] = useState(false);
   const [showFolderPicker, setShowFolderPicker] = useState(false);
 
-  // Neu: Echten Base-Pfad für die Anzeige vom Server holen
+  // Echten Base-Pfad für die Anzeige vom Server holen (über fsApi)
   const [baseLabel, setBaseLabel] = useState("");
-
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/fs/base-label")
-      .then((r) => (r.ok ? r.json() : Promise.reject(r)))
-      .then((d) => {
-        if (!cancelled) setBaseLabel(String(d?.baseLabel || ""));
-      })
-      .catch(() => {
-        // Anzeige ist optional – leise ignorieren, wir nutzen dann den DEFAULT
-      });
-    return () => {
-      cancelled = true;
-    };
+    (async () => {
+      try {
+        const label = await fsBaseLabel();
+        if (!cancelled) setBaseLabel(label);
+      } catch {
+        // optional – Anzeige
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
-  /** Hilfsfunktion: Base + Subpfad hübsch (optisch) zusammensetzen */
   function joinBaseAndSub(base, sub) {
     if (!base) return sub || "";
     const hasBackslashBase = base.includes("\\") && !base.includes("/");
-    const cleanBase = base.replace(/[/\\]+$/, ""); // trailing Slash weg
+    const cleanBase = base.replace(/[/\\]+$/, "");
     if (!sub) return cleanBase;
     const sep = hasBackslashBase ? "\\" : "/";
     return `${cleanBase}${sep}${sub}`;
@@ -88,7 +81,7 @@ export default function TaskEditModal({
     aufwandStunden: Number.isFinite(Number(task?.aufwandStunden)) ? Number(task?.aufwandStunden) : 0,
     stk: Number.isFinite(Number(task?.stk)) ? Number(task?.stk) : 0,
     fa: task?.fa ?? "",
-    dateipfad: task?.dateipfad ?? "", // RELATIVER Unterordner
+    dateipfad: task?.dateipfad ?? "",
     zustaendig: task?.zustaendig ?? "",
     zusaetzlicheInfos: task?.zusaetzlicheInfos ?? "",
     arbeitsstation: task?.arbeitsstation ?? (stations[0]?.name ?? ""),
@@ -123,19 +116,14 @@ export default function TaskEditModal({
       qs: !!form.qs,
       stk: Number.isFinite(Number(form.stk)) ? Number(form.stk) : undefined,
       fa: sanitize(form.fa),
-      dateipfad: sanitize(form.dateipfad) // weiterhin RELATIV zum serverseitigen Basispräfix
+      dateipfad: sanitize(form.dateipfad)
     };
-    Object.keys(payload).forEach((k) => {
-      if (payload[k] == null) delete payload[k];
-    });
+    Object.keys(payload).forEach((k) => { if (payload[k] == null) delete payload[k]; });
     return payload;
   };
 
   const handleSave = async () => {
-    if (!form.id) {
-      toast.error("Ungültige Task-ID");
-      return;
-    }
+    if (!form.id) { toast.error("Ungültige Task-ID"); return; }
     setSubmitting(true);
     try {
       await apiPatch(`/tasks/${form.id}`, buildPayload());
@@ -150,10 +138,7 @@ export default function TaskEditModal({
   };
 
   const handleDelete = async () => {
-    if (!form.id) {
-      toast.error("Ungültige Task-ID");
-      return;
-    }
+    if (!form.id) { toast.error("Ungültige Task-ID"); return; }
     if (!confirm("Diese Aufgabe wirklich löschen?")) return;
     setSubmitting(true);
     try {
@@ -168,13 +153,10 @@ export default function TaskEditModal({
     }
   };
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // PATH: Breadcrumbs aus RELATIVEM Unterordner bauen (z.B. "Kunde/Projekt/Teil")
-  // Click auf Crumb setzt den Unterordner bis zu diesem Segment.
-  // ─────────────────────────────────────────────────────────────────────────────
+  // Breadcrumbs aus relativem Unterordner
   const breadcrumbs = useMemo(() => {
     const raw = (form.dateipfad || "").replaceAll("\\", "/").replace(/^\/+/, "");
-    if (!raw) return []; // keine Crumbs wenn leer → nur "Basis"
+    if (!raw) return [];
     const parts = raw.split("/").filter(Boolean);
     let running = "";
     return parts.map((part) => {
@@ -392,8 +374,8 @@ export default function TaskEditModal({
           style={styles.btnSecondary}
           onClick={async () => {
             try {
-              const r = await fsExists(form.dateipfad || "");
-              if (r?.exists) toast.success("Pfad vorhanden");
+              const exists = await fsExists(form.dateipfad || "");
+              if (exists) toast.success("Pfad vorhanden");
               else toast.error("Pfad existiert nicht");
             } catch {
               toast.error("Prüfung fehlgeschlagen");
@@ -405,7 +387,6 @@ export default function TaskEditModal({
         </button>
       </div>
 
-      {/* Info: Voller Pfad zur Orientierung (rein optisch, aus Server-Config) */}
       {(baseLabel || DEFAULT_BASE_LABEL) && (
         <div style={{ marginTop: 8, ...styles.muted }}>
           Voller Pfad (Info):{" "}
@@ -415,7 +396,6 @@ export default function TaskEditModal({
 
       {/* Breadcrumbs */}
       <div aria-label="Pfad-Navigation" style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 10 }}>
-        {/* Basis als erster Crumb */}
         <span>
           <button
             type="button"
