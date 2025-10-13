@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+// components/TaskEditModal.jsx
+import React, { useEffect, useMemo, useState } from "react";
 import { apiPatch, apiDelete } from "@/config/apiClient";
 import "../config/TaskStatusTheme.css";
 import "../config/AdditionalWorkTheme.css";
@@ -24,10 +25,18 @@ const styles = {
   btnDanger: { padding: "10px 16px", backgroundColor: "#ef4444", color: "#fff", border: "1px solid #ef4444", borderRadius: 10, cursor: "pointer", fontWeight: 700 },
   btnSecondary: { padding: "10px 16px", backgroundColor: "transparent", color: "#cbd5e1", border: "1px solid #334155", borderRadius: 10, cursor: "pointer", fontWeight: 600 },
   tabsRow: { display: "flex", gap: 8, marginBottom: 12 },
-  tabBtn: (active) => ({ padding: "8px 12px", borderRadius: 8, border: "1px solid #334155", background: active ? "#1f2937" : "transparent", color: "#e5e7eb", cursor: "pointer", fontWeight: 600 })
+  tabBtn: (active) => ({ padding: "8px 12px", borderRadius: 8, border: "1px solid #334155", background: active ? "#1f2937" : "transparent", color: "#e5e7eb", cursor: "pointer", fontWeight: 600 }),
+
+  // kleine Chips für Breadcrumbs
+  crumbBtn: { background: "#24282e", border: "1px solid #2a2d33", color: "#c6c9cf", padding: "4px 8px", borderRadius: 999, cursor: "pointer" },
+  crumbSep: { color: "#6d7480", margin: "0 4px" },
+  muted: { color: "#9ca3af", fontSize: 12 }
 };
 
 const STATUS_ORDER = ["NEU", "TO_DO", "IN_BEARBEITUNG", "FERTIG"];
+
+/** Fallback für die Anzeige, falls der Server kein baseLabel liefert (rein optisch) */
+const DEFAULT_BASE_LABEL = "\\\\server\\share\\";
 
 export default function TaskEditModal({
   task,
@@ -42,6 +51,34 @@ export default function TaskEditModal({
   const [submitting, setSubmitting] = useState(false);
   const [showFolderPicker, setShowFolderPicker] = useState(false);
 
+  // Neu: Echten Base-Pfad für die Anzeige vom Server holen
+  const [baseLabel, setBaseLabel] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/fs/base-label")
+      .then((r) => (r.ok ? r.json() : Promise.reject(r)))
+      .then((d) => {
+        if (!cancelled) setBaseLabel(String(d?.baseLabel || ""));
+      })
+      .catch(() => {
+        // Anzeige ist optional – leise ignorieren, wir nutzen dann den DEFAULT
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /** Hilfsfunktion: Base + Subpfad hübsch (optisch) zusammensetzen */
+  function joinBaseAndSub(base, sub) {
+    if (!base) return sub || "";
+    const hasBackslashBase = base.includes("\\") && !base.includes("/");
+    const cleanBase = base.replace(/[/\\]+$/, ""); // trailing Slash weg
+    if (!sub) return cleanBase;
+    const sep = hasBackslashBase ? "\\" : "/";
+    return `${cleanBase}${sep}${sub}`;
+  }
+
   const [form, setForm] = useState(() => ({
     id: task?.id ?? null,
     bezeichnung: task?.bezeichnung ?? "",
@@ -51,7 +88,7 @@ export default function TaskEditModal({
     aufwandStunden: Number.isFinite(Number(task?.aufwandStunden)) ? Number(task?.aufwandStunden) : 0,
     stk: Number.isFinite(Number(task?.stk)) ? Number(task?.stk) : 0,
     fa: task?.fa ?? "",
-    dateipfad: task?.dateipfad ?? "",
+    dateipfad: task?.dateipfad ?? "", // RELATIVER Unterordner
     zustaendig: task?.zustaendig ?? "",
     zusaetzlicheInfos: task?.zusaetzlicheInfos ?? "",
     arbeitsstation: task?.arbeitsstation ?? (stations[0]?.name ?? ""),
@@ -86,7 +123,7 @@ export default function TaskEditModal({
       qs: !!form.qs,
       stk: Number.isFinite(Number(form.stk)) ? Number(form.stk) : undefined,
       fa: sanitize(form.fa),
-      dateipfad: sanitize(form.dateipfad)
+      dateipfad: sanitize(form.dateipfad) // weiterhin RELATIV zum serverseitigen Basispräfix
     };
     Object.keys(payload).forEach((k) => {
       if (payload[k] == null) delete payload[k];
@@ -130,6 +167,21 @@ export default function TaskEditModal({
       setSubmitting(false);
     }
   };
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // PATH: Breadcrumbs aus RELATIVEM Unterordner bauen (z.B. "Kunde/Projekt/Teil")
+  // Click auf Crumb setzt den Unterordner bis zu diesem Segment.
+  // ─────────────────────────────────────────────────────────────────────────────
+  const breadcrumbs = useMemo(() => {
+    const raw = (form.dateipfad || "").replaceAll("\\", "/").replace(/^\/+/, "");
+    if (!raw) return []; // keine Crumbs wenn leer → nur "Basis"
+    const parts = raw.split("/").filter(Boolean);
+    let running = "";
+    return parts.map((part) => {
+      running = running ? `${running}/${part}` : part;
+      return { label: part, sub: running };
+    });
+  }, [form.dateipfad]);
 
   const DetailsForm = (
     <>
@@ -299,7 +351,6 @@ export default function TaskEditModal({
 
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>Beschreibung</h3>
-        {/* Dateipfad ist in den Tab „Pfad“ umgezogen */}
         <label style={styles.label} htmlFor="zusaetzlicheInfos">Zusätzliche Infos</label>
         <textarea
           id="zusaetzlicheInfos"
@@ -316,6 +367,7 @@ export default function TaskEditModal({
   const PathForm = (
     <div style={styles.section}>
       <h3 style={styles.sectionTitle}>Dateipfad</h3>
+
       <label style={styles.label} htmlFor="dateipfad">Unterordner gegenüber Basis</label>
       <div style={{ display: "flex", gap: 8 }}>
         <input
@@ -323,8 +375,9 @@ export default function TaskEditModal({
           type="text"
           style={{ ...styles.input, flex: 1 }}
           value={form.dateipfad}
-          onChange={(e) => setValue("dateipfad", e.target.value)}
+          onChange={(e) => setValue("dateipfad", e.target.value.replaceAll("\\", "/"))}
           disabled={submitting}
+          placeholder="z. B. Kunde/Projekt/Teil"
         />
         <button
           type="button"
@@ -351,8 +404,48 @@ export default function TaskEditModal({
           Prüfen
         </button>
       </div>
-      <div style={{ marginTop: 8, color: "#9ca3af", fontSize: 12 }}>
-        Hinweis: Basispräfix wird serverseitig konfiguriert (z. B. <code>\\\\server\\share\\</code>). Hier nur den Unterordner wählen/eintragen.
+
+      {/* Info: Voller Pfad zur Orientierung (rein optisch, aus Server-Config) */}
+      {(baseLabel || DEFAULT_BASE_LABEL) && (
+        <div style={{ marginTop: 8, ...styles.muted }}>
+          Voller Pfad (Info):{" "}
+          <code>{joinBaseAndSub(baseLabel || DEFAULT_BASE_LABEL, form.dateipfad?.replaceAll("\\", "/"))}</code>
+        </div>
+      )}
+
+      {/* Breadcrumbs */}
+      <div aria-label="Pfad-Navigation" style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginTop: 10 }}>
+        {/* Basis als erster Crumb */}
+        <span>
+          <button
+            type="button"
+            onClick={() => setValue("dateipfad", "")}
+            title={baseLabel || DEFAULT_BASE_LABEL}
+            style={styles.crumbBtn}
+            disabled={submitting}
+          >
+            Basis
+          </button>
+        </span>
+        {breadcrumbs.length > 0 && <span style={styles.crumbSep}>/</span>}
+        {breadcrumbs.map((b, idx) => (
+          <span key={b.sub} style={{ display: "inline-flex", alignItems: "center" }}>
+            <button
+              type="button"
+              onClick={() => setValue("dateipfad", b.sub)}
+              title={joinBaseAndSub(baseLabel || DEFAULT_BASE_LABEL, b.sub)}
+              style={styles.crumbBtn}
+              disabled={submitting}
+            >
+              {b.label}
+            </button>
+            {idx < breadcrumbs.length - 1 && <span style={styles.crumbSep}>/</span>}
+          </span>
+        ))}
+      </div>
+
+      <div style={{ marginTop: 8, ...styles.muted }}>
+        Hinweis: Basispräfix wird serverseitig konfiguriert (z. B. <code>\\\\server\\share\\</code>). Hier nur den <em>Unterordner</em> wählen/eintragen.
       </div>
     </div>
   );
@@ -415,12 +508,12 @@ export default function TaskEditModal({
         <FolderPickerModal
           initialSub={form.dateipfad || ""}
           onSelect={(sub) => {
-            setValue("dateipfad", sub);
+            setValue("dateipfad", sub?.replaceAll("\\", "/") || "");
             setShowFolderPicker(false);
           }}
           onClose={() => setShowFolderPicker(false)}
           title="Unterordner wählen"
-          baseLabel="\\\\server\\share\\"
+          baseLabel={baseLabel || DEFAULT_BASE_LABEL}
         />
       )}
     </div>

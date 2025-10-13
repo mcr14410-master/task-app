@@ -30,6 +30,19 @@ const styles = {
 
 const STATUS_ORDER = ['NEU', 'TO_DO', 'IN_BEARBEITUNG', 'FERTIG'];
 
+// Fallback nur für Anzeige, falls Server nichts liefert
+const DEFAULT_BASE_LABEL = "\\\\server\\share\\";
+
+// Anzeige-Helfer: Base + Sub hübsch zusammensetzen (nur optisch)
+function joinBaseAndSub(base, sub) {
+  if (!base) return sub || "";
+  const hasBackslashBase = base.includes("\\") && !base.includes("/");
+  const cleanBase = base.replace(/[/\\]+$/, ""); // trailing Slash weg
+  if (!sub) return cleanBase;
+  const sep = hasBackslashBase ? "\\" : "/";
+  return `${cleanBase}${sep}${sub}`;
+}
+
 export default function TaskCreationModal({ stations = [], onTaskCreated, onClose }) {
   const toast = useToast();
   const defaultStationName = useMemo(() => (stations[0]?.name ?? ''), [stations]);
@@ -55,6 +68,17 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
 
   // Folder Picker
   const [showFolderPicker, setShowFolderPicker] = useState(false);
+
+  // Neu: echten Base-Pfad für Anzeige vom Server holen
+  const [baseLabel, setBaseLabel] = useState("");
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/fs/base-label")
+      .then(r => (r.ok ? r.json() : Promise.reject(r)))
+      .then(d => { if (!cancelled) setBaseLabel(String(d?.baseLabel || "")); })
+      .catch(() => { /* Anzeige optional – leise ignorieren */ });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     setForm(f => ({ ...f, arbeitsstation: f.arbeitsstation || defaultStationName }));
@@ -93,7 +117,7 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
       fai: !!form.fai, qs: !!form.qs, prioritaet: 9999,
       stk: Number.isFinite(Number(form.stk)) ? Number(form.stk) : undefined,
       fa: sanitize(form.fa),
-      dateipfad: sanitize(form.dateipfad)
+      dateipfad: sanitize(form.dateipfad) // nur Subpfad
     };
     Object.keys(payload).forEach(k => { if (payload[k] == null) delete payload[k]; });
     return payload;
@@ -264,19 +288,40 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
       <h3 style={styles.sectionTitle}>Dateipfad</h3>
       <label style={styles.label} htmlFor="dateipfad">Unterordner (relativ zur Basis)</label>
       <div style={{display:'flex', gap:8}}>
-        <input id="dateipfad" type="text" style={{...styles.input, flex:1}}
-               value={form.dateipfad || ''} onChange={(e)=>setValue('dateipfad', e.target.value)} disabled={submitting}/>
-        <button type="button" style={styles.btnSecondary} onClick={()=>setShowFolderPicker(true)} disabled={submitting}>Ordner wählen…</button>
-        <button type="button" style={styles.btnSecondary} onClick={async ()=>{
-          try{
-            const r = await fsExists(form.dateipfad || "");
-            if (r?.exists) { toast.success("Pfad vorhanden"); } else { toast.error("Pfad existiert nicht"); }
-          }catch{ toast.error("Prüfung fehlgeschlagen"); }
-        }} disabled={submitting}>Prüfen</button>
+        <input
+          id="dateipfad"
+          type="text"
+          style={{...styles.input, flex:1}}
+          value={form.dateipfad || ''}
+          onChange={(e)=>setValue('dateipfad', e.target.value.replaceAll("\\","/"))}
+          disabled={submitting}
+          placeholder="z. B. Kunde/Projekt/Teil"
+        />
+        <button type="button" style={styles.btnSecondary} onClick={()=>setShowFolderPicker(true)} disabled={submitting}>
+          Ordner wählen…
+        </button>
+        <button
+          type="button"
+          style={styles.btnSecondary}
+          onClick={async ()=>{
+            try{
+              const r = await fsExists(form.dateipfad || "");
+              if (r?.exists) { toast.success("Pfad vorhanden"); } else { toast.error("Pfad existiert nicht"); }
+            }catch{ toast.error("Prüfung fehlgeschlagen"); }
+          }}
+          disabled={submitting}
+        >
+          Prüfen
+        </button>
       </div>
-      <div style={{marginTop:8, color:'#9ca3af', fontSize:12}}>
-        Basis (Server): <code>\\server\share\</code> — gespeichert wird nur der Unterordner.
-      </div>
+
+      {/* Info: Voller Pfad zur Orientierung (rein optisch, aus Server-Config) */}
+      {(baseLabel || DEFAULT_BASE_LABEL) && (
+        <div style={{marginTop:8, color:'#9ca3af', fontSize:12}}>
+          Voller Pfad (Info):{" "}
+          <code>{joinBaseAndSub(baseLabel || DEFAULT_BASE_LABEL, (form.dateipfad || '').replaceAll("\\","/"))}</code>
+        </div>
+      )}
     </div>
   );
 
@@ -359,10 +404,10 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
       {showFolderPicker && (
         <FolderPickerModal
           initialSub={form.dateipfad || ""}
-          onSelect={(sub) => { setValue("dateipfad", sub); setShowFolderPicker(false); }}
+          onSelect={(sub) => { setValue("dateipfad", (sub || "").replaceAll("\\","/")); setShowFolderPicker(false); }}
           onClose={() => setShowFolderPicker(false)}
           title="Unterordner wählen"
-          baseLabel="\\\\server\\share\\"
+          baseLabel={baseLabel || DEFAULT_BASE_LABEL}
         />
       )}
     </div>

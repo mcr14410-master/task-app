@@ -3,6 +3,7 @@ package com.pp.taskmanagementbackend.controller;
 import com.pp.taskmanagementbackend.service.FilePickerService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -17,6 +18,15 @@ public class FilePickerController {
     public FilePickerController(FilePickerService service) {
         this.service = service;
         log.info("FilePicker aktiv. Base: {}", service.getBase());
+    }
+    
+    @Value("${filepicker.base-path}")
+    private String basePath;
+
+    @GetMapping("/base-label")
+    public Map<String, String> getBaseLabel() {
+      // Nur Anzeigezweck. Keine Rechteprüfung nötig, da es rein statisch aus config kommt.
+      return Map.of("baseLabel", basePath);
     }
 
     @GetMapping("/subfolders")
