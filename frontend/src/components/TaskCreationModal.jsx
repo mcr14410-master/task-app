@@ -46,11 +46,11 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
 
-  // Tabs: "visualActiveTab" = welcher Tab-Button aktiv; "shownTab" = welcher Inhalt angezeigt.
-  const [visualActiveTab, setVisualActiveTab] = useState("details");
-  const [shownTab, setShownTab] = useState("details");
+  // Tabs
+  const [visualActiveTab, setVisualActiveTab] = useState("details"); // welcher Tab-Button ist aktiv markiert
+  const [shownTab, setShownTab] = useState("details");               // welcher Inhalt wird angezeigt
 
-  // Nach dem ersten Speichern (Erstellen) verfügbar
+  // Nach erstem Erstellen ⇒ Anhänge freischalten
   const [createdTaskId, setCreatedTaskId] = useState(null);
 
   // Folder Picker
@@ -92,7 +92,8 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
       status: sanitize(form.status) ?? 'NEU',
       fai: !!form.fai, qs: !!form.qs, prioritaet: 9999,
       stk: Number.isFinite(Number(form.stk)) ? Number(form.stk) : undefined,
-      fa: sanitize(form.fa), dateipfad: sanitize(form.dateipfad)
+      fa: sanitize(form.fa),
+      dateipfad: sanitize(form.dateipfad)
     };
     Object.keys(payload).forEach(k => { if (payload[k] == null) delete payload[k]; });
     return payload;
@@ -107,11 +108,10 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
 
   const doCreate = async () => {
     const payload = buildPayload();
-    // Erwartet: Backend gibt das erstellte Task-DTO zurück
-    return apiPost("/tasks", payload);
+    return apiPost("/tasks", payload); // Backend liefert das erstellte DTO zurück
   };
 
-  // Schließen-Variante (wie gehabt)
+  // 1) Erstellen & schließen (wie gehabt)
   const handleCreateClose = async () => {
     setErrorMsg(null);
     const v = validate(); if (v) { setErrorMsg(v); return; }
@@ -119,7 +119,7 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
     try {
       await doCreate();
       toast.success("Aufgabe erstellt");
-      onTaskCreated?.();          // parent darf schließen/refreshen
+      onTaskCreated?.();
       onClose?.();
     } catch (err) {
       const msg = apiErrorMessage(err);
@@ -128,8 +128,7 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
     } finally { setSubmitting(false); }
   };
 
-  // Bleibt offen: NICHT onClose, NICHT onTaskCreated (damit parent nichts schließt)
-  // Markiert nur den Anhänge-Tab als aktivierbar + optisch aktiv, Inhalt bleibt „Details“.
+  // 2) Erstellen (bleiben) — Modal bleibt offen; Anhänge-Tab wird nur aktiv markiert
   const handleCreateStay = async () => {
     if (submitting) return;
     setErrorMsg(null);
@@ -144,10 +143,8 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
         setCreatedTaskId(newId);
       }
       toast.success("Aufgabe erstellt — Anhänge-Tab jetzt verfügbar");
-      // Tab optisch auf "attachments" schalten, Inhalt bleibt Details
-      setVisualActiveTab("attachments");
-      setShownTab("details");
-      // WICHTIG: KEIN onTaskCreated, KEIN onClose → Modal bleibt offen
+      setVisualActiveTab("attachments"); // optisch aktiv
+      setShownTab("details");            // angezeigter Inhalt bleibt Details
     } catch (err) {
       const msg = apiErrorMessage(err);
       setErrorMsg(msg);
@@ -155,6 +152,7 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
     } finally { setSubmitting(false); }
   };
 
+  // 3) Erstellen & Neu — Modal bleibt offen, Formular geleert
   const handleCreateAndNew = async () => {
     if (submitting) return;
     setErrorMsg(null);
@@ -163,9 +161,8 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
     try {
       await doCreate();
       toast.success("Aufgabe erstellt");
-      // Formular leeren & Tabs zurücksetzen, Modal bleibt offen
       resetForm();
-      onTaskCreated?.(); // Liste im Hintergrund darf aktualisiert werden (optional)
+      onTaskCreated?.(); // Liste darf neu laden
     } catch (err) {
       const msg = apiErrorMessage(err);
       setErrorMsg(msg);
@@ -173,6 +170,7 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
     } finally { setSubmitting(false); }
   };
 
+  // --- Tab-Inhalte ---
   const DetailsForm = (
     <>
       <div style={styles.section}>
@@ -253,22 +251,33 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
 
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>Beschreibung</h3>
-        <label style={styles.label} htmlFor="dateipfad">Dateipfad (Unterordner gegenüber Basis)</label>
-        <div style={{display:'flex', gap:8}}>
-          <input id="dateipfad" type="text" style={{...styles.input, flex:1}} value={form.dateipfad || ''} onChange={(e)=>setValue('dateipfad', e.target.value)} disabled={submitting}/>
-          <button type="button" style={styles.btnSecondary} onClick={()=>setShowFolderPicker(true)} disabled={submitting}>Ordner wählen…</button>
-          <button type="button" style={styles.btnSecondary} onClick={async ()=>{
-            try{
-              const r = await fsExists(form.dateipfad || "");
-              if (r?.exists) { toast.success("Pfad vorhanden"); } else { toast.error("Pfad existiert nicht"); }
-            }catch{ toast.error("Prüfung fehlgeschlagen"); }
-          }} disabled={submitting}>Prüfen</button>
-        </div>
-        <div style={{ height: 10 }} />
         <label style={styles.label} htmlFor="zusätzlicheInfos">Zusätzliche Infos</label>
-        <textarea id="zusätzlicheInfos" style={{ ...styles.input, ...styles.textarea }} value={form.zusätzlicheInfos || ''} onChange={(e)=>setValue('zusätzlicheInfos', e.target.value)} disabled={submitting} placeholder="Optional: Kurzbeschreibung" />
+        <textarea id="zusätzlicheInfos" style={{ ...styles.input, ...styles.textarea }}
+                  value={form.zusätzlicheInfos || ''} onChange={(e)=>setValue('zusätzlicheInfos', e.target.value)}
+                  disabled={submitting} placeholder="Optional: Kurzbeschreibung" />
       </div>
     </>
+  );
+
+  const PathForm = (
+    <div style={styles.section}>
+      <h3 style={styles.sectionTitle}>Dateipfad</h3>
+      <label style={styles.label} htmlFor="dateipfad">Unterordner (relativ zur Basis)</label>
+      <div style={{display:'flex', gap:8}}>
+        <input id="dateipfad" type="text" style={{...styles.input, flex:1}}
+               value={form.dateipfad || ''} onChange={(e)=>setValue('dateipfad', e.target.value)} disabled={submitting}/>
+        <button type="button" style={styles.btnSecondary} onClick={()=>setShowFolderPicker(true)} disabled={submitting}>Ordner wählen…</button>
+        <button type="button" style={styles.btnSecondary} onClick={async ()=>{
+          try{
+            const r = await fsExists(form.dateipfad || "");
+            if (r?.exists) { toast.success("Pfad vorhanden"); } else { toast.error("Pfad existiert nicht"); }
+          }catch{ toast.error("Prüfung fehlgeschlagen"); }
+        }} disabled={submitting}>Prüfen</button>
+      </div>
+      <div style={{marginTop:8, color:'#9ca3af', fontSize:12}}>
+        Basis (Server): <code>\\server\share\</code> — gespeichert wird nur der Unterordner.
+      </div>
+    </div>
   );
 
   const tabs = (
@@ -277,6 +286,12 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
               style={styles.tabBtn(visualActiveTab==='details')}
               onClick={() => { setVisualActiveTab('details'); setShownTab('details'); }}>
         Details
+      </button>
+
+      <button type="button"
+              style={styles.tabBtn(visualActiveTab==='path')}
+              onClick={() => { setVisualActiveTab('path'); setShownTab('path'); }}>
+        Pfad
       </button>
 
       <button type="button"
@@ -301,6 +316,8 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
 
         {shownTab === 'details' ? (
           DetailsForm
+        ) : shownTab === 'path' ? (
+          PathForm
         ) : (
           <div style={styles.section}>
             <h3 style={styles.sectionTitle}>Anhänge</h3>
@@ -319,20 +336,16 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
         ) : null}
 
         <div style={styles.footer}>
-          {/* Linksbündig: Zurücksetzen */}
           <div>
             <button type="button" style={styles.btnSecondary} onClick={resetForm} disabled={submitting}>
               Zurücksetzen
             </button>
           </div>
-
-          {/* Rechts: Aktions-Buttons */}
           <div style={{ display:'flex', gap:8 }}>
             <button type="button" style={styles.btnSecondary} onClick={onClose} disabled={submitting}>Abbrechen</button>
             <button type="button" style={styles.btnSecondary} onClick={handleCreateAndNew} disabled={submitting}>
               {submitting ? '…' : 'Erstellen & Neu'}
             </button>
-            {/* Umbenannt & bleibt offen */}
             <button type="button" style={styles.btnSecondary} onClick={handleCreateStay} disabled={submitting}>
               {submitting ? '…' : 'Erstellen'}
             </button>
