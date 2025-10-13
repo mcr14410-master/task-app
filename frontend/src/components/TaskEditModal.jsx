@@ -5,6 +5,8 @@ import "../config/AdditionalWorkTheme.css";
 import useToast from "@/components/ui/useToast";
 import FolderPickerModal from "./FolderPickerModal";
 import { fsExists } from "@/api/fsApi";
+import AttachmentTab from "./AttachmentTab";
+
 
 const styles = {
   overlay: { position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000 },
@@ -356,23 +358,45 @@ export default function TaskEditModal({
           </button>
         </div>
 
-        <div style={styles.tabsRow}>
-          <button type="button" style={styles.tabBtn(activeTab === "details")} onClick={() => setActiveTab("details")}>
-            Details
-          </button>
-          <button type="button" style={styles.tabBtn(activeTab === "attachments")} onClick={() => setActiveTab("attachments")}>
-            Anhänge
-          </button>
-        </div>
+		<div style={styles.tabsRow}>
+		  <button
+		    type="button"
+		    style={styles.tabBtn(activeTab === "details")}
+		    onClick={() => setActiveTab("details")}
+		  >
+		    Details
+		  </button>
+		  <button
+		    type="button"
+		    style={styles.tabBtn(activeTab === "attachments")}
+		    onClick={() => setActiveTab("attachments")}
+		  >
+		    Anhänge
+		  </button>
+		</div>
 
-        {activeTab === "details" ? (
-          DetailsForm
-        ) : (
-          <div style={styles.section}>
-            <h3 style={styles.sectionTitle}>Anhänge</h3>
-            <div style={{ color: "#9ca3af" }}>Anhänge-Tab wie gehabt (deine bestehende Komponente einhängen).</div>
-          </div>
-        )}
+		{activeTab === "details" ? (
+		  DetailsForm
+		) : (
+		  // === Anhänge-Panel (Design bleibt: dieselben Container-Styles) ===
+		  <div style={styles.section}>
+		    <h3 style={styles.sectionTitle}>Anhänge</h3>
+
+		    {/* Falls der Task noch keine ID hat (Neuanlage vor dem Speichern), zeigen wir nur
+		        einen neutralen Hinweis – keine Styles verändert */}
+		    {!task?.id ? (
+		      <div style={{ color: "#9ca3af" }}>
+		        Bitte zuerst speichern. Anhänge sind erst für bestehende Tasks verfügbar.
+		      </div>
+		    ) : (
+		      // Deine bestehende Komponente – ohne Styleänderungen
+		      <AttachmentTab taskId={task.id} />
+		      // Wenn du einen Toast/Notifier durchreichen willst:
+		      // <AttachmentTab taskId={task.id} toast={toast} />
+		    )}
+		  </div>
+		)}
+
 
         <div style={styles.footer}>
           <button type="button" style={styles.btnDanger} onClick={handleDelete} disabled={submitting}>
