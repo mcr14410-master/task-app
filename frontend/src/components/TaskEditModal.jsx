@@ -7,7 +7,6 @@ import FolderPickerModal from "./FolderPickerModal";
 import { fsExists } from "@/api/fsApi";
 import AttachmentTab from "./AttachmentTab";
 
-
 const styles = {
   overlay: { position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000 },
   modal: { backgroundColor: "#0f172a", color: "#e5e7eb", padding: "22px 24px", borderRadius: 12, width: 720, maxWidth: "96vw", maxHeight: "88vh", overflowY: "auto", border: "1px solid #1f2937", boxShadow: "0 24px 64px rgba(0,0,0,.5)" },
@@ -43,7 +42,6 @@ export default function TaskEditModal({
   const [submitting, setSubmitting] = useState(false);
   const [showFolderPicker, setShowFolderPicker] = useState(false);
 
-  // KEINE Umlaute in Keys; alle Felder initialisiert => kontrollierte Inputs
   const [form, setForm] = useState(() => ({
     id: task?.id ?? null,
     bezeichnung: task?.bezeichnung ?? "",
@@ -301,40 +299,7 @@ export default function TaskEditModal({
 
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>Beschreibung</h3>
-        <label style={styles.label} htmlFor="dateipfad">Dateipfad (Unterordner gegenüber Basis)</label>
-        <div style={{ display: "flex", gap: 8 }}>
-          <input
-            id="dateipfad"
-            type="text"
-            style={{ ...styles.input, flex: 1 }}
-            value={form.dateipfad}
-            onChange={(e) => setValue("dateipfad", e.target.value)}
-            disabled={submitting}
-          />
-          <button type="button" style={styles.btnSecondary} onClick={() => setShowFolderPicker(true)} disabled={submitting}>
-            Ordner wählen…
-          </button>
-          <button
-            type="button"
-            style={styles.btnSecondary}
-            onClick={async () => {
-              try {
-                const r = await fsExists(form.dateipfad || "");
-                if (r?.exists) {
-                  toast.success("Pfad vorhanden");
-                } else {
-                  toast.error("Pfad existiert nicht");
-                }
-              } catch {
-                toast.error("Prüfung fehlgeschlagen");
-              }
-            }}
-            disabled={submitting}
-          >
-            Prüfen
-          </button>
-        </div>
-        <div style={{ height: 10 }} />
+        {/* Dateipfad ist in den Tab „Pfad“ umgezogen */}
         <label style={styles.label} htmlFor="zusaetzlicheInfos">Zusätzliche Infos</label>
         <textarea
           id="zusaetzlicheInfos"
@@ -348,6 +313,50 @@ export default function TaskEditModal({
     </>
   );
 
+  const PathForm = (
+    <div style={styles.section}>
+      <h3 style={styles.sectionTitle}>Dateipfad</h3>
+      <label style={styles.label} htmlFor="dateipfad">Unterordner gegenüber Basis</label>
+      <div style={{ display: "flex", gap: 8 }}>
+        <input
+          id="dateipfad"
+          type="text"
+          style={{ ...styles.input, flex: 1 }}
+          value={form.dateipfad}
+          onChange={(e) => setValue("dateipfad", e.target.value)}
+          disabled={submitting}
+        />
+        <button
+          type="button"
+          style={styles.btnSecondary}
+          onClick={() => setShowFolderPicker(true)}
+          disabled={submitting}
+        >
+          Ordner wählen…
+        </button>
+        <button
+          type="button"
+          style={styles.btnSecondary}
+          onClick={async () => {
+            try {
+              const r = await fsExists(form.dateipfad || "");
+              if (r?.exists) toast.success("Pfad vorhanden");
+              else toast.error("Pfad existiert nicht");
+            } catch {
+              toast.error("Prüfung fehlgeschlagen");
+            }
+          }}
+          disabled={submitting}
+        >
+          Prüfen
+        </button>
+      </div>
+      <div style={{ marginTop: 8, color: "#9ca3af", fontSize: 12 }}>
+        Hinweis: Basispräfix wird serverseitig konfiguriert (z. B. <code>\\\\server\\share\\</code>). Hier nur den Unterordner wählen/eintragen.
+      </div>
+    </div>
+  );
+
   return (
     <div style={styles.overlay} onClick={onClose}>
       <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
@@ -358,45 +367,34 @@ export default function TaskEditModal({
           </button>
         </div>
 
-		<div style={styles.tabsRow}>
-		  <button
-		    type="button"
-		    style={styles.tabBtn(activeTab === "details")}
-		    onClick={() => setActiveTab("details")}
-		  >
-		    Details
-		  </button>
-		  <button
-		    type="button"
-		    style={styles.tabBtn(activeTab === "attachments")}
-		    onClick={() => setActiveTab("attachments")}
-		  >
-		    Anhänge
-		  </button>
-		</div>
+        <div style={styles.tabsRow}>
+          <button type="button" style={styles.tabBtn(activeTab === "details")} onClick={() => setActiveTab("details")}>
+            Details
+          </button>
+          <button type="button" style={styles.tabBtn(activeTab === "path")} onClick={() => setActiveTab("path")}>
+            Pfad
+          </button>
+          <button type="button" style={styles.tabBtn(activeTab === "attachments")} onClick={() => setActiveTab("attachments")}>
+            Anhänge
+          </button>
+        </div>
 
-		{activeTab === "details" ? (
-		  DetailsForm
-		) : (
-		  // === Anhänge-Panel (Design bleibt: dieselben Container-Styles) ===
-		  <div style={styles.section}>
-		    <h3 style={styles.sectionTitle}>Anhänge</h3>
-
-		    {/* Falls der Task noch keine ID hat (Neuanlage vor dem Speichern), zeigen wir nur
-		        einen neutralen Hinweis – keine Styles verändert */}
-		    {!task?.id ? (
-		      <div style={{ color: "#9ca3af" }}>
-		        Bitte zuerst speichern. Anhänge sind erst für bestehende Tasks verfügbar.
-		      </div>
-		    ) : (
-		      // Deine bestehende Komponente – ohne Styleänderungen
-		      <AttachmentTab taskId={task.id} />
-		      // Wenn du einen Toast/Notifier durchreichen willst:
-		      // <AttachmentTab taskId={task.id} toast={toast} />
-		    )}
-		  </div>
-		)}
-
+        {activeTab === "details" ? (
+          DetailsForm
+        ) : activeTab === "path" ? (
+          PathForm
+        ) : (
+          <div style={styles.section}>
+            <h3 style={styles.sectionTitle}>Anhänge</h3>
+            {!task?.id ? (
+              <div style={{ color: "#9ca3af" }}>
+                Bitte zuerst speichern. Anhänge sind erst für bestehende Tasks verfügbar.
+              </div>
+            ) : (
+              <AttachmentTab taskId={task.id} />
+            )}
+          </div>
+        )}
 
         <div style={styles.footer}>
           <button type="button" style={styles.btnDanger} onClick={handleDelete} disabled={submitting}>
