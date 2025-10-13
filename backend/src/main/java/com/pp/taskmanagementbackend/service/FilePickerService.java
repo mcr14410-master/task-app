@@ -13,7 +13,7 @@ public class FilePickerService {
     private final Path base;
 
     public FilePickerService(
-            @Value("${filepicker.base:}") String baseDirFallback,
+            @Value("${filepicker.base-path:}") String baseDirFallback,
             @Value("${attachments.base-path:}") String attachmentsBase // falls du das als Fallback willst
     ) {
         String root = (baseDirFallback != null && !baseDirFallback.isBlank())
