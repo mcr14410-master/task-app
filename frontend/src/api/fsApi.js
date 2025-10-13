@@ -1,7 +1,20 @@
 // frontend/src/api/fsApi.js
 import { apiGet, apiPost, apiDelete } from "@/config/apiClient";
 
-// Liefert IMMER ein Array von Ordnernamen (normalisiert)
+/**
+ * Liefert den absoluten Basis-Pfad als Label-String.
+ * Erwartet vom Backend: { label: "<voller Pfad>" }
+ */
+export async function fsBaseLabel() {
+  const res = await apiGet(`/fs/base-label`);
+  return res?.label || "";
+}
+
+/**
+ * Liefert IMMER ein Array von Ordnernamen (relativ zum aktuellen sub).
+ * Backend akzeptiert optional ?sub=
+ * Backend kann entweder { folders: [...] } oder direkt [ ... ] zurückgeben.
+ */
 export async function fsSubfolders(sub = "") {
   const qs = new URLSearchParams();
   if (sub) qs.set("sub", sub);
@@ -11,6 +24,10 @@ export async function fsSubfolders(sub = "") {
   return [];
 }
 
+/**
+ * Existenz-Check des Ordners ?sub=...
+ * Erwartet vom Backend: { exists: boolean }
+ */
 export async function fsExists(sub = "") {
   const qs = new URLSearchParams();
   if (sub) qs.set("sub", sub);
@@ -18,6 +35,10 @@ export async function fsExists(sub = "") {
   return !!res?.exists;
 }
 
+/**
+ * Legt unterhalb von ?sub= einen neuen Ordner ?name= an.
+ * Backend: POST /fs/mkdir -> 204 No Content
+ */
 export async function fsMkdir(sub = "", name) {
   const qs = new URLSearchParams();
   if (sub) qs.set("sub", sub);
@@ -25,6 +46,10 @@ export async function fsMkdir(sub = "", name) {
   return apiPost(`/fs/mkdir?${qs.toString()}`);
 }
 
+/**
+ * Benennt unterhalb von ?sub= einen Ordner von ?from= nach ?to= um.
+ * Backend: POST /fs/rename -> 204 No Content
+ */
 export async function fsRename(sub = "", from, to) {
   const qs = new URLSearchParams();
   if (sub) qs.set("sub", sub);
@@ -33,7 +58,10 @@ export async function fsRename(sub = "", from, to) {
   return apiPost(`/fs/rename?${qs.toString()}`);
 }
 
-// ACHTUNG: Dein Controller heißt /empty (nicht /is-empty)
+/**
+ * Prüft, ob der Ordner <sub>/<name> leer ist.
+ * Erwartet vom Backend: { empty: boolean }
+ */
 export async function fsIsEmpty(sub = "", name) {
   const qs = new URLSearchParams();
   if (sub) qs.set("sub", sub);
@@ -42,7 +70,10 @@ export async function fsIsEmpty(sub = "", name) {
   return { empty: !!res?.empty };
 }
 
-// Dein Controller nutzt DELETE /rmdir
+/**
+ * Löscht den Ordner <sub>/<name>, nur wenn leer.
+ * Backend: DELETE /fs/rmdir -> 204 No Content
+ */
 export async function fsRmdir(sub = "", name) {
   const qs = new URLSearchParams();
   if (sub) qs.set("sub", sub);

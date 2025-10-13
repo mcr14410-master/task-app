@@ -1,3 +1,4 @@
+// components/TaskCreationModal.jsx
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { apiPost } from "@/config/apiClient";
 import '../config/TaskStatusTheme.css';
@@ -5,7 +6,7 @@ import '../config/AdditionalWorkTheme.css';
 import useToast from "@/components/ui/useToast";
 import apiErrorMessage from "@/utils/apiErrorMessage";
 import FolderPickerModal from "./FolderPickerModal";
-import { fsExists } from "@/api/fsApi";
+import { fsExists, fsBaseLabel } from "@/api/fsApi";
 import AttachmentTab from "./AttachmentTab";
 
 const styles = {
@@ -37,7 +38,7 @@ const DEFAULT_BASE_LABEL = "\\\\server\\share\\";
 function joinBaseAndSub(base, sub) {
   if (!base) return sub || "";
   const hasBackslashBase = base.includes("\\") && !base.includes("/");
-  const cleanBase = base.replace(/[/\\]+$/, ""); // trailing Slash weg
+  const cleanBase = base.replace(/[/\\]+$/, "");
   if (!sub) return cleanBase;
   const sep = hasBackslashBase ? "\\" : "/";
   return `${cleanBase}${sep}${sub}`;
@@ -60,8 +61,8 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
   const [errorMsg, setErrorMsg] = useState(null);
 
   // Tabs
-  const [visualActiveTab, setVisualActiveTab] = useState("details"); // welcher Tab-Button ist aktiv markiert
-  const [shownTab, setShownTab] = useState("details");               // welcher Inhalt wird angezeigt
+  const [visualActiveTab, setVisualActiveTab] = useState("details");
+  const [shownTab, setShownTab] = useState("details");
 
   // Nach erstem Erstellen ⇒ Anhänge freischalten
   const [createdTaskId, setCreatedTaskId] = useState(null);
@@ -69,14 +70,18 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
   // Folder Picker
   const [showFolderPicker, setShowFolderPicker] = useState(false);
 
-  // Neu: echten Base-Pfad für Anzeige vom Server holen
+  // Echten Base-Pfad für Anzeige vom Server holen (über fsApi)
   const [baseLabel, setBaseLabel] = useState("");
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/fs/base-label")
-      .then(r => (r.ok ? r.json() : Promise.reject(r)))
-      .then(d => { if (!cancelled) setBaseLabel(String(d?.baseLabel || "")); })
-      .catch(() => { /* Anzeige optional – leise ignorieren */ });
+    (async () => {
+      try {
+        const label = await fsBaseLabel();
+        if (!cancelled) setBaseLabel(label);
+      } catch {
+        // optional, Anzeige-Feature – ignorieren
+      }
+    })();
     return () => { cancelled = true; };
   }, []);
 
@@ -132,10 +137,9 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
 
   const doCreate = async () => {
     const payload = buildPayload();
-    return apiPost("/tasks", payload); // Backend liefert das erstellte DTO zurück
+    return apiPost("/tasks", payload);
   };
 
-  // 1) Erstellen & schließen (wie gehabt)
   const handleCreateClose = async () => {
     setErrorMsg(null);
     const v = validate(); if (v) { setErrorMsg(v); return; }
@@ -152,7 +156,6 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
     } finally { setSubmitting(false); }
   };
 
-  // 2) Erstellen (bleiben) — Modal bleibt offen; Anhänge-Tab wird nur aktiv markiert
   const handleCreateStay = async () => {
     if (submitting) return;
     setErrorMsg(null);
@@ -161,14 +164,10 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
     try {
       const created = await doCreate();
       const newId = created?.id ?? created?.taskId ?? null;
-      if (newId == null) {
-        toast.error("Erstellt, aber keine ID erhalten");
-      } else {
-        setCreatedTaskId(newId);
-      }
+      if (newId != null) setCreatedTaskId(newId); else toast.error("Erstellt, aber keine ID erhalten");
       toast.success("Aufgabe erstellt — Anhänge-Tab jetzt verfügbar");
-      setVisualActiveTab("attachments"); // optisch aktiv
-      setShownTab("details");            // angezeigter Inhalt bleibt Details
+      setVisualActiveTab("attachments");
+      setShownTab("details");
     } catch (err) {
       const msg = apiErrorMessage(err);
       setErrorMsg(msg);
@@ -176,7 +175,6 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
     } finally { setSubmitting(false); }
   };
 
-  // 3) Erstellen & Neu — Modal bleibt offen, Formular geleert
   const handleCreateAndNew = async () => {
     if (submitting) return;
     setErrorMsg(null);
@@ -186,7 +184,7 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
       await doCreate();
       toast.success("Aufgabe erstellt");
       resetForm();
-      onTaskCreated?.(); // Liste darf neu laden
+      onTaskCreated?.();
     } catch (err) {
       const msg = apiErrorMessage(err);
       setErrorMsg(msg);
@@ -194,7 +192,6 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
     } finally { setSubmitting(false); }
   };
 
-  // --- Tab-Inhalte ---
   const DetailsForm = (
     <>
       <div style={styles.section}>
@@ -305,8 +302,8 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
           style={styles.btnSecondary}
           onClick={async ()=>{
             try{
-              const r = await fsExists(form.dateipfad || "");
-              if (r?.exists) { toast.success("Pfad vorhanden"); } else { toast.error("Pfad existiert nicht"); }
+              const exists = await fsExists(form.dateipfad || "");
+              if (exists) { toast.success("Pfad vorhanden"); } else { toast.error("Pfad existiert nicht"); }
             }catch{ toast.error("Prüfung fehlgeschlagen"); }
           }}
           disabled={submitting}
@@ -315,7 +312,6 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
         </button>
       </div>
 
-      {/* Info: Voller Pfad zur Orientierung (rein optisch, aus Server-Config) */}
       {(baseLabel || DEFAULT_BASE_LABEL) && (
         <div style={{marginTop:8, color:'#9ca3af', fontSize:12}}>
           Voller Pfad (Info):{" "}
