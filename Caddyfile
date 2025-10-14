@@ -2,12 +2,11 @@
   root * /srv/frontend
   file_server
 
-  # Alles unter /api an das Backend weiterreichen
-  handle_path /api/* {
+  # Prefix NICHT strippen:
+  handle /api/* {
     reverse_proxy backend:8080
   }
 
-  # Optional: 10 Minuten Cache für statische Assets
   @assets {
     path *.js *.css *.png *.jpg *.jpeg *.gif *.svg *.ico *.webp *.woff *.woff2
   }
