@@ -1,11 +1,30 @@
+
+
 # Changelog
-All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.6.0] - 2025-10-14
+### Added
+- FolderPicker: Inline-Heroicons (Home/Up), kompakte Action-Leiste in der Liste, Breadcrumbs mit Klick-Navigation.
+- Health-Check `/api/fs/health` (lokal im FolderPicker verwendet).
+- Backend-Endpoint `/api/fs/base-label` zur Anzeige des echten Basis-Pfads.
+- Rename-API `/api/fs/rename` (Service + Controller).
 
-## [Unreleased]
-- _Place upcoming changes here_
+### Changed
+- FilePicker → FolderPicker (Service + Controller) mit gestrafften Routen: `/api/fs/subfolders|exists|mkdir|empty|rmdir|rename|base-label|health`.
+- `exists`-Response auf `{ "exists": boolean }` harmonisiert, `empty` auf `{ "empty": boolean }`.
+- Frontend `fsApi.js`: konsolidierte Calls, Nutzung von `VITE_API_BASE`, Korrektur der Response-Shapes.
+- TaskEditModal / TaskCreationModal: echte Basis-Pfad-Anzeige (Server-Label), Pfadprüfung via `fsExists`.
+- UI-Politur: Dezentere Layouts, klare Buttons, „Löschen nur wenn leer“–Logik konsistent.
+
+### Fixed
+- Path Traversal Absicherung im Service (`startsWith(base)`), valide Ordnernamenprüfung.
+- 404 auf `/api/fs/base-label` (fehlender Endpoint) behoben.
+- Falscher Import `DirectoryNotEmptyException` (jetzt `java.nio.file.*`).
+- `useToast must be used within <ToastProvider>` durch globalen Provider-Fix.
+
+### Removed
+- Doppelte „Übernehmen“-Buttons im FolderPicker, redundanter Doppelklick-Hinweis.
+
 
 ## [0.5.0] - 2025-10-10
 ### Added
