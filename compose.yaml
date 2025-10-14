@@ -1,4 +1,4 @@
-version: "3.9"
+
 
 services:
   db:
@@ -28,3 +28,9 @@ services:
     depends_on:
       - db
     restart: unless-stopped
+	healthcheck:
+	  test: ["CMD", "curl", "-f", "http://localhost:8080/api/fs/health"]
+	  interval: 15s
+	  timeout: 5s
+	  retries: 5
+	  start_period: 25s
