@@ -40,9 +40,8 @@ services:
     ports:
       - "80:80"
     volumes:
-     - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./frontend/dist:/srv/frontend:ro
     depends_on:
       - backend
     restart: unless-stopped
-
