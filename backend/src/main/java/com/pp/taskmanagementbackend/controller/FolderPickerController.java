@@ -9,9 +9,11 @@ import com.pp.taskmanagementbackend.service.FolderPickerService;
 import java.io.IOException;
 import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.NoSuchFileException;
+import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.time.Instant;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -86,6 +88,24 @@ public class FolderPickerController {
     ) throws IOException {
         folderPickerService.rename(sub, from, to);
         return ResponseEntity.noContent().build();
+    }
+    
+    @GetMapping("/health")
+    public Map<String, Object> health() {
+        var base = folderPickerService.getBase();
+        boolean exists = Files.exists(base);
+        boolean dir = Files.isDirectory(base);
+        boolean readable = Files.isReadable(base);
+        boolean writable = Files.isWritable(base);
+        return Map.of(
+            "ok", exists && dir && readable && writable,
+            "base", base.toString(),
+            "exists", exists,
+            "directory", dir,
+            "readable", readable,
+            "writable", writable,
+            "ts", Instant.now().toString()
+        );
     }
 
     // ---------------- Fehlerbehandlung ----------------

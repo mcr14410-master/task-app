@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { fsSubfolders, fsExists, fsMkdir, fsIsEmpty, fsRmdir } from "@/api/fsApi";
 import useToast from "@/components/ui/useToast";
+import { fsHealth } from "@/api/fsApi";
 
 /* Inline-Heroicons (Outline) */
 const IconHome = (props) => (
@@ -143,7 +144,31 @@ export default function FolderPickerModal({
   baseLabel = "\\\\server\\share\\"
 }) {
   const toast = useToast();
-
+  const [fsOk, setFsOk] = useState(true);
+  const [fsHealthInfo, setFsHealthInfo] = useState(null);
+  
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const h = await fsHealth();      // { ok, base, exists, directory, readable, writable, ts }
+        if (!mounted) return;
+        setFsOk(!!h?.ok);
+        setFsHealthInfo(h || null);
+        if (!h?.ok) {
+          toast.error("Datei-Basis nicht erreichbar oder keine Rechte.");
+        }
+      } catch (e) {
+        if (!mounted) return;
+        setFsOk(false);
+        setFsHealthInfo(null);
+        toast.error("Health-Check fehlgeschlagen.");
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+  
+  
   // Navigationszustand
   const [stack, setStack] = useState(initialSub ? initialSub.split("/").filter(Boolean) : []);
   const subPath = useMemo(() => joinParts(stack), [stack]);
@@ -313,6 +338,12 @@ export default function FolderPickerModal({
     <div style={styles.overlay} onClick={onClose}>
       <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
         {/* Kopf */}
+		{!fsOk && (
+		  <div style={{ padding: 10, background: '#3f1d1d', color: '#fecaca', borderBottom: '1px solid #7f1d1d' }}>
+		    🚧 Basis nicht verfügbar.
+		    {fsHealthInfo?.base && <> Basis: <code>{fsHealthInfo.base}</code></>}
+		  </div>
+		)}
         <div style={styles.header}>
           <h3 style={styles.title}>{title}</h3>
           <button style={styles.btn} onClick={onClose} title="Schließen">✕</button>

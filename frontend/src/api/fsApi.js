@@ -80,3 +80,8 @@ export async function fsRmdir(sub = "", name) {
   qs.set("name", name);
   return apiDelete(`/fs/rmdir?${qs.toString()}`);
 }
+
+// Health-Check
+export async function fsHealth() {
+  return await apiGet(`/fs/health`); // oder `/fs/health` falls dein apiClient '/api' voranstellt
+}
