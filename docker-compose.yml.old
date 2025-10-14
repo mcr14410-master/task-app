@@ -41,7 +41,7 @@ services:
     volumes:
       - ./data/attachments:/data/attachments
 
-      - //Master-PC/MovieZ:/mnt/share:ro   # Windows Docker Desktop
+      # Windows Docker Desktop
     # Linux:
     # volumes:
     #   - /mnt/your-smb-mount:/mnt/share:ro
