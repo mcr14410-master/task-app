@@ -22,9 +22,9 @@ public class FolderPickerService {
 
     private final Path base;
 
-    public FolderPickerService(@Value("${filepicker.base-path}") String basePath) {
+    public FolderPickerService(@Value("${FolderPicker.base-path}") String basePath) {
         if (basePath == null || basePath.isBlank()) {
-            throw new IllegalStateException("Konfiguration fehlt: 'filepicker.base-path' ist leer.");
+            throw new IllegalStateException("Konfiguration fehlt: 'FolderPicker.base-path' ist leer.");
         }
         Path p = Paths.get(basePath).toAbsolutePath().normalize();
         if (!Files.exists(p)) throw new IllegalStateException("Basisordner existiert nicht: " + p);

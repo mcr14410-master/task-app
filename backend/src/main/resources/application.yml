@@ -18,7 +18,7 @@ spring:
     multipart:
       max-file-size: 200MB
       max-request-size: 200MB
-filepicker:
+FolderPicker:
   base-path: /srv/taskapp/files
 server:
   port: 8080
@@ -35,7 +35,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
-filepicker:
+FolderPicker:
   base-path: /data/files
 server:
   port: 8080
@@ -52,7 +52,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
-filepicker:
+FolderPicker:
   base-path: /data/files
 server:
   port: 8080
