@@ -49,6 +49,10 @@ spring:
   config:
     activate:
       on-profile: prod
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
   datasource:
     url: jdbc:postgresql://db:5432/taskapp
     username: task
