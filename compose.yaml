@@ -20,9 +20,11 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/taskapp
       SPRING_DATASOURCE_USERNAME: task
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-devpw}
-      FILEPICKER_BASE_PATH: /data/files
+      FOLDERPICKER_BASE_PATH: /data/files
+      ATTACHMENTS_BASE_PATH: /data/files/attachment
     volumes:
       - /srv/taskapp/files:/data/files
+      - /srv/taskapp/files/attachments:/data/files/attachments
     ports:
       - "8080:8080"
     depends_on:
