@@ -3,7 +3,7 @@ new file mode 100644
 --- /dev/null
 +++ b/README.md
 @@ -0,0 +1,260 @@
-+# task-app — Start & Deploy
++# task-app â€” Start & Deploy
 +
 +Monorepo mit **Frontend (Vite/React)**, **Backend (Spring Boot)** und **Docker/Compose**.  
 +Lokal in der IDE entwickeln, optional lokal in Docker testen, auf dem Pi mit Docker deployen.
@@ -12,10 +12,10 @@ new file mode 100644
 +
 +## Inhalt
 +
-+- `backend/` – Spring Boot (Java 17, Maven)
-+- `frontend/` – Vite/React (Node 20+, npm)
-+- `compose.yaml` – Services: `db`, `backend`, `caddy`
-+- `.env.example` – ENV-Vorlage (niemals echte Secrets commiten)
++- `backend/` â€“ Spring Boot (Java 17, Maven)
++- `frontend/` â€“ Vite/React (Node 20+, npm)
++- `compose.yaml` â€“ Services: `db`, `backend`, `caddy`
++- `.env.example` â€“ ENV-Vorlage (niemals echte Secrets commiten)
 +- (optional) `deploy.sh`, `dev.ps1`
 +
 +---
@@ -25,25 +25,25 @@ new file mode 100644
 +- Java 17, Maven (oder `./mvnw`)
 +- Node 20+, npm
 +- Docker & Docker Compose
-+- optional: `jq` für hübsche JSON-Ausgabe
++- optional: `jq` fÃ¼r hÃ¼bsche JSON-Ausgabe
 +
 +---
 +
 +## 2) Profile & Pfade (wichtig)
 +
-+Pfade kommen aus `application.yml` **und** können per ENV in Compose überschrieben werden:
++Pfade kommen aus `application.yml` **und** kÃ¶nnen per ENV in Compose Ã¼berschrieben werden:
 +
 +- `folderpicker.base-path`
 +- `attachments.base-path`
 +
-+**Ladereihenfolge (später gewinnt):**
-+1. `application.yml` (Standard + Profil-Blöcke)
++**Ladereihenfolge (spÃ¤ter gewinnt):**
++1. `application.yml` (Standard + Profil-BlÃ¶cke)
 +2. `application-<profile>.*` (falls vorhanden)
-+3. **ENV/Compose** (`FOLDERPICKER_BASE_PATH`, `ATTACHMENTS_BASE_PATH`, `SPRING_DATASOURCE_PASSWORD` …)
++3. **ENV/Compose** (`FOLDERPICKER_BASE_PATH`, `ATTACHMENTS_BASE_PATH`, `SPRING_DATASOURCE_PASSWORD` â€¦)
 +
 +**Relaxed Binding:**  
-+`FOLDERPICKER_BASE_PATH` ? `folderpicker.base-path`  
-+`ATTACHMENTS_BASE_PATH` ? `attachments.base-path`
++`FOLDERPICKER_BASE_PATH` â‡„ `folderpicker.base-path`  
++`ATTACHMENTS_BASE_PATH` â‡„ `attachments.base-path`
 +
 +**Profilgruppe:**  
 +In `application.yml` ist `pi` als Gruppe definiert: `pi = [docker, prod]`.
@@ -115,9 +115,9 @@ new file mode 100644
 +curl -s http://localhost/api/fs/health | jq .
 +```
 +
-+**Volumes (Compose, Host ? Container):**
-+- `/srv/taskapp/files` ? `/data/files`
-+- `/srv/taskapp/files/attachments` ? `/data/files/attachments`
++**Volumes (Compose, Host â†’ Container):**
++- `/srv/taskapp/files` â†’ `/data/files`
++- `/srv/taskapp/files/attachments` â†’ `/data/files/attachments`
 +
 +---
 +
@@ -129,27 +129,27 @@ new file mode 100644
 +- `forward-headers-strategy=framework` (Caddy)
 +- Actuator minimal (nur Health)
 +
-+> `prod` **stapelt** sich über `docker`. Auf dem Pi wird per `SPRING_PROFILES_ACTIVE=pi` automatisch beides aktiviert.
++> `prod` **stapelt** sich Ã¼ber `docker`. Auf dem Pi wird per `SPRING_PROFILES_ACTIVE=pi` automatisch beides aktiviert.
 +
 +---
 +
-+## 7) Profil-Matrix (Überblick)
++## 7) Profil-Matrix (Ãœberblick)
 +
-+| Kontext        | `SPRING_PROFILES_ACTIVE` | Pfadquelle (`folderpicker`/`attachments`)                          | DB URL/User                                   | Passwörter            | FE API-Base | Reverse Proxy | Besonderheiten |
++| Kontext        | `SPRING_PROFILES_ACTIVE` | Pfadquelle (`folderpicker`/`attachments`)                          | DB URL/User                                   | PasswÃ¶rter            | FE API-Base | Reverse Proxy | Besonderheiten |
 +|----------------|---------------------------|---------------------------------------------------------------------|-----------------------------------------------|-----------------------|-------------|---------------|----------------|
-+| IDE lokal      | `dev`                     | `application.yml` (dev, Windows-Pfade)                              | `jdbc:postgresql://localhost:5432/taskapp` / `taskdb_admin` | IDE-ENV (z. B. `SPRING_DATASOURCE_PASSWORD`) | `http://localhost:8080` (dev) | –             | `show-sql=true`, ausführliches Logging |
-+| Docker lokal   | `docker`                  | **ENV/Compose** ? `/data/files`, `/data/files/attachments`          | `jdbc:postgresql://db:5432/taskapp` / `task`  | `.env.dev.docker`     | `/api`      | Caddy (optional) | Prod-ähnlich ohne Prod-Tweaks |
-+| Prod (Pi)      | `docker,prod` oder `pi`   | **ENV/Compose** ? `/data/files`, `/data/files/attachments`          | `jdbc:postgresql://db:5432/taskapp` / `task`  | `.env` am Pi          | `/api`      | Caddy         | Prod-Tweaks aktiv (s. o.) |
++| IDE lokal      | `dev`                     | `application.yml` (dev, Windows-Pfade)                              | `jdbc:postgresql://localhost:5432/taskapp` / `taskdb_admin` | IDE-ENV (z. B. `SPRING_DATASOURCE_PASSWORD`) | `http://localhost:8080` (dev) | â€“             | `show-sql=true`, ausfÃ¼hrliches Logging |
++| Docker lokal   | `docker`                  | **ENV/Compose** â†’ `/data/files`, `/data/files/attachments`          | `jdbc:postgresql://db:5432/taskapp` / `task`  | `.env.dev.docker`     | `/api`      | Caddy (optional) | Prod-Ã¤hnlich ohne Prod-Tweaks |
++| Prod (Pi)      | `docker,prod` oder `pi`   | **ENV/Compose** â†’ `/data/files`, `/data/files/attachments`          | `jdbc:postgresql://db:5432/taskapp` / `task`  | `.env` am Pi          | `/api`      | Caddy         | Prod-Tweaks aktiv (s. o.) |
 +
 +---
 +
-+## 8) Nützliche Kommandos
++## 8) NÃ¼tzliche Kommandos
 +
 +```bash
 +# Backend-Logs (Compose)
 +docker compose logs -f --tail=200 backend
 +
-+# Caddy neu laden (wenn Caddyfile geändert)
++# Caddy neu laden (wenn Caddyfile geÃ¤ndert)
 +docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
 +
 +# DB-Shell
@@ -166,7 +166,7 @@ new file mode 100644
 +
 +## 9) Kiosk (optional, Pi)
 +
-+Autostart via `~/.config/lxsession/LXDE-pi/autostart` ? startet `~/bin/kiosk.sh`.  
++Autostart via `~/.config/lxsession/LXDE-pi/autostart` â†’ startet `~/bin/kiosk.sh`.  
 +Skalierung im Script (4K-TV): `SCALE="1.50"`.
 +
 +---
@@ -185,10 +185,10 @@ new file mode 100644
 +## 11) Hilfsskripte
 +
 +**Windows (lokal):** `dev.ps1`  
-+Baut Backend (skip tests), öffnet Frontend-Dev in neuem Fenster, startet Backend.
++Baut Backend (skip tests), Ã¶ffnet Frontend-Dev in neuem Fenster, startet Backend.
 +
 +**Pi/Unix (Deploy):** `deploy.sh`  
-+Pull ? Backend-Image bauen ? Compose up ? Status + Healthcheck.
++Pull â†’ Backend-Image bauen â†’ Compose up â†’ Status + Healthcheck.
 diff --git a/.env.example b/.env.example
 new file mode 100644
 --- /dev/null
@@ -206,7 +206,7 @@ new file mode 100644
 +SPRING_DATASOURCE_PASSWORD=change-me
 +
 +# --- Storage paths (container-internal) ---
-+# In compose.yaml, these are typically mounted from host paths like /srv/taskapp/files ? /data/files
++# In compose.yaml, these are typically mounted from host paths like /srv/taskapp/files â†’ /data/files
 +FOLDERPICKER_BASE_PATH=/data/files
 +ATTACHMENTS_BASE_PATH=/data/files/attachments
 +
@@ -219,14 +219,14 @@ new file mode 100644
 --- /dev/null
 +++ b/.env.prod.example
 @@ -0,0 +1,13 @@
-+# .env.prod.example — template for Pi/Prod (copy to .env on the Pi)
++# .env.prod.example â€” template for Pi/Prod (copy to .env on the Pi)
 +SPRING_PROFILES_ACTIVE=pi
 +
 +# --- Database (set strong, unique passwords!) ---
 +SPRING_DATASOURCE_PASSWORD=change-me
 +POSTGRES_PASSWORD=change-me
 +
-+# --- Storage (container paths; volumes map host ? container) ---
++# --- Storage (container paths; volumes map host â†’ container) ---
 +FOLDERPICKER_BASE_PATH=/data/files
 +ATTACHMENTS_BASE_PATH=/data/files/attachments
 +
@@ -263,7 +263,7 @@ new file mode 100644
 --- /dev/null
 +++ b/dev.ps1
 @@ -0,0 +1,35 @@
-+# dev.ps1 — build & run locally on Windows
++# dev.ps1 â€” build & run locally on Windows
 +# Usage: PowerShell > .\dev.ps1
 +
 +$ErrorActionPreference = "Stop"
