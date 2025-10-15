@@ -1,184 +1,186 @@
-# Task App (Monorepo)
-
-- `backend/`: Spring Boot (Java 17, Maven)
-- `frontend/`: React (Vite, Node.js)
-
-## Development
-- Backend starten: `mvn spring-boot:run` im Ordner `backend/`
-- Frontend starten: `npm run dev` im Ordner `frontend/`
-
-
-
-
-
-
 # task-app — Start & Deploy
 
-Kurzfassung: **Monorepo mit Frontend (Vite) + Backend (Spring Boot) + Docker/Compose**.  
-Lokal entwickeln, auf dem Pi per Compose deployen.
+Monorepo mit **Frontend (Vite/React)**, **Backend (Spring Boot)** und **Docker/Compose**.  
+Lokal in der IDE entwickeln, optional lokal in Docker testen, auf dem Pi mit Docker deployen.
+
+---
+
+## Inhalt
+
+- `backend/` – Spring Boot (Java 17, Maven)
+- `frontend/` – Vite/React (Node 20+, npm)
+- `compose.yaml` – Services: `db`, `backend`, `caddy`
+- `.env.example` – ENV-Vorlage (niemals echte Secrets commiten)
+- (optional) `deploy.sh`, `dev.ps1`
 
 ---
 
 ## 1) Voraussetzungen
 
-- **Backend**: Java 17, Maven (oder `./mvnw`)
-- **Frontend**: Node 20+, npm
-- **Docker/Compose** (für Pi/Prod)
-- Optional: `jq` für hübsche JSON-Outputs
+- Java 17, Maven (oder `./mvnw`)
+- Node 20+, npm
+- Docker & Docker Compose
+- optional: `jq` für hübsche JSON-Ausgabe
 
 ---
 
 ## 2) Profile & Pfade (wichtig)
 
-Pfade kommen **immer** aus `application.yml`/Profil + **ENV**:
+Pfade kommen aus `application.yml` **und** können per ENV in Compose überschrieben werden:
+
 - `folderpicker.base-path`
 - `attachments.base-path`
 
-**Reihenfolge (später gewinnt):**
-1. `application.yml` (Default/Profil)
-2. `application-<profile>.*`
-3. **ENV** (`FOLDERPICKER_BASE_PATH`, `ATTACHMENTS_BASE_PATH`)
+**Ladereihenfolge (später gewinnt):**
+1. `application.yml` (Standard + Profil-Blöcke)
+2. `application-<profile>.*` (falls vorhanden)
+3. **ENV/Compose** (`FOLDERPICKER_BASE_PATH`, `ATTACHMENTS_BASE_PATH`, `SPRING_DATASOURCE_PASSWORD` …)
 
-**Dev (Windows)** – in `application.yml`:
-```yaml
-spring.profiles.active: dev
-folderpicker.base-path: "C:/Users/Master/task-app/files"
-attachments.base-path: "C:/Users/Master/task-app/files/attachments"
+**Relaxed Binding:**  
+`FOLDERPICKER_BASE_PATH` ⇄ `folderpicker.base-path`  
+`ATTACHMENTS_BASE_PATH` ⇄ `attachments.base-path`
 
+**Profilgruppe:**  
+In `application.yml` ist `pi` als Gruppe definiert: `pi = [docker, prod]`.
 
-Docker/Prod – via .env/Compose:
+---
 
-# .env
-FOLDERPICKER_BASE_PATH=/data/files
-ATTACHMENTS_BASE_PATH=/data/files/attachments
-SPRING_DATASOURCE_PASSWORD=change-me
-POSTGRES_PASSWORD=change-me
+## 3) Schnellstart lokal (IDE, Profil `dev`)
 
-
-
-## 3) Schnellstart lokal (IDE/CLI)
-Backend (dev)
+### Backend (Dev)
+```bash
 cd backend
 ./mvnw -DskipTests package
 ./mvnw spring-boot:run
-# läuft auf http://localhost:8080
+# -> http://localhost:8080
+```
 
-Frontend (dev)
+### Frontend (Dev)
+```bash
 cd frontend
 npm ci
 npm run dev
-# läuft auf http://localhost:5173 (VITE_API_BASE im .env.development beachten)
+# -> http://localhost:5173
+```
 
-## 4) Docker (Pi/Prod)
-Einmalig auf dem Pi
-# im Repo-Root
-cp .env.example .env        # und Secrets setzen
-docker compose up -d db     # DB starten
-docker compose build backend
-docker compose up -d backend
-docker compose up -d caddy  # Reverse Proxy + statische Files
+**Dev-Pfade (Windows, in `application.yml`):**
+```yaml
+folderpicker:
+  base-path: "C:/Users/Master/task-app/files"
+attachments:
+  base-path: "C:/Users/Master/task-app/files/attachments"
+```
 
-Health-Checks
-# Backend OK?
-curl -s http://localhost:8080/api/fs/health | jq .
+---
 
-# Durch Caddy (UI/Proxy)
-curl -I http://localhost/
-curl -s http://localhost/api/fs/health | jq .
+## 4) Docker lokal (Profil `docker`)
 
-## 5) Deploy-Workflow (Pi)
-git pull --rebase
-docker compose build backend
+**ENV-Datei (nicht committen):** `.env.dev.docker`
+```ini
+SPRING_PROFILES_ACTIVE=docker
+SPRING_DATASOURCE_PASSWORD=devpw
+POSTGRES_PASSWORD=devpw
+FOLDERPICKER_BASE_PATH=/data/files
+ATTACHMENTS_BASE_PATH=/data/files/attachments
+```
+
+**Starten:**
+```bash
+docker compose --env-file .env.dev.docker up -d
+docker compose logs -f --tail=200 backend
+```
+
+---
+
+## 5) Deployment auf dem Pi (Profilgruppe `pi` = `docker,prod`)
+
+**ENV (auf dem Pi im Repo-Ordner):** `.env`
+```ini
+SPRING_PROFILES_ACTIVE=pi
+SPRING_DATASOURCE_PASSWORD=<STRONG>
+POSTGRES_PASSWORD=<STRONG>
+FOLDERPICKER_BASE_PATH=/data/files
+ATTACHMENTS_BASE_PATH=/data/files/attachments
+```
+
+**Starten/Update:**
+```bash
 docker compose up -d
 docker compose ps
 curl -s http://localhost/api/fs/health | jq .
+```
 
-## 6) Ordner/Volumes (Compose)
+**Volumes (Compose, Host → Container):**
+- `/srv/taskapp/files` → `/data/files`
+- `/srv/taskapp/files/attachments` → `/data/files/attachments`
 
-Host: /srv/taskapp/files → Container: /data/files
+---
 
-Anhänge: /srv/taskapp/files/attachments → /data/files/attachments
+## 6) Prod-Tuning (Profil `prod`)
 
-Passen zum FOLDERPICKER_BASE_PATH & ATTACHMENTS_BASE_PATH in .env.
+- kleines Hikari-Pool-Sizing (Pi-freundlich)
+- `show-sql=false`, schlankes Logging
+- `server.shutdown=graceful`, Kompression aktiviert
+- `forward-headers-strategy=framework` (Caddy)
+- Actuator minimal (nur Health)
 
-## 7) Kiosk (optional, Pi)
+> `prod` **stapelt** sich über `docker`. Auf dem Pi wird per `SPRING_PROFILES_ACTIVE=pi` automatisch beides aktiviert.
 
-Autostart via ~/.config/lxsession/LXDE-pi/autostart ruft ~/bin/kiosk.sh auf.
-Skalierung im Script: SCALE="1.50" (für 4K-TV).
+---
 
-## 8) Troubleshooting
+## 7) Profil-Matrix (Überblick)
 
-Pfad wird nicht gefunden: Logs beim Start zeigen FolderPicker base: und Attachments base:
+| Kontext        | `SPRING_PROFILES_ACTIVE` | Pfadquelle (`folderpicker`/`attachments`)                          | DB URL/User                                   | Passwörter            | FE API-Base | Reverse Proxy | Besonderheiten |
+|----------------|---------------------------|---------------------------------------------------------------------|-----------------------------------------------|-----------------------|-------------|---------------|----------------|
+| IDE lokal      | `dev`                     | `application.yml` (dev, Windows-Pfade)                              | `jdbc:postgresql://localhost:5432/taskapp` / `taskdb_admin` | IDE-ENV (z. B. `SPRING_DATASOURCE_PASSWORD`) | `http://localhost:8080` (dev) | –             | `show-sql=true`, ausführliches Logging |
+| Docker lokal   | `docker`                  | **ENV/Compose** → `/data/files`, `/data/files/attachments`          | `jdbc:postgresql://db:5432/taskapp` / `task`  | `.env.dev.docker`     | `/api`      | Caddy (optional) | Prod-ähnlich ohne Prod-Tweaks |
+| Prod (Pi)      | `docker,prod` oder `pi`   | **ENV/Compose** → `/data/files`, `/data/files/attachments`          | `jdbc:postgresql://db:5432/taskapp` / `task`  | `.env` am Pi          | `/api`      | Caddy         | Prod-Tweaks aktiv (s. o.) |
 
-Actuator 404: Wir nutzen /api/fs/health als Health-Endpoint.
+---
 
-VNC Bild weich: RealVNC Viewer auf „Best/Full Color“, 100% Zoom; für Admin lieber RDP.
+## 8) Nützliche Kommandos
 
-## 9) Nützliche Kommandos
+```bash
 # Backend-Logs (Compose)
 docker compose logs -f --tail=200 backend
 
-# Caddy neu laden
+# Caddy neu laden (wenn Caddyfile geändert)
 docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
 
 # DB-Shell
 docker compose exec db psql -U task -d taskapp
 
-## 10) Struktur
-backend/         # Spring Boot
-frontend/        # Vite React
-compose.yaml     # Services: db, backend, caddy
-.env.example     # ENV-Vorlage (copy to .env)
+# Health (direkt Backend)
+curl -s http://localhost:8080/api/fs/health | jq .
 
+# Health (durch Caddy)
+curl -s http://localhost/api/fs/health | jq .
+```
 
 ---
 
-# `Makefile` (optional, falls du make nutzt)
-```make
-.PHONY: backend-build backend-run frontend-dev compose-up backend-logs deploy
+## 9) Kiosk (optional, Pi)
 
-backend-build:
-	cd backend && ./mvnw -DskipTests package
+Autostart via `~/.config/lxsession/LXDE-pi/autostart` → startet `~/bin/kiosk.sh`.  
+Skalierung im Script (4K-TV): `SCALE="1.50"`.
 
-backend-run:
-	cd backend && ./mvnw spring-boot:run
+---
 
-frontend-dev:
-	cd frontend && npm ci && npm run dev
+## 10) Git-Hygiene
 
-compose-up:
-	docker compose up -d
+```
+.env
+.env.*
+!/.env.example
+!/.env.prod.example
+```
 
-backend-logs:
-	docker compose logs -f --tail=200 backend
+---
 
-deploy:
-	git pull --rebase
-	docker compose build backend
-	docker compose up -d
-	docker compose ps
-	curl -s http://localhost/api/fs/health | jq .
+## 11) Hilfsskripte
 
-package.json-Skripte (frontend) – Ergänzung
-{
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview --port 5173",
-    "lint": "eslint ."
-  }
-}
+**Windows (lokal):** `dev.ps1`  
+Baut Backend (skip tests), öffnet Frontend-Dev in neuem Fenster, startet Backend.
 
-deploy.sh (Pi, komfort)
-#!/usr/bin/env bash
-set -euo pipefail
-cd "$(dirname "$0")"
-git pull --rebase
-docker compose build backend
-docker compose up -d
-docker compose ps
-curl -s http://localhost/api/fs/health | jq . || true
-
-dev.ps1 (Windows, lokal)
-# Backend bauen & laufen lassen; Frontend dev in zweitem Terminal starten
-cd backend; ./mvnw -q -DskipTests package; Start-Process powershell -ArgumentList 'cd ..\frontend; npm ci; npm run dev'; ./mvnw spring-boot:run
+**Pi/Unix (Deploy):** `deploy.sh`  
+Pull → Backend-Image bauen → Compose up → Status + Healthcheck.
