@@ -2,6 +2,42 @@
 
 # Changelog
 
+
+### v0.6.0 — 2025-10-16
+
+**Neu**
+- Zentrale Konfiguration via `StorageProperties` (ersetzt verstreute `@Value`/Einzel-Properties):
+  - `folderpicker.base-path`
+  - `attachments.base-path`
+- Profilgruppe **`pi`** (alias für `docker, prod`) für Raspberry-Pi-Deployments.
+- Dokumentation & Hilfsskripte:
+  - `README.md` mit Profilmatrix & Deploy-Anleitung
+  - `deploy.sh` (Pi/Unix): Pull → Build Backend → Compose Up → Healthcheck
+  - `dev.ps1` (Windows): Backend bauen & starten, Frontend-Dev separat hochfahren
+  - `.env.example` und `.env.prod.example` als Vorlagen
+
+**Cleans & Konsolidierung**
+- `application.yml` aufgeräumt:
+  - **dev** (IDE), **docker** (Container), **prod** (Prod-Tweaks)
+  - Prod-Tweaks: kleiner Hikari-Pool, `show-sql=false`, schlankes Logging, GZip, `forward-headers-strategy=framework`, Actuator minimal
+- Legacy-Dateien entfernt:
+  - `backend/src/main/resources/application.properties`
+  - `backend/src/main/resources/application-prod.properties`
+- Einheitliche, überschreibbare Pfade via ENV:
+  - `FOLDERPICKER_BASE_PATH` ⇄ `folderpicker.base-path`
+  - `ATTACHMENTS_BASE_PATH` ⇄ `attachments.base-path`
+
+**Breaking Changes**
+- Direkte Pfadinjektion via `@Value("${attachments.base-path}")` / `@Value("${folderpicker.base-path}")` nicht mehr vorgesehen.
+  - Services nutzen jetzt `StorageProperties` bzw. `AttachmentStorageService`.
+- Secrets gehören nicht mehr in Properties-Dateien → `.env`/ENV verwenden.
+
+**Upgrade-Hinweise**
+1. **Pull** der Änderungen & Build:
+   ```bash
+   git pull
+   cd backend && ./mvnw -DskipTests package
+
 ## [0.6.0] - 2025-10-14
 ### Added
 - FolderPicker: Inline-Heroicons (Home/Up), kompakte Action-Leiste in der Liste, Breadcrumbs mit Klick-Navigation.
