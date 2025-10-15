@@ -1,6 +1,7 @@
 package com.pp.taskmanagementbackend.service;
 
-import com.pp.taskmanagementbackend.config.AttachmentsProperties;
+
+import com.pp.taskmanagementbackend.config.StorageProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.FileSystemResource;
@@ -20,8 +21,28 @@ public class AttachmentStorageService {
 
     private final Path baseDir;
 
-    public AttachmentStorageService(AttachmentsProperties props) {
-        this.baseDir = Path.of(props.getBasePath()).toAbsolutePath();
+    public AttachmentStorageService(com.pp.taskmanagementbackend.config.StorageProperties storage) {
+        Path configured = storage.getAttachments().getBasePath();
+        if (configured == null) {
+            throw new IllegalStateException("Konfiguration fehlt: 'attachments.base-path' ist nicht gesetzt.");
+        }
+        Path p = configured.toAbsolutePath().normalize();
+
+        try {
+            // Basisverzeichnis sicherstellen
+            if (!java.nio.file.Files.exists(p)) {
+                java.nio.file.Files.createDirectories(p);
+            }
+        } catch (java.io.IOException e) {
+            throw new IllegalStateException("Konnte Attachments-Basisverzeichnis nicht erstellen: " + p, e);
+        }
+
+        if (!java.nio.file.Files.isDirectory(p))  throw new IllegalStateException("Attachments-Basis ist kein Verzeichnis: " + p);
+        if (!java.nio.file.Files.isReadable(p))   throw new IllegalStateException("Attachments-Basis nicht lesbar: " + p);
+        if (!java.nio.file.Files.isWritable(p))   throw new IllegalStateException("Attachments-Basis nicht schreibbar: " + p);
+
+        this.baseDir = p;
+        log.info("[Attachments] Base initialisiert: {}", this.baseDir);
     }
 
     @PostConstruct

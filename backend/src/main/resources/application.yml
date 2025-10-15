@@ -18,8 +18,10 @@ spring:
     multipart:
       max-file-size: 200MB
       max-request-size: 200MB
-FolderPicker:
-  base-path: /srv/taskapp/files
+folderpicker:
+  base-path: "C:/Users/Master/task-app/files"
+attachments:
+  base-path: "C:/Users/Master/task-app/files/attachments"
 server:
   port: 8080
 
@@ -35,8 +37,10 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
-FolderPicker:
-  base-path: /data/files
+folderpicker:
+  base-path: ${FOLDERPICKER_BASE_PATH:/data/files}
+attachments:
+  base-path: ${ATTACHMENTS_BASE_PATH:/data/files/attachments}
 server:
   port: 8080
 
@@ -52,7 +56,9 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
-FolderPicker:
-  base-path: /data/files
+folderpicker:
+  base-path: ${FOLDERPICKER_BASE_PATH:/data/files}
+attachments:
+  base-path: ${ATTACHMENTS_BASE_PATH:/data/files/attachments}
 server:
   port: 8080

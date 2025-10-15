@@ -23,11 +23,16 @@ public class AttachmentService {
         this.storage = storage;
         this.taskRepo = taskRepo;
     }
-
-    private Task requireTask(Long id){
-        return taskRepo.findById(id).orElseThrow(() -> new RuntimeException("Task " + id + " not found"));
+    
+    public class NotFoundException extends RuntimeException {
+        public NotFoundException(String msg) { super(msg); }
     }
 
+    private Task requireTask(Long id){
+        return taskRepo.findById(id).orElseThrow(() -> new NotFoundException("Task %d not found".formatted(id)));
+    }
+
+    @Transactional(readOnly = true)
     public List<Attachment> list(Long taskId) {
         Task task = requireTask(taskId);
         return repo.findByTask(task);
@@ -38,14 +43,19 @@ public class AttachmentService {
         Task task = requireTask(taskId);
         String key = storage.store(file);
         Attachment a = new Attachment();
+        String original = file.getOriginalFilename();
+        String safeName = original != null ? original.replaceAll("[\\\\/]+", "_") : "unnamed";
+        String mime = file.getContentType();
+        if (mime == null || mime.isBlank()) mime = "application/octet-stream";
         a.setTask(task);
-        a.setFilename(file.getOriginalFilename());
-        a.setMime(file.getContentType() != null ? file.getContentType() : "application/octet-stream");
+        a.setFilename(safeName);
+        a.setMime(mime);
         a.setSize(file.getSize());
         a.setStorageKey(key);
         return repo.save(a);
     }
 
+    @Transactional(readOnly = true)
     public Attachment get(Long taskId, Long attId) {
         return repo.findByIdAndTaskId(attId, taskId).orElseThrow(() -> new RuntimeException("Attachment not found"));
     }
