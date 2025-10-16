@@ -45,9 +45,9 @@ logging:
     com.pp.taskmanagementbackend.service.AttachmentStorageService: debug
 
 folderpicker:
-  base-path: "C:/Users/Master/task-app/files"
+  base-path: "../docs/dev-filepath/files"
 attachments:
-  base-path: "C:/Users/Master/task-app/files/attachments"
+  base-path: "../docs/dev-filepath/files/attachments"
 
 ---
 # =========================
