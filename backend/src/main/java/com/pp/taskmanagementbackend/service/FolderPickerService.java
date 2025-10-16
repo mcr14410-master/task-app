@@ -24,11 +24,11 @@ public class FolderPickerService {
     private final Path base;
 
     public FolderPickerService(StorageProperties storage) {
-        Path configured = storage.getFolderpicker().getBasePath();
-        if (configured == null) {
+    	String cfg = storage.getFolderpicker().getBasePath();
+        if (java.nio.file.Paths.get(cfg) == null) {
             throw new IllegalStateException("Konfiguration fehlt: 'folderpicker.base-path' ist nicht gesetzt.");
         }
-        Path p = configured.toAbsolutePath().normalize();
+        Path p = java.nio.file.Paths.get(cfg).toAbsolutePath().normalize();
         if (!Files.exists(p))        throw new IllegalStateException("Basisordner existiert nicht: " + p);
         if (!Files.isDirectory(p))   throw new IllegalStateException("Basis ist kein Verzeichnis: " + p);
         if (!Files.isReadable(p))    throw new IllegalStateException("Basisordner nicht lesbar: " + p);

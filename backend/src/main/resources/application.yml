@@ -15,7 +15,7 @@ spring:
   application:
     name: pp
   datasource:
-    url: jdbc:postgresql://localhost:5432/taskapp
+    url: jdbc:postgresql://localhost:5432/taskdb
     username: taskdb_admin
     password: ${SPRING_DATASOURCE_PASSWORD}
   jpa:

@@ -22,11 +22,11 @@ public class AttachmentStorageService {
     private final Path baseDir;
 
     public AttachmentStorageService(com.pp.taskmanagementbackend.config.StorageProperties storage) {
-        Path configured = storage.getAttachments().getBasePath();
-        if (configured == null) {
+    	String cfg = storage.getAttachments().getBasePath();
+        if (java.nio.file.Paths.get(cfg) == null) {
             throw new IllegalStateException("Konfiguration fehlt: 'attachments.base-path' ist nicht gesetzt.");
         }
-        Path p = configured.toAbsolutePath().normalize();
+        Path p = java.nio.file.Paths.get(cfg).toAbsolutePath().normalize();
 
         try {
             // Basisverzeichnis sicherstellen

@@ -2,14 +2,16 @@ package com.pp.taskmanagementbackend.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
-
-import java.nio.file.Path;
+import org.springframework.boot.context.properties.NestedConfigurationProperty;
 
 @Component
-@ConfigurationProperties // Prefix frei; wir mappen verschachtelt (folderpicker.*, attachments.*)
+@ConfigurationProperties // ohne prefix: liest Top-Level-Keys (folderpicker.*, attachments.*)
 public class StorageProperties {
 
+  @NestedConfigurationProperty
   private final Folderpicker folderpicker = new Folderpicker();
+
+  @NestedConfigurationProperty
   private final Attachments attachments = new Attachments();
 
   public Folderpicker getFolderpicker() { return folderpicker; }
@@ -17,21 +19,21 @@ public class StorageProperties {
 
   public static class Folderpicker {
     /**
-     * Root-Pfad des FolderPickers (entspricht YAML: folderpicker.base-path)
+     * YAML: folderpicker.base-path
      */
-    private Path basePath;
+    private String basePath;
 
-    public Path getBasePath() { return basePath; }
-    public void setBasePath(Path basePath) { this.basePath = basePath; }
+    public String getBasePath() { return basePath; }
+    public void setBasePath(String basePath) { this.basePath = basePath; }
   }
 
   public static class Attachments {
     /**
-     * Root-Pfad für Anhänge (entspricht YAML: attachments.base-path)
+     * YAML: attachments.base-path
      */
-    private Path basePath;
+    private String basePath;
 
-    public Path getBasePath() { return basePath; }
-    public void setBasePath(Path basePath) { this.basePath = basePath; }
+    public String getBasePath() { return basePath; }
+    public void setBasePath(String basePath) { this.basePath = basePath; }
   }
 }
