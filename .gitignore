@@ -56,3 +56,11 @@ frontend/.env.production.local
 ########################################
 .DS_Store
 Thumbs.db
+/.env
+
+
+.env
+.env.*
+!/.env.example
+!/.env.prod.example
+

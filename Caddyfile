@@ -6,6 +6,11 @@
   handle /api/* {
     reverse_proxy backend:8080
   }
+  
+  handle /* {
+  try_files {path} /index.html
+  file_server
+}
 
   @assets {
     path *.js *.css *.png *.jpg *.jpeg *.gif *.svg *.ico *.webp *.woff *.woff2

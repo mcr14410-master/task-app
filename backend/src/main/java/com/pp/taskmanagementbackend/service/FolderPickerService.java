@@ -1,6 +1,6 @@
 package com.pp.taskmanagementbackend.service;
 
-import org.springframework.beans.factory.annotation.Value;
+import com.pp.taskmanagementbackend.config.StorageProperties;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -18,19 +18,22 @@ import org.slf4j.LoggerFactory;
 
 @Service
 public class FolderPickerService {
-	  private static final Logger log = LoggerFactory.getLogger(FolderPickerService.class);
+
+    private static final Logger log = LoggerFactory.getLogger(FolderPickerService.class);
 
     private final Path base;
 
-    public FolderPickerService(@Value("${filepicker.base-path}") String basePath) {
-        if (basePath == null || basePath.isBlank()) {
-            throw new IllegalStateException("Konfiguration fehlt: 'filepicker.base-path' ist leer.");
+    public FolderPickerService(StorageProperties storage) {
+    	String cfg = storage.getFolderpicker().getBasePath();
+        if (java.nio.file.Paths.get(cfg) == null) {
+            throw new IllegalStateException("Konfiguration fehlt: 'folderpicker.base-path' ist nicht gesetzt.");
         }
-        Path p = Paths.get(basePath).toAbsolutePath().normalize();
-        if (!Files.exists(p)) throw new IllegalStateException("Basisordner existiert nicht: " + p);
-        if (!Files.isDirectory(p)) throw new IllegalStateException("Basis ist kein Verzeichnis: " + p);
-        if (!Files.isReadable(p)) throw new IllegalStateException("Basisordner nicht lesbar: " + p);
-        if (!Files.isWritable(p)) throw new IllegalStateException("Basisordner nicht schreibbar: " + p);
+        Path p = java.nio.file.Paths.get(cfg).toAbsolutePath().normalize();
+        if (!Files.exists(p))        throw new IllegalStateException("Basisordner existiert nicht: " + p);
+        if (!Files.isDirectory(p))   throw new IllegalStateException("Basis ist kein Verzeichnis: " + p);
+        if (!Files.isReadable(p))    throw new IllegalStateException("Basisordner nicht lesbar: " + p);
+        if (!Files.isWritable(p))    throw new IllegalStateException("Basisordner nicht schreibbar: " + p);
+
         this.base = p;
         log.info("[FolderPicker] Base initialisiert: {}", this.base);
     }
