@@ -13,7 +13,15 @@ git pull --rebase
 [ "${STASHED:-0}" = "1" ] && git stash pop || true
 
 echo "[deploy] Frontend-Build (im Container)..."
-docker run --rm -v "$PWD/frontend":/app -w /app node:20 bash -lc "npm ci && npm run build"
+docker run --rm -u $(id -u):$(id -g) -v "$PWD/frontend":/app -w /app node:20 bash -lc '
+  set -e
+  if [ -f package-lock.json ]; then
+    npm ci --no-audit --no-fund
+  else
+    npm install --no-audit --no-fund
+  fi
+  npm run build
+'
 
 echo "[deploy] building backend image..."
 docker compose build backend
