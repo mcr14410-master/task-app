@@ -250,9 +250,9 @@ export default function TaskBoard() {
     try { return localStorage.getItem("taskboard:hardFilter") === "1"; }
     catch { return false; }
   });
-
-  async function fetchAll() {
-    setLoading(true);
+  
+  const fetchAll = useCallback(async () => {
+        setLoading(true);
     try {
       const [tasksRes, stationsRes] = await Promise.all([
         apiGet("/tasks"),
@@ -304,10 +304,43 @@ export default function TaskBoard() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+  
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+ 
 
-  useEffect(() => { fetchAll(); /* eslint-disable-line */ }, []);
+  // ... deine fetchAll-Funktion bleibt unverändert ...
 
+  useEffect(() => {
+    // DEV direkt zum Backend, PROD relativ
+	const isVite = typeof window !== "undefined" && window.location && window.location.port === "5173";
+	const url = isVite ? "http://localhost:8080/api/tasks/stream" : "/api/tasks/stream";
+
+
+    const es = new EventSource(url);
+
+    let t = null;
+    const onTask = () => {
+      // kleine Entlastung bei Event-Stürmen
+      if (t) clearTimeout(t);
+      t = setTimeout(() => { fetchAll(); }, 400);
+    };
+
+    es.addEventListener("task-created", onTask);
+    es.addEventListener("task-updated", onTask);
+    es.addEventListener("task-deleted", onTask);
+
+    es.onerror = () => { /* Browser reconnectet automatisch; kein fetch hier */ };
+
+    return () => {
+      if (t) clearTimeout(t);
+      es.close();
+    };
+  }, [fetchAll]); // falls fetchAll nicht stabil ist: notfalls [] verwenden
+	
+
+  
+  
   // --- NEU: Handler top-level, nicht in onDragEnd ---
   const handleTaskDeleted = useCallback((deletedId) => {
     setColumnsById(prev => {
