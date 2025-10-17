@@ -1,4 +1,9 @@
 // components/FolderPickerModal.jsx
+// Anpassung: variable Dialogbreite (clamp), horizontales Overflow versteckt,
+// Pfad-/Breadcrumb-Texte umbrechbar via overflowWrap:anywhere.
+// NEU: Bei Bedarf vertikaler Scrollbalken für das Modal (overflowY:'auto').
+// (Funktionalität unverändert)
+
 import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { fsSubfolders, fsExists, fsMkdir, fsIsEmpty, fsRmdir } from "@/api/fsApi";
 import useToast from "@/components/ui/useToast";
@@ -30,7 +35,14 @@ const styles = {
     display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
   },
   modal: {
-    width: 'min(820px, 96vw)', maxHeight: '88vh', overflow: 'hidden',
+    // vorher: width: 'min(820px, 96vw)'
+    // neu: flexibel per clamp – ohne horizontalen Scroll
+    width: 'clamp(640px, 82vw, 800px)',
+    maxWidth: '95vw',
+    maxHeight: '88vh',
+    // Wichtig: nur horizontal verstecken, vertikal bei Bedarf scrollen
+    overflowX: 'hidden',
+    overflowY: 'auto',
     background: '#0f172a', color: '#e5e7eb', border: '1px solid #1f2937',
     borderRadius: 12, boxShadow: '0 24px 64px rgba(0,0,0,.5)'
   },
@@ -48,14 +60,15 @@ const styles = {
   },
   crumbLink: {
     display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer',
-    padding: '2px 8px', borderRadius: 999
+    padding: '2px 8px', borderRadius: 999,
+    minWidth: 0, // wichtig für flex-wrap
   },
   crumbSep: { opacity: .5, margin: '0 6px' },
 
   // Hauptbereich: 2 Spalten
   content: {
     display: 'grid',
-    gridTemplateColumns: 'minmax(300px, 1fr) 320px',
+    gridTemplateColumns: 'minmax(300px, 1fr) 340px',
     gap: 12,
     padding: 16
   },
@@ -67,7 +80,7 @@ const styles = {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     padding: '8px 12px', borderBottom: '1px solid #1f2937', background: '#0b1220'
   },
-  list: { listStyle: 'none', margin: 0, padding: 0, maxHeight: '46vh', overflowY: 'auto' },
+  list: { listStyle: 'none', margin: 0, padding: 0, maxHeight: '46vh', overflowY: 'auto', overflowX: 'hidden' },
   listItem: {
     padding: '10px 12px', borderBottom: '1px solid #0f172a',
     cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10
@@ -112,9 +125,9 @@ const styles = {
   // Controls
   btn: { padding: '8px 12px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#e5e7eb', cursor: 'pointer' },
   btnPrimary: { padding: '8px 12px', borderRadius: 8, border: '1px solid #3b82f6', background: '#3b82f6', color: '#fff', cursor: 'pointer' },
-  btnDanger: { padding: '8px 12px', borderRadius: 8, border: '1px solid #ef4444', background: '#ef4444', color: '#fff', cursor: 'pointer' },
-  input: { width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #334155', background: '#0b1220', color: '#e5e7eb' },
-  checkboxRow: { display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center' },
+  btnDanger: { padding: '5px 8px', fontSize: 12, borderRadius: 8, border: '1px solid #ef4444', background: '#ef4444', color: '#fff', cursor: 'pointer' },
+  input: { width: '94%', padding: '8px 10px', borderRadius: 8, border: '1px solid #334155', background: '#0b1220', color: '#e5e7eb' },
+  checkboxRow: { display: 'flex', fontSize: 12, gap: 14, flexWrap: 'wrap', alignItems: 'center' },
   hint: { color: '#9ca3af', fontSize: 12 }
 };
 
@@ -125,13 +138,17 @@ const responsiveWrap = {
   gap: 12
 };
 
+// vorher: Ellipsis/nowrap
+// neu: bricht lange Pfade (C:\\Users\\… oder \\\\Server\\Share\\…)
 const codeEllipsis = {
-  display: 'inline-block', maxWidth: '100%', overflow: 'hidden',
-  textOverflow: 'ellipsis', whiteSpace: 'nowrap', verticalAlign: 'bottom'
+  display: 'block',
+  overflowWrap: 'anywhere',
+  wordBreak: 'break-word',
+  whiteSpace: 'normal'
 };
 
 function normArray(x) { if (Array.isArray(x)) return x; if (x && Array.isArray(x.folders)) return x.folders; return []; }
-function lastSegment(relPath) { if (!relPath) return ""; return relPath.replaceAll("\\", "/").split("/").filter(Boolean).pop() ?? relPath; }
+function lastSegment(relPath) { if (!relPath) return ""; return relPath.replaceAll("\\\\", "/").split("/").filter(Boolean).pop() ?? relPath; }
 function joinParts(parts) { return parts.filter(Boolean).join("/"); }
 
 const TECH_NAMES = new Set(["node_modules", ".git", ".svn", ".hg", "__MACOSX", ".DS_Store", "Thumbs.db"]);
@@ -268,7 +285,7 @@ export default function FolderPickerModal({
     const n = newName.trim();
     if (!n) return false;
     if (n === "." || n === "..") return false;
-    if (n.includes("/") || n.includes("\\")) return false;
+    if (n.includes("/") || n.includes("\\\\")) return false;
     return true;
   }, [newName]);
 
@@ -329,7 +346,7 @@ export default function FolderPickerModal({
   // Tooltip für den *unteren* Übernehmen-Button mit vollem Pfad
   const acceptTooltip = useMemo(() => {
     const baseClean = (baseLabel || "").replace(/[/\\]+$/, "");
-    const sep = (baseClean.includes("\\") && !baseClean.includes("/")) ? "\\" : "/";
+    const sep = (baseClean.includes("\\\\") && !baseClean.includes("/")) ? "\\\\" : "/";
     const full = subPath ? `${baseClean}${sep}${subPath}` : baseClean || "(Basis)";
     return `Aktuellen Ordner übernehmen: ${full}`;
   }, [baseLabel, subPath]);
@@ -338,12 +355,12 @@ export default function FolderPickerModal({
     <div style={styles.overlay} onClick={onClose}>
       <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
         {/* Kopf */}
-		{!fsOk && (
-		  <div style={{ padding: 10, background: '#3f1d1d', color: '#fecaca', borderBottom: '1px solid #7f1d1d' }}>
-		    🚧 Basis nicht verfügbar.
-		    {fsHealthInfo?.base && <> Basis: <code>{fsHealthInfo.base}</code></>}
-		  </div>
-		)}
+        {!fsOk && (
+          <div style={{ padding: 10, background: '#3f1d1d', color: '#fecaca', borderBottom: '1px solid #7f1d1d' }}>
+            🚧 Basis nicht verfügbar.
+            {fsHealthInfo?.base && <> Basis: <code>{fsHealthInfo.base}</code></>}
+          </div>
+        )}
         <div style={styles.header}>
           <h3 style={styles.title}>{title}</h3>
           <button style={styles.btn} onClick={onClose} title="Schließen">✕</button>
