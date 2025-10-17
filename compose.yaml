@@ -21,7 +21,7 @@ services:
       SPRING_DATASOURCE_USERNAME: task
       SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-devpw}
       FOLDERPICKER_BASE_PATH: /data/files
-      ATTACHMENTS_BASE_PATH: /data/files/attachment
+      ATTACHMENTS_BASE_PATH: /data/files/attachments
     volumes:
       - /srv/taskapp/files:/data/files
       - /srv/taskapp/files/attachments:/data/files/attachments
