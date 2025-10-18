@@ -1,6 +1,6 @@
 // frontend/src/components/TaskBoard.jsx
 // Wire up due-* stripe classes via central DueDateConfig/DueDateTheme and remove inline due-color logic.
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import TaskCreationModal from "./TaskCreationModal";
 import TaskEditModal from "./TaskEditModal";
@@ -185,13 +185,18 @@ export default function TaskBoard() {
   const [idToLabel, setIdToLabel] = useState({});           // {id: name}
   const [orderIds, setOrderIds] = useState([]);             // [id, id, ...]
   const [columnsById, setColumnsById] = useState({});       // {id: Task[]}
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editTask, setEditTask] = useState(null);
   const [editInitialTab, setEditInitialTab] = useState("details");   // << neu
   const [isStationsOpen, setIsStationsOpen] = useState(false);
   const inFlightByColumn = React.useRef(new Map());
+  const [loadingHard, setLoadingHard] = useState(false);   // nur initial
+  const [loadingSoft, setLoadingSoft] = useState(false);  // alle Refreshes
+  const ignoreRefetchUntil = useRef(0);                   // SSE-Duplikate dämpfen
+  const vpRef = useRef(null);
+  const [edges, setEdges] = useState({ left: true, right: false, top: true, bottom: false });
+
 
   // Modal opener
   const openEditModal = useCallback((task, initialTab = "details") => {
@@ -251,8 +256,8 @@ export default function TaskBoard() {
     catch { return false; }
   });
   
-  const fetchAll = useCallback(async () => {
-        setLoading(true);
+  const fetchAll = useCallback(async ({ mode = "soft" } = {}) => {
+    if (mode === "hard") setLoadingHard(true); else setLoadingSoft(true);
     try {
       const [tasksRes, stationsRes] = await Promise.all([
         apiGet("/tasks"),
@@ -302,26 +307,30 @@ export default function TaskBoard() {
       console.error(e);
       setError(String(e?.message || e));
     } finally {
-      setLoading(false);
+      if (mode === "hard") setLoadingHard(false); else setLoadingSoft(false);
     }
   }, []);
   
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => {
+    fetchAll({ mode: "hard" });
+    // absichtlich ohne Abhängigkeiten, damit es garantiert 1x feuert
+  }, []);
  
 
-  // ... deine fetchAll-Funktion bleibt unverändert ...
 
   useEffect(() => {
     const isVite = typeof window !== "undefined" && window.location && window.location.port === "5173";
     const url = isVite ? "http://localhost:8080/api/tasks/stream" : "/api/tasks/stream";
-    const es = new EventSource(url);
-    let t = null;
-
-    const onTask = () => {
-      if (t) clearTimeout(t);
-      t = setTimeout(() => fetchAll(), 400);
-    };
-
+    const es = new EventSource(url);	
+ 	let t = null;
+ 	const onTask = () => {
+	   // Speicherkollisionen vermeiden (Save triggert gleich nochmal via SSE)
+	   if (Date.now() < ignoreRefetchUntil.current) return;
+	   if (t) clearTimeout(t);
+	   t = setTimeout(() => fetchAll({ mode: "soft" }), 400);
+	 };
+	
+		
     es.addEventListener("task-created", onTask);
     es.addEventListener("task-updated", onTask);
     es.addEventListener("task-deleted", onTask);
@@ -331,6 +340,48 @@ export default function TaskBoard() {
   }, [fetchAll]);
 
 
+  useEffect(() => {
+    const el = vpRef.current;
+    if (!el) return;
+
+    const update = () => {
+      const { scrollLeft, scrollTop, scrollWidth, scrollHeight, clientWidth, clientHeight } = el;
+      const left   = scrollLeft <= 0;
+      const right  = scrollLeft + clientWidth  >= scrollWidth  - 1;
+      const top    = scrollTop  <= 0;
+      const bottom = scrollTop  + clientHeight >= scrollHeight - 1;
+      setEdges({ left, right, top, bottom });
+    };
+
+    update(); // initial
+    el.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => {
+      el.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, []);
+
+  useEffect(() => {
+    const el = vpRef.current;
+    if (!el) return;
+
+    const setSB = () => {
+      const v = Math.max(0, el.offsetWidth  - el.clientWidth);   // vertikale Leiste (rechts)
+      const h = Math.max(0, el.offsetHeight - el.clientHeight);  // horizontale Leiste (unten)
+      el.style.setProperty("--sb-v", `${v}px`);
+      el.style.setProperty("--sb-h", `${h}px`);
+    };
+
+    setSB();
+    const ro = new ResizeObserver(setSB);
+    ro.observe(el);
+    window.addEventListener("resize", setSB);
+    return () => { ro.disconnect(); window.removeEventListener("resize", setSB); };
+  }, []);
+
+  
+  
   
   
   // --- NEU: Handler top-level, nicht in onDragEnd ---
@@ -399,18 +450,23 @@ export default function TaskBoard() {
     try { localStorage.setItem("taskboard:hardFilter", next ? "1" : "0"); } catch { /* ignore */ }
   };
 
-  if (loading) return <div style={{ padding: 24 }}>Lade…</div>;
+  
+  if (loadingHard) { return ( <div className="hard-loader">Lade…</div> );}
+  
   if (error) return <div style={{ padding: 24, color: "#ef4444" }}>Fehler: {String(error)}</div>;
 
   return (
-    <div style={{
-      padding: 16,
-      background: "#0b1220",
-      minHeight: "100vh",
-      display: "flex",
-      flexDirection: "column",
-      justifyContent: "flex-start"
-    }}>
+	<div
+	  ref={vpRef}
+	  className={["board-viewport", edges.left?"at-left":"", edges.right?"at-right":"", edges.top?"at-top":"", edges.bottom?"at-bottom":""].join(" ").trim()}
+	>
+	  <div className="board-fade-left"  aria-hidden="true" />
+	  <div className="board-fade-right" aria-hidden="true" />
+	  <div className="board-fade-top"   aria-hidden="true" />
+	  <div className="board-container">
+	
+	  <div style={{ padding: 0, display: "flex", flexDirection: "column", justifyContent: "flex-start", marginTop: 0 }}>
+
       <style>{`
         :root {
           --bg: #0b1220; --panel: #0f172a; --card: #111827;
@@ -446,10 +502,15 @@ export default function TaskBoard() {
         .search-clear { position: absolute; right: 8px; font-size: 16px; line-height: 1; cursor: pointer; border: none; background: transparent; color: var(--muted); padding: 0 4px; }
         .search-clear:hover { color: var(--text); }
         .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); user-select: none; }
+		
+		 /* Soft load spinner*/
+		 .soft-spinner { width:16px; height:16px; border:2px solid #999; border-top-color:transparent; border-radius:50%; display:inline-block; animation:spin .8s linear infinite; opacity:.8; margin-left:8px; }
+		 @keyframes spin{to{transform:rotate(360deg)}}
+			
       `}</style>
 
       {/* Toolbar */}
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginBottom: 12, paddingTop:0,  marginTop: 5, marginLeft: 16, }}>
         <span className="search-wrap">
           <input
             type="text"
@@ -488,11 +549,15 @@ export default function TaskBoard() {
         <button className="btn-primary" onClick={() => setIsCreateOpen(true)}>+ Neuer Task</button>
         <button className="btn-ghost" onClick={() => setIsStationsOpen(true)}>Stationen verwalten</button>
         {hardFilter && queryActive && <span style={{ fontSize: 12, color: "var(--muted)" }}>Hinweis: Drag & Drop ist bei hartem Filter deaktiviert.</span>}
+		
+	  {loadingSoft && <span className="soft-spinner" aria-label="Aktualisieren…" />}
+
+		
       </div>
 
       {/* Columns */}
       <DragDropContext onDragEnd={onDragEnd}>
-        <div style={{ display: "flex", gap: 16, alignItems: "flex-start", overflowX: "auto", paddingBottom: 8, flex: "1 1 auto" }}>
+        <div className="columns-wrap" style={{ alignItems: "flex-start", paddingBottom: 8 }}>
           {orderIds.map((colId) => {
             const title = idToLabel[colId] || colId;
             const list = Array.isArray(columnsById[colId]) ? columnsById[colId] : [];
@@ -563,15 +628,21 @@ export default function TaskBoard() {
           })}
         </div>
       </DragDropContext>
+	  
+	    </div>
+		</div>
+		<div className="board-fade-bottom" aria-hidden="true" />
+ 
 
       {/* Modals */}
       {isCreateOpen && (
         <TaskCreationModal
           stations={stations.map((s) => ({ id: String(pickStationId(s)), name: pickStationName(s) }))}
-          onTaskCreated={(opts) => {
-            fetchAll();
-            if (!opts || !opts.keepOpen) setIsCreateOpen(false);
-          }}
+		   onTaskCreated={(opts) => {
+		     ignoreRefetchUntil.current = Date.now() + 800; // kurz SSE-Refetch ignorieren
+		     fetchAll({ mode: "soft" });
+		     if (!opts || !opts.keepOpen) setIsCreateOpen(false);
+		   }}
           onClose={() => setIsCreateOpen(false)}
         />
       )}
@@ -580,9 +651,21 @@ export default function TaskBoard() {
         <TaskEditModal
           task={editTask}
           stations={stations.map((s) => ({ id: String(pickStationId(s)), name: pickStationName(s) }))}
-          onSave={() => { closeEditModal(); fetchAll(); }}
-          onClose={closeEditModal}
-          onDeleted={(id) => { closeEditModal(); fetchAll(); }}
+		  
+		  onSave={() => {
+		    closeEditModal();
+		    ignoreRefetchUntil.current = Date.now() + 800;
+		    fetchAll({ mode: "soft" });
+		   }}
+		   
+		  onClose={closeEditModal}
+		  
+		  onDeleted={(id) => {
+		    closeEditModal();
+		    ignoreRefetchUntil.current = Date.now() + 800;
+		    fetchAll({ mode: "soft" });
+		   }}
+		  
           initialTab={editInitialTab}                              // << neu
         />
       )}
@@ -595,9 +678,15 @@ export default function TaskBoard() {
       >
         <StationManagementContent
           stations={stations.map((s) => ({ id: pickStationId(s), name: pickStationName(s), sortOrder: s.sort_order ?? s.sortOrder }))}
-          onUpdate={() => { setIsStationsOpen(false); fetchAll(); }}
-        />
+		   onUpdate={() => {
+		     setIsStationsOpen(false);
+		     ignoreRefetchUntil.current = Date.now() + 800;
+		     fetchAll({ mode: "soft" });
+		   }}      
+		/>
       </Modal>
     </div>
+	
+	
   );
 }
