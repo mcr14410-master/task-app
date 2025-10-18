@@ -1,7 +1,8 @@
 // uses the existing apiClient for GET/DELETE; direct fetch for multipart POST
 import { apiGet, apiDelete } from "../config/apiClient";
 
-const base = import.meta.env.VITE_API_BASE;
+const API_BASE = '/api'; // immer relativ, funktioniert mit Vite-Proxy und Backend-only
+
 
 export const AttachmentsApi = {
   list(taskId){
@@ -10,7 +11,7 @@ export const AttachmentsApi = {
   async upload(taskId, file){
     const form = new FormData();
     form.append("file", file);
-    const res = await fetch(`${base}/api/tasks/${taskId}/attachments`, {
+    const res = await fetch(`${API_BASE}/tasks/${taskId}/attachments`, {
       method: "POST",
       body: form
     });

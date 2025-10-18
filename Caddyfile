@@ -2,12 +2,6 @@
   root * /srv/frontend
   file_server
 
- # --- HOTFIX: zuerst /api/api/* abfangen und auf /api/* umschreiben ---
-  @dup path_regexp dup ^/api/api/(.*)$
-  handle @dup {
-    uri replace ^/api/api/ /api/
-    reverse_proxy backend:8080
-  }
 
   # Prefix NICHT strippen:
   handle /api/* {

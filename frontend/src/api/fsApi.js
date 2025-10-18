@@ -1,5 +1,38 @@
 // frontend/src/api/fsApi.js
 import { apiGet, apiPost, apiDelete } from "@/config/apiClient";
+import axios from "axios";
+
+
+// Basis-URL:
+// - DEV mit Vite:     /api   (Proxy → :8080)
+// - Backend-only:     /api   (gleicher Origin :8080)
+// - Produktion:       /api   (hinter Caddy/Nginx)
+// Optional via .env.* übersteuerbar (z. B. VITE_API_BASE=/api)
+const baseURL = import.meta?.env?.VITE_API_BASE || "/api";
+
+// Einmalige Axios-Instanz
+export const api = axios.create({
+  baseURL,
+  headers: {
+    Accept: "application/json",
+  },
+  // Keine automatische Transformation erzwingen
+  transformResponse: [(data) => {
+    try { return JSON.parse(data); } catch { return data; }
+  }],
+});
+
+
+// Hilfsfunktionen: **ohne** führendes /api aufrufen!
+export const get  = (path, cfg)          => api.get(path, cfg);
+export const del  = (path, cfg)          => api.delete(path, cfg);
+export const post = (path, body, cfg)    => api.post(path, body, cfg);
+export const put  = (path, body, cfg)    => api.put(path, body, cfg);
+export const patch= (path, body, cfg)    => api.patch(path, body, cfg);
+// Beispiel-Aufrufe (so verwenden):
+// get("/tasks")
+// post(`/tasks/${id}/attachments`, formData, { headers: { "Content-Type": "multipart/form-data" } })
+
 
 /**
  * Liefert den absoluten Basis-Pfad als Label-String.
