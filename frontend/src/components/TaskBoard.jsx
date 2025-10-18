@@ -312,32 +312,24 @@ export default function TaskBoard() {
   // ... deine fetchAll-Funktion bleibt unverändert ...
 
   useEffect(() => {
-    // DEV direkt zum Backend, PROD relativ
-	const isVite = typeof window !== "undefined" && window.location && window.location.port === "5173";
-	const url = isVite ? "http://localhost:8080/api/tasks/stream" : "/api/tasks/stream";
-
-
+    const isVite = typeof window !== "undefined" && window.location && window.location.port === "5173";
+    const url = isVite ? "http://localhost:8080/api/tasks/stream" : "/api/tasks/stream";
     const es = new EventSource(url);
-
     let t = null;
+
     const onTask = () => {
-      // kleine Entlastung bei Event-Stürmen
       if (t) clearTimeout(t);
-      t = setTimeout(() => { fetchAll(); }, 400);
+      t = setTimeout(() => fetchAll(), 400);
     };
 
     es.addEventListener("task-created", onTask);
     es.addEventListener("task-updated", onTask);
     es.addEventListener("task-deleted", onTask);
 
-    es.onerror = () => { /* Browser reconnectet automatisch; kein fetch hier */ };
+    es.onerror = () => {}; // Browser reconnectet automatisch
+    return () => { if (t) clearTimeout(t); es.close(); };
+  }, [fetchAll]);
 
-    return () => {
-      if (t) clearTimeout(t);
-      es.close();
-    };
-  }, [fetchAll]); // falls fetchAll nicht stabil ist: notfalls [] verwenden
-	
 
   
   
