@@ -2,9 +2,9 @@
 // Wire up due-* stripe classes via central DueDateConfig/DueDateTheme and remove inline due-color logic.
 import React, { useCallback, useEffect, useState, useRef } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+import SettingsModal from '@/components/settings/SettingsModal';
 import TaskCreationModal from "./TaskCreationModal";
 import TaskEditModal from "./TaskEditModal";
-import StationManagementContent from "./StationManagementContent";
 import TaskItem from "./TaskItem";
 import "@/config/DueDateTheme.css";           // zentrale Farben/Stripe pro Fälligkeit
 import { dueClassForDate } from "@/config/DueDateConfig"; // zentrale Schwellen → Klasse
@@ -189,13 +189,14 @@ export default function TaskBoard() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editTask, setEditTask] = useState(null);
   const [editInitialTab, setEditInitialTab] = useState("details");   // << neu
-  const [isStationsOpen, setIsStationsOpen] = useState(false);
   const inFlightByColumn = React.useRef(new Map());
   const [loadingHard, setLoadingHard] = useState(false);   // nur initial
   const [loadingSoft, setLoadingSoft] = useState(false);  // alle Refreshes
   const ignoreRefetchUntil = useRef(0);                   // SSE-Duplikate dämpfen
   const vpRef = useRef(null);
   const [edges, setEdges] = useState({ left: true, right: false, top: true, bottom: false });
+  const [openSettings, setOpenSettings] = useState(false);
+
 
 
   // Modal opener
@@ -509,51 +510,76 @@ export default function TaskBoard() {
 			
       `}</style>
 
-      {/* Toolbar */}
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center", marginBottom: 12, paddingTop:0,  marginTop: 5, marginLeft: 16, }}>
-        <span className="search-wrap">
-          <input
-            type="text"
-            className="toolbar-input"
-            placeholder="Suchen… (Bezeichnung, Kunde, Teilenummer, Status …)"
-            value={query}
-            onChange={(e) => {
-              const v = e.target.value;
-              setQuery(v);
-              try { localStorage.setItem("taskboard:query", v); } catch { /* ignore */ }
-            }}
-            onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); clearQuery(); } }}
-            style={{ minWidth: 260, paddingRight: 28 }}
-          />
-          {query && (
-            <button
-              className="search-clear"
-              aria-label="Suche löschen"
-              title="Suche löschen (Esc)"
-              onClick={clearQuery}
-            >
-              ×
-            </button>
-          )}
-        </span>
+	  {/* Toolbar */}
+	  <div
+	    className="board-toolbar"
+	    style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 0, marginTop: 5 }}
+	  >
+	    {/* LEFT: Suche, Filter, Aktionen */}
+	    <div className="toolbar-left" style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+	      <span className="search-wrap">
+	        <input
+	          type="text"
+	          className="toolbar-input"
+	          placeholder="Suchen… (Bezeichnung, Kunde, Teilenummer, Status …)"
+	          value={query}
+	          onChange={(e) => {
+	            const v = e.target.value;
+	            setQuery(v);
+	            try { localStorage.setItem("taskboard:query", v); } catch { /* ignore */ }
+	          }}
+	          onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); clearQuery(); } }}
+	          style={{ minWidth: 260, paddingRight: 28 }}
+	        />
+	        {query && (
+	          <button
+	            className="search-clear"
+	            aria-label="Suche löschen"
+	            title="Suche löschen (Esc)"
+	            onClick={clearQuery}
+	          >
+	            ×
+	          </button>
+	        )}
+	      </span>
 
-        <label className="toggle">
-          <input
-            type="checkbox"
-            checked={hardFilter}
-            onChange={toggleHardFilter}
-          />
-          Hart filtern (ausblenden)
-        </label>
+	      <label className="toggle">
+	        <input
+	          type="checkbox"
+	          checked={hardFilter}
+	          onChange={toggleHardFilter}
+	        />
+	        Hart filtern (ausblenden)
+	      </label>
 
-        <button className="btn-primary" onClick={() => setIsCreateOpen(true)}>+ Neuer Task</button>
-        <button className="btn-ghost" onClick={() => setIsStationsOpen(true)}>Stationen verwalten</button>
-        {hardFilter && queryActive && <span style={{ fontSize: 12, color: "var(--muted)" }}>Hinweis: Drag & Drop ist bei hartem Filter deaktiviert.</span>}
-		
-	  {loadingSoft && <span className="soft-spinner" aria-label="Aktualisieren…" />}
+	      <button className="btn-primary" onClick={() => setIsCreateOpen(true)}>+ Neuer Task</button>
+	   
 
-		
-      </div>
+		  {loadingSoft && <span className="soft-spinner" aria-label="Aktualisieren…" />}
+	     
+		   {hardFilter && queryActive && (
+	        <span style={{ fontSize: 12, color: "var(--muted)" }}>
+	          Hinweis: Drag & Drop ist bei hartem Filter deaktiviert.
+	        </span>
+	      )}
+	    </div>
+
+	    {/* RIGHT: Einstellungen (rechtsbündig per margin-left:auto) */}
+	    <div className="toolbar-right" style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+	      <button
+	        className="btn"
+	        onClick={() => setOpenSettings(true)}
+	        aria-haspopup="dialog"
+	        aria-controls="settings-modal"
+	        title="Einstellungen"
+	      >
+	        Einstellungen
+	      </button>
+	    </div>
+	  </div>
+
+
+
 
       {/* Columns */}
       <DragDropContext onDragEnd={onDragEnd}>
@@ -670,21 +696,20 @@ export default function TaskBoard() {
         />
       )}
 
-      <Modal
-        open={isStationsOpen}
-        onClose={() => setIsStationsOpen(false)}
-        title="Stationen verwalten"
-        width={760}
-      >
-        <StationManagementContent
-          stations={stations.map((s) => ({ id: pickStationId(s), name: pickStationName(s), sortOrder: s.sort_order ?? s.sortOrder }))}
-		   onUpdate={() => {
-		     setIsStationsOpen(false);
-		     ignoreRefetchUntil.current = Date.now() + 800;
-		     fetchAll({ mode: "soft" });
-		   }}      
-		/>
-      </Modal>
+
+	  
+	  {openSettings && (
+	    <SettingsModal
+	      open={openSettings}
+	      onClose={() => setOpenSettings(false)}
+		     initialTab="stations"
+		     stations={stations}   
+		     onUpdate={() => fetchAll({ mode: "soft" })} 
+	    />
+	  )}
+	  
+	  
+	  
     </div>
 	
 	

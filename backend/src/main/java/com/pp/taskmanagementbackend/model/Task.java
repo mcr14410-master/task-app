@@ -18,10 +18,13 @@ public class Task {
     @Column private Integer prioritaet = 0;
     @Column(name="fai", nullable=false) private boolean fai = false;
     @Column(name="qs",  nullable=false) private boolean qs  = false;
-@Column(name="stk") private Integer stk;
-@Column(name="fa")  private String fa;
-@Column(name="dateipfad", length=512) private String dateipfad;
-        @Version @Column(name = "version", nullable = false) private Integer version = 0;
+    @Column(name="stk") private Integer stk;
+    @Column(name="fa")  private String fa;
+    @Column(name="dateipfad", length=512) private String dateipfad;
+    @Version @Column(name = "version", nullable = false) private Integer version = 0;
+    @Column(name = "status_code", nullable = false, length = 64) private String statusCode;
+    
+    
 
     public Long getId(){return id;} public void setId(Long id){this.id=id;}
     public String getBezeichnung(){return bezeichnung;} public void setBezeichnung(String v){this.bezeichnung=v;}
@@ -43,5 +46,10 @@ public class Task {
     public Integer getStk(){ return stk; } public void setStk(Integer v){ this.stk = v; }
     public String getFa(){ return fa; } public void setFa(String v){ this.fa = v; }
     public String getDateipfad(){ return dateipfad; } public void setDateipfad(String v){ this.dateipfad = v; }
+    
+ // NEU:
+    public String getStatusCode(){ return statusCode; }
+    public void setStatusCode(String statusCode) {this.statusCode = statusCode; }
+  
 
 }
