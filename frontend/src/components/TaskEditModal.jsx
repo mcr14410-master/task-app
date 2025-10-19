@@ -1,5 +1,5 @@
 // components/TaskEditModal.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { apiPatch, apiDelete } from "@/config/apiClient";
 import "../config/TaskStatusTheme.css";
 import "../config/AdditionalWorkTheme.css";
@@ -7,6 +7,7 @@ import useToast from "@/components/ui/useToast";
 import FolderPickerModal from "./FolderPickerModal";
 import { fsExists, fsBaseLabel } from "@/api/fsApi";
 import AttachmentTab from "./AttachmentTab";
+import { fetchStatuses } from "@/api/statuses";
 
 const styles = {
   overlay: { position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000 },
@@ -32,7 +33,39 @@ const styles = {
   muted: { color: "#9ca3af", fontSize: 12 }
 };
 
-const STATUS_ORDER = ["NEU", "TO_DO", "IN_BEARBEITUNG", "FERTIG"];
+/** Farb-Utils (Hover/Active-Hintergründe) */
+function hexToRgb(hex) {
+  if (!hex) return null;
+  const h = hex.replace('#','');
+  const v = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+  if (v.length !== 6) return null;
+  const n = parseInt(v, 16);
+  if (Number.isNaN(n)) return null;
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+function toRgba(hex, alpha) {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return `rgba(23,32,50,${alpha})`;
+  return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+}
+
+const statusStyles = {
+  pillBase: { display:'inline-flex', alignItems:'center', gap:8, padding:'6px 10px', borderRadius:999, border:'1px solid #ffffff22', cursor:'pointer', userSelect:'none' },
+  menu: { position:'absolute', minWidth:220, maxHeight:260, overflowY:'auto', backgroundColor:'#0b1220', color:'#e5e7eb', border:'1px solid #1f2937', borderRadius:10, boxShadow:'0 20px 60px rgba(0,0,0,.45)', padding:6, zIndex:1200 },
+  menuItem: (active, disabled, colors) => {
+    const baseBg = colors?.bg ? toRgba(colors.bg, 0.14) : 'transparent';
+    const activeBg = colors?.bg ? toRgba(colors.bg, 0.30) : '#172032';
+    return {
+      display:'flex', alignItems:'center', gap:8, width:'100%', padding:'8px 10px', borderRadius:8, textAlign:'left',
+      backgroundColor: active ? activeBg : baseBg,
+      opacity: disabled ? .45 : 1, cursor: disabled ? 'not-allowed' : 'pointer',
+      border:'1px solid ' + (active ? '#ffffff22' : 'transparent'),
+      color: colors?.fg || undefined
+    };
+  },
+  dot: (color) => ({ width:8, height:8, borderRadius:999, backgroundColor:color, boxShadow:'0 0 0 2px #000 inset' })
+};
+
 const DEFAULT_BASE_LABEL = "\\\\server\\share\\";
 
 export default function TaskEditModal({
@@ -48,7 +81,30 @@ export default function TaskEditModal({
   const [submitting, setSubmitting] = useState(false);
   const [showFolderPicker, setShowFolderPicker] = useState(false);
 
-  // Echten Base-Pfad für die Anzeige vom Server holen (über fsApi)
+  /** Statusliste laden (aktiv) */
+  const [statuses, setStatuses] = useState([]);
+  const [statusErr, setStatusErr] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const list = await fetchStatuses(true);
+        if (!alive) return;
+        const sorted = (list || []).slice().sort((a, b) =>
+          (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
+          String(a.label).localeCompare(String(b.label))
+        );
+        setStatuses(sorted);
+        setStatusErr('');
+      } catch {
+        if (alive) setStatusErr('Statusliste konnte nicht geladen werden.');
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  /** Base-Pfad für Anzeige */
   const [baseLabel, setBaseLabel] = useState("");
   useEffect(() => {
     let cancelled = false;
@@ -56,9 +112,7 @@ export default function TaskEditModal({
       try {
         const label = await fsBaseLabel();
         if (!cancelled) setBaseLabel(label);
-      } catch {
-        // optional – Anzeige
-      }
+      } catch {}
     })();
     return () => { cancelled = true; };
   }, []);
@@ -72,6 +126,7 @@ export default function TaskEditModal({
     return `${cleanBase}${sep}${sub}`;
   }
 
+  /** Formularzustand – Status bevorzugt aus statusCode */
   const [form, setForm] = useState(() => ({
     id: task?.id ?? null,
     bezeichnung: task?.bezeichnung ?? "",
@@ -85,13 +140,82 @@ export default function TaskEditModal({
     zustaendig: task?.zustaendig ?? "",
     zusaetzlicheInfos: task?.zusaetzlicheInfos ?? "",
     arbeitsstation: task?.arbeitsstation ?? (stations[0]?.name ?? ""),
-    status: task?.status ?? "NEU",
+    status: task?.statusCode ?? task?.status ?? "NEU",
     fai: !!task?.fai,
     qs: !!task?.qs
   }));
 
   const setValue = (name, value) => setForm((prev) => ({ ...prev, [name]: value }));
 
+  /** Status-Pill Dropdown (ohne Auto-Persist) */
+  const statusBtnRef = useRef(null);
+  const statusMenuRef = useRef(null);
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const [hi, setHi] = useState(-1);
+
+  const currentStatus = useMemo(
+    () => statuses.find(s => s.code === form.status) || null,
+    [statuses, form?.status]
+  );
+
+  const visibleList = useMemo(() => (
+    statuses.length ? statuses : [
+      { code:'NEU', label:'Neu', colorBg:'#2e3847', colorFg:'#d7e3ff', sortOrder:0, isFinal:false, active:true },
+      { code:'TO_DO', label:'To do', colorBg:'#374151', colorFg:'#e5e7eb', sortOrder:1, isFinal:false, active:true },
+      { code:'IN_BEARBEITUNG', label:'In Bearbeitung', colorBg:'#1f4a3a', colorFg:'#b5f5d1', sortOrder:2, isFinal:false, active:true },
+      { code:'FERTIG', label:'Fertig', colorBg:'#133b19', colorFg:'#b2fcb8', sortOrder:3, isFinal:true, active:true }
+    ]
+  ), [statuses]);
+
+  const enabledIdxs = useMemo(
+    () => visibleList.reduce((acc, s, idx) => (s.active ? (acc.push(idx), acc) : acc), []),
+    [visibleList]
+  );
+
+  function openStatusMenu() {
+    setStatusMenuOpen(true);
+    const curIdx = visibleList.findIndex(s => s.code === form.status && s.active);
+    const start = curIdx >= 0 ? curIdx : (enabledIdxs[0] ?? -1);
+    setHi(start);
+    setTimeout(() => statusMenuRef.current?.focus(), 0);
+  }
+  function closeStatusMenu() {
+    setStatusMenuOpen(false);
+    setHi(-1);
+    setTimeout(() => statusBtnRef.current?.focus(), 0);
+  }
+  function move(delta) {
+    if (!enabledIdxs.length) return;
+    const pos = enabledIdxs.indexOf(hi);
+    const next = pos < 0 ? enabledIdxs[0] : enabledIdxs[(pos + delta + enabledIdxs.length) % enabledIdxs.length];
+    setHi(next);
+  }
+  function choose(idx) {
+    const s = visibleList[idx];
+    if (!s || !s.active) return;
+    if (s.isFinal && s.code !== form.status) {
+      const ok = confirm(`Status „${s.label}“ ist final. Trotzdem setzen?`);
+      if (!ok) return;
+    }
+    // Nur lokal setzen – Persistenz erst bei "Speichern"
+    setForm(prev => ({ ...prev, status: s.code }));
+    closeStatusMenu();
+  }
+
+  // Klick außerhalb schließt
+  useEffect(() => {
+    if (!statusMenuOpen) return;
+    const onDown = (e) => {
+      if (!statusMenuRef.current || !statusBtnRef.current) return;
+      if (!statusMenuRef.current.contains(e.target) && !statusBtnRef.current.contains(e.target)) {
+        setStatusMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [statusMenuOpen]);
+
+  /** Sanitizer */
   const sanitize = (value) => {
     if (value === undefined || value === null) return null;
     if (typeof value === "string") {
@@ -101,6 +225,7 @@ export default function TaskEditModal({
     return value;
   };
 
+  /** Build Payload – statusCode mitgeben (wichtig fürs Backend) */
   const buildPayload = () => {
     const payload = {
       bezeichnung: sanitize(form.bezeichnung),
@@ -112,6 +237,7 @@ export default function TaskEditModal({
       zusaetzlicheInfos: sanitize(form.zusaetzlicheInfos),
       arbeitsstation: sanitize(form.arbeitsstation),
       status: sanitize(form.status) ?? "NEU",
+      statusCode: sanitize(form.status) ?? "NEU",
       fai: !!form.fai,
       qs: !!form.qs,
       stk: Number.isFinite(Number(form.stk)) ? Number(form.stk) : undefined,
@@ -122,6 +248,7 @@ export default function TaskEditModal({
     return payload;
   };
 
+  /** Speichern (einmaliger Patch) */
   const handleSave = async () => {
     if (!form.id) { toast.error("Ungültige Task-ID"); return; }
     setSubmitting(true);
@@ -153,7 +280,7 @@ export default function TaskEditModal({
     }
   };
 
-  // Breadcrumbs aus relativem Unterordner
+  /** Breadcrumbs aus relativem Unterordner */
   const breadcrumbs = useMemo(() => {
     const raw = (form.dateipfad || "").replaceAll("\\", "/").replace(/^\/+/, "");
     if (!raw) return [];
@@ -286,47 +413,108 @@ export default function TaskEditModal({
             </select>
           </div>
         </div>
+
         <div style={{ height: 10 }} />
         <div>
-          <label style={styles.label}>Status</label>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            {STATUS_ORDER.map((st) => {
-              const selected = form.status === st;
-              return (
-                <button
-                  key={st}
-                  type="button"
-                  className={`pill st-${st.toLowerCase().replace("_", "-")} ${selected ? "is-selected" : ""}`}
-                  aria-pressed={selected}
-                  onClick={() => setValue("status", st)}
-                  disabled={submitting}
-                  title={st}
-                >
-                  {st}
-                </button>
-              );
-            })}
-            <div style={{ marginLeft: "auto", display: "inline-flex", gap: 8, alignItems: "center" }}>
-              <span style={{ fontSize: 12, color: "#94a3b8" }}>Zusatzarbeiten:</span>
-              <button
-                type="button"
-                className={`pill-add add-fai ${form.fai ? "is-active" : ""} is-clickable`}
-                onClick={() => setForm((prev) => ({ ...prev, fai: !prev.fai }))}
-                disabled={submitting}
-                title="FAI"
+          <label className="form-label">Status</label>
+          <div style={{ position:'relative', display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+            {/* Pill-Button */}
+            <button
+              ref={statusBtnRef}
+              type="button"
+              onClick={() => (statusMenuOpen ? closeStatusMenu() : openStatusMenu())}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  if (!statusMenuOpen) openStatusMenu();
+                }
+              }}
+              className="pill"
+              style={{
+                ...statusStyles.pillBase,
+                backgroundColor: (currentStatus?.colorBg ?? '#26303f'),
+                color: (currentStatus?.colorFg ?? '#e5e7eb'),
+                border: '1px solid #ffffff22'
+              }}
+              aria-haspopup="menu"
+              aria-expanded={statusMenuOpen}
+              title={currentStatus ? currentStatus.label : form.status}
+            >
+              <span style={{ width:8, height:8, borderRadius:999, backgroundColor:'#8df58d' }} />
+              <span>{currentStatus ? currentStatus.label : form.status}</span>
+              <span style={{ opacity:.75 }}>▾</span>
+            </button>
+
+            {/* Dropdown */}
+            {statusMenuOpen && (
+              <div
+                ref={statusMenuRef}
+                role="menu"
+                tabIndex={-1}
+                style={{ ...statusStyles.menu, top:'calc(100% + 6px)', left:0 }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') { e.preventDefault(); closeStatusMenu(); }
+                  else if (e.key === 'ArrowDown') { e.preventDefault(); move(+1); }
+                  else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
+                  else if (e.key === 'Enter') { e.preventDefault(); choose(hi); }
+                }}
               >
-                FAI
-              </button>
-              <button
-                type="button"
-                className={`pill-add add-qs ${form.qs ? "is-active" : ""} is-clickable`}
-                onClick={() => setForm((prev) => ({ ...prev, qs: !prev.qs }))}
-                disabled={submitting}
-                title="QS"
-              >
-                QS
-              </button>
-            </div>
+                {visibleList.map((s, idx) => {
+                  const active = hi === idx;
+                  const disabled = !s.active;
+                  return (
+                    <button
+                      key={s.code}
+                      role="menuitem"
+                      onMouseEnter={() => setHi(idx)}
+                      onClick={() => choose(idx)}
+                      disabled={disabled}
+                      title={disabled ? 'Inaktiv (nicht auswählbar)' : (s.isFinal ? 'Finaler Status' : s.label)}
+                      style={statusStyles.menuItem(active, disabled, { bg: s.colorBg, fg: s.colorFg })}
+                    >
+                      <span style={statusStyles.dot(s.colorFg)} />
+                      <span style={{ flex:1 }}>{s.label}</span>
+                      {s.isFinal && (
+                        <span style={{ fontSize:11, opacity:.85, border:'1px solid #ffffff33', borderRadius:999, padding:'2px 6px' }}>
+                          final
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+			{/* Zusatzarbeiten (FAI/QS) – rechts ausgerichtet */}
+			<div style={{ marginLeft: "auto", display: "inline-flex", gap: 8, alignItems: "center" }}>
+			  <span style={{ fontSize: 12, color: "#94a3b8" }}>Zusatzarbeiten:</span>
+
+			  <button
+			    type="button"
+			    className={`pill-add add-fai ${form.fai ? "is-active" : ""} is-clickable`}
+			    onClick={() => setForm((prev) => ({ ...prev, fai: !prev.fai }))}
+			    disabled={submitting}
+			    aria-pressed={!!form.fai}
+			    title="FAI"
+			  >
+			    FAI
+			  </button>
+
+			  <button
+			    type="button"
+			    className={`pill-add add-qs ${form.qs ? "is-active" : ""} is-clickable`}
+			    onClick={() => setForm((prev) => ({ ...prev, qs: !prev.qs }))}
+			    disabled={submitting}
+			    aria-pressed={!!form.qs}
+			    title="QS"
+			  >
+			    QS
+			  </button>
+			</div>
+
+			
+			
+            {statusErr && <div style={{ marginTop:6, color:'#fecaca', fontSize:12 }}>{statusErr}</div>}
           </div>
         </div>
       </div>

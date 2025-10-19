@@ -67,7 +67,22 @@ public class TaskController {
         if (t == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Task " + id + " not found");
         return t;
     }
-
+    
+    
+    
+    private static String deriveStatusCode(TaskDto dto) {
+        if (dto == null) return "NEU";
+        if (dto.getStatusCode() != null && !dto.getStatusCode().isBlank()) {
+            return dto.getStatusCode();
+        }
+        // falls dto.getStatus() existiert (String oder Enum)
+        if (dto.getStatus() != null) {
+            String s = dto.getStatus().toString();
+            if (!s.isBlank()) return s;
+        }
+        return "NEU";
+    }
+    
     @GetMapping
     public List<TaskDto> list() {
         List<Task> entities = service.findAll(); // oder deine bestehende Methode
@@ -103,6 +118,9 @@ public class TaskController {
             dto.setStatus(TaskStatus.NEU);
         }
         Task entity = TaskMapper.toEntity(dto);
+        if (entity.getStatusCode() == null || entity.getStatusCode().isBlank()) {
+            entity.setStatusCode( deriveStatusCode(dto) );
+        }
         Task saved = service.save(entity);
         return ResponseEntity.status(HttpStatus.CREATED).body(TaskMapper.toDto(saved));
     }
@@ -110,7 +128,17 @@ public class TaskController {
     @PatchMapping("/{id:\\d+}")
     public TaskDto patch(@PathVariable Long id, @RequestBody TaskDto dto) {
         Task entity = requireTask(id);
+        
         TaskMapper.updateEntityFromDto(dto, entity);
+        // ▼ Status-Code übernehmen
+        String code = (dto.getStatusCode() != null && !dto.getStatusCode().isBlank())
+            ? dto.getStatusCode().trim()
+            : (dto.getStatus() != null ? dto.getStatus().toString().trim() : null);
+        if (code != null && !code.isEmpty()) {
+            // optional: assertActiveStatusOr400(code);
+            entity.setStatusCode(code);
+        }
+
         Task saved = service.save(entity);
         return TaskMapper.toDto(saved);
     }

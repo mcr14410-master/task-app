@@ -4,6 +4,26 @@
 
 
 ### v0.6.0 — 2025-10-16
+## 0.6.0 — 2025-10-20
+### Added
+- Datenbankgetriebenes Status-System (`task_statuses`), inkl. Farben, Sortierung, `isFinal`, Aktiv/Inaktiv.
+- REST-API `/api/statuses` (CRUD) + `activeOnly` Filter.
+- Settings-Modal mit Tabs: **Status-Management** & **Stationen**.
+- Frontend: Status-Pill-Dropdown mit Hover/Keyboard-Navigation.
+
+### Changed
+- `TaskCreate`/`TaskEdit`: senden `statusCode` (statt hart codiertem Enum).
+- `PATCH /api/tasks/{id}` verarbeitet jetzt `statusCode`.
+
+### Fixed
+- 409 bei Task-Create (wegen `status_code` NOT NULL).
+- Konsistenz der Feldnamen (`zustaendig`, `zusaetzlicheInfos`).
+
+### Notes
+- Final-Status zeigt Confirm-Dialog.
+- Inaktive Status sind im Menü disabled.
+
+
 
 **Neu**
 - Zentrale Konfiguration via `StorageProperties` (ersetzt verstreute `@Value`/Einzel-Properties):

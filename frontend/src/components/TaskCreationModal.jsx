@@ -1,5 +1,5 @@
 // components/TaskCreationModal.jsx
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { apiPost } from "@/config/apiClient";
 import '../config/TaskStatusTheme.css';
 import '../config/AdditionalWorkTheme.css';
@@ -8,6 +8,23 @@ import apiErrorMessage from "@/utils/apiErrorMessage";
 import FolderPickerModal from "./FolderPickerModal";
 import { fsExists, fsBaseLabel } from "@/api/fsApi";
 import AttachmentTab from "./AttachmentTab";
+import { fetchStatuses } from "@/api/statuses";
+
+/** Farb-Utils */
+function hexToRgb(hex) {
+  if (!hex) return null;
+  const h = hex.replace('#','');
+  const v = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+  if (v.length !== 6) return null;
+  const n = parseInt(v, 16);
+  if (Number.isNaN(n)) return null;
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+function toRgba(hex, alpha) {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return `rgba(23,32,50,${alpha})`; // Fallback
+  return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+}
 
 const styles = {
   overlay: { position:'fixed', inset:0, backgroundColor:'rgba(0,0,0,.5)', display:'flex', justifyContent:'center', alignItems:'center', zIndex:1000 },
@@ -25,16 +42,25 @@ const styles = {
   btnPrimary: { padding:'10px 16px', backgroundColor:'#3b82f6', color:'#fff', border:'1px solid #3b82f6', borderRadius:10, cursor:'pointer', fontWeight:700 },
   btnSecondary: { padding:'10px 16px', backgroundColor:'transparent', color:'#cbd5e1', border:'1px solid #334155', borderRadius:10, cursor:'pointer', fontWeight:600 },
   tabsRow: { display:'flex', gap:8, marginBottom:12 },
-  tabBtn: (active, disabled=false) => ({ padding:'8px 12px', borderRadius:8, border:'1px solid #334155', background: active ? '#1f2937' : 'transparent', color: disabled ? '#6b7280' : '#e5e7eb', cursor: disabled ? 'not-allowed' : 'pointer', fontWeight:600 }),
-  pill: (selected, cls) => `pill ${cls ?? ''} ${selected ? 'is-selected' : ''}`
+  tabBtn: (active, disabled=false) => ({ padding:'8px 12px', borderRadius:8, border:'1px solid #334155', backgroundColor: active ? '#1f2937' : 'transparent', color: disabled ? '#6b7280' : '#e5e7eb', cursor: disabled ? 'not-allowed' : 'pointer', fontWeight:600 }),
+  pillBase: { display:'inline-flex', alignItems:'center', gap:8, padding:'6px 10px', borderRadius:999, border:'1px solid #ffffff22', cursor:'pointer', userSelect:'none' },
+  menu: { position:'absolute', minWidth:220, maxHeight:260, overflowY:'auto', backgroundColor:'#0b1220', color:'#e5e7eb', border:'1px solid #1f2937', borderRadius:10, boxShadow:'0 20px 60px rgba(0,0,0,.45)', padding:6, zIndex:1200 },
+  menuItem: (active, disabled, colors) => {
+    const baseBg = colors?.bg ? toRgba(colors.bg, 0.14) : 'transparent';
+    const activeBg = colors?.bg ? toRgba(colors.bg, 0.30) : '#172032';
+    return {
+      display:'flex', alignItems:'center', gap:8, width:'100%', padding:'8px 10px', borderRadius:8, textAlign:'left',
+      backgroundColor: active ? activeBg : baseBg,
+      opacity: disabled ? .45 : 1, cursor: disabled ? 'not-allowed' : 'pointer',
+      border:'1px solid ' + (active ? '#ffffff22' : 'transparent'),
+      color: colors?.fg || undefined
+    };
+  },
+  dot: (color) => ({ width:8, height:8, borderRadius:999, backgroundColor:color, boxShadow:'0 0 0 2px #000 inset' })
 };
 
-const STATUS_ORDER = ['NEU', 'TO_DO', 'IN_BEARBEITUNG', 'FERTIG'];
-
-// Fallback nur für Anzeige, falls Server nichts liefert
 const DEFAULT_BASE_LABEL = "\\\\server\\share\\";
 
-// Anzeige-Helfer: Base + Sub hübsch zusammensetzen (nur optisch)
 function joinBaseAndSub(base, sub) {
   if (!base) return sub || "";
   const hasBackslashBase = base.includes("\\") && !base.includes("/");
@@ -48,10 +74,11 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
   const toast = useToast();
   const defaultStationName = useMemo(() => (stations[0]?.name ?? ''), [stations]);
 
+  // 👉 KEINE Umlaute in den Keys im State
   const makeInitial = useCallback(() => ({
     bezeichnung: '', teilenummer: '', kunde: '', endDatum: '',
     aufwandStunden: 0, stk: 0, fa: "", dateipfad: "",
-    zuständig: '', zusätzlicheInfos: '',
+    zustaendig: '', zusaetzlicheInfos: '',
     arbeitsstation: defaultStationName, status: 'NEU',
     fai: false, qs: false
   }), [defaultStationName]);
@@ -60,26 +87,20 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
 
-  // Tabs
   const [visualActiveTab, setVisualActiveTab] = useState("details");
   const [shownTab, setShownTab] = useState("details");
-
-  // Nach erstem Erstellen ⇒ Anhänge freischalten
   const [createdTaskId, setCreatedTaskId] = useState(null);
-
-  // Folder Picker
   const [showFolderPicker, setShowFolderPicker] = useState(false);
-
-  // Echten Base-Pfad für Anzeige vom Server holen (über fsApi)
   const [baseLabel, setBaseLabel] = useState("");
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const label = await fsBaseLabel();
         if (!cancelled) setBaseLabel(label);
-      } catch {
-        // optional, Anzeige-Feature – ignorieren
+      } catch (e) {
+        // Base-Label ist nur kosmetisch; Fehler hier bewusst ignorieren
       }
     })();
     return () => { cancelled = true; };
@@ -115,23 +136,115 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
       kunde: sanitize(form.kunde),
       endDatum: sanitize(form.endDatum),
       aufwandStunden: Number.isFinite(Number(form.aufwandStunden)) ? Number(form.aufwandStunden) : 0,
-      zuständig: sanitize(form.zuständig),
-      zusätzlicheInfos: sanitize(form.zusätzlicheInfos),
+      zustaendig: sanitize(form.zustaendig),
+      zusaetzlicheInfos: sanitize(form.zusaetzlicheInfos),
       arbeitsstation: sanitize(form.arbeitsstation),
       status: sanitize(form.status) ?? 'NEU',
+      statusCode: sanitize(form.status) ?? 'NEU', // WICHTIG fürs Backend
       fai: !!form.fai, qs: !!form.qs, prioritaet: 9999,
       stk: Number.isFinite(Number(form.stk)) ? Number(form.stk) : undefined,
       fa: sanitize(form.fa),
-      dateipfad: sanitize(form.dateipfad) // nur Subpfad
+      dateipfad: sanitize(form.dateipfad)
     };
     Object.keys(payload).forEach(k => { if (payload[k] == null) delete payload[k]; });
     return payload;
   };
 
+  /** Dynamische Status laden */
+  const [statuses, setStatuses] = useState([]);
+  const [statusErr, setStatusErr] = useState('');
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const list = await fetchStatuses(true); // nur aktive
+        if (!alive) return;
+        const sorted = (list || []).slice().sort((a, b) =>
+          (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
+          String(a.label).localeCompare(String(b.label))
+        );
+        setStatuses(sorted);
+        setStatusErr('');
+        if (sorted.length && !sorted.some(s => s.code === form.status)) {
+          setForm(f => ({ ...f, status: sorted[0].code }));
+        }
+      } catch (e) {
+        if (alive) setStatusErr('Statusliste konnte nicht geladen werden.');
+      }
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const allowedCodes = useMemo(
+    () => (statuses.length ? statuses.filter(s => s.active).map(s => s.code) : ['NEU','TO_DO','IN_BEARBEITUNG','FERTIG']),
+    [statuses]
+  );
+  const currentStatus = useMemo(
+    () => statuses.find(s => s.code === form.status) || null,
+    [statuses, form.status]
+  );
+
+  /** Status-Dropdown (Pill-Menü) */
+  const btnRef = useRef(null);
+  const menuRef = useRef(null);
+  const [openMenu, setOpenMenu] = useState(false);
+  const [hi, setHi] = useState(-1);
+
+  const visibleList = statuses.length ? statuses : [
+    { code:'NEU', label:'Neu', colorBg:'#2e3847', colorFg:'#d7e3ff', sortOrder:0, isFinal:false, active:true },
+    { code:'TO_DO', label:'To do', colorBg:'#374151', colorFg:'#e5e7eb', sortOrder:1, isFinal:false, active:true },
+    { code:'IN_BEARBEITUNG', label:'In Bearbeitung', colorBg:'#1f4a3a', colorFg:'#b5f5d1', sortOrder:2, isFinal:false, active:true },
+    { code:'FERTIG', label:'Fertig', colorBg:'#133b19', colorFg:'#b2fcb8', sortOrder:3, isFinal:true, active:true }
+  ];
+
+  const enabledIdxs = useMemo(() => visibleList.reduce((acc, s, idx) => (s.active ? (acc.push(idx), acc) : acc), []), [visibleList]);
+
+  function openStatusMenu() {
+    setOpenMenu(true);
+    const curIdx = visibleList.findIndex(s => s.code === form.status && s.active);
+    const start = curIdx >= 0 ? curIdx : (enabledIdxs[0] ?? -1);
+    setHi(start);
+    setTimeout(() => menuRef.current?.focus(), 0);
+  }
+  function closeStatusMenu() {
+    setOpenMenu(false);
+    setHi(-1);
+    setTimeout(() => btnRef.current?.focus(), 0);
+  }
+  function move(delta) {
+    if (!enabledIdxs.length) return;
+    const pos = enabledIdxs.indexOf(hi);
+    const next = pos < 0 ? enabledIdxs[0] : enabledIdxs[(pos + delta + enabledIdxs.length) % enabledIdxs.length];
+    setHi(next);
+  }
+  function choose(idx) {
+    const s = visibleList[idx];
+    if (!s || !s.active) return;
+    if (s.isFinal && s.code !== form.status) {
+      const ok = confirm(`Status „${s.label}“ ist final. Trotzdem setzen?`);
+      if (!ok) return;
+    }
+    setValue('status', s.code);
+    closeStatusMenu();
+  }
+
+  useEffect(() => {
+    if (!openMenu) return;
+    const onDown = (e) => {
+      if (!menuRef.current || !btnRef.current) return;
+      if (!menuRef.current.contains(e.target) && !btnRef.current.contains(e.target)) {
+        setOpenMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [openMenu]);
+
   const validate = () => {
     if (!form.bezeichnung?.trim()) return 'Bezeichnung ist ein Pflichtfeld.';
     if (!form.arbeitsstation?.trim()) return 'Bitte eine Arbeitsstation auswählen.';
-    if (!STATUS_ORDER.includes(form.status)) return 'Ungültiger Status gewählt.';
+    if (!allowedCodes.includes(form.status)) return 'Ungültiger Status gewählt.';
     return null;
   };
 
@@ -231,8 +344,8 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
         <h3 style={styles.sectionTitle}>Zuweisung & Status</h3>
         <div style={styles.grid2}>
           <div>
-            <label style={styles.label} htmlFor="zuständig">Zuständigkeit</label>
-            <input id="zuständig" type="text" style={styles.input} value={form.zuständig} onChange={(e)=>setValue('zuständig', e.target.value)} disabled={submitting}/>
+            <label style={styles.label} htmlFor="zustaendig">Zuständigkeit</label>
+            <input id="zustaendig" type="text" style={styles.input} value={form.zustaendig} onChange={(e)=>setValue('zustaendig', e.target.value)} disabled={submitting}/>
           </div>
           <div>
             <label style={styles.label} htmlFor="arbeitsstation">Arbeitsstation *</label>
@@ -244,17 +357,36 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
         <div style={{ height: 10 }} />
         <div>
           <label style={styles.label}>Status</label>
-          <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
-            {STATUS_ORDER.map(st => {
-              const selected = form.status === st;
-              const cls = `st-${st.toLowerCase().replace('_','-')}`;
-              return (
-                <button key={st} type="button" className={styles.pill(selected, cls)}
-                        aria-pressed={selected} onClick={()=>setValue('status', st)} disabled={submitting} title={st}>
-                  {st}
-                </button>
-              );
-            })}
+
+          {/* Status-Pill + Dropdown */}
+          <div style={{ position:'relative', display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
+            <button
+              ref={btnRef}
+              type="button"
+              onClick={() => (openMenu ? closeStatusMenu() : openStatusMenu())}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  if (!openMenu) openStatusMenu();
+                }
+              }}
+              className="pill"
+              style={{
+                ...styles.pillBase,
+                backgroundColor: (currentStatus?.colorBg ?? '#26303f'),
+                color: (currentStatus?.colorFg ?? '#e5e7eb'),
+                border: '1px solid #ffffff22'
+              }}
+              disabled={submitting}
+              aria-haspopup="menu"
+              aria-expanded={openMenu}
+              title={currentStatus ? currentStatus.label : form.status}
+            >
+              <span style={{ width:8, height:8, borderRadius:999, backgroundColor:'#8df58d' }} />
+              <span>{currentStatus ? currentStatus.label : form.status}</span>
+              <span style={{ opacity:.75 }}>▾</span>
+            </button>
+
             <div style={{marginLeft:'auto', display:'inline-flex', gap:8, alignItems:'center'}}>
               <span style={{fontSize:12, color:'#94a3b8'}}>Zusatzarbeiten:</span>
               <button type="button" className={`pill-add add-fai ${form.fai ? 'is-active' : ''} is-clickable`}
@@ -266,15 +398,52 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
                 QS
               </button>
             </div>
+
+            {openMenu && (
+              <div
+                ref={menuRef}
+                role="menu"
+                tabIndex={-1}
+                style={{ ...styles.menu, top: 'calc(100% + 6px)', left: 0 }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') { e.preventDefault(); closeStatusMenu(); }
+                  else if (e.key === 'ArrowDown') { e.preventDefault(); move(+1); }
+                  else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
+                  else if (e.key === 'Enter') { e.preventDefault(); choose(hi); }
+                }}
+              >
+                {visibleList.map((s, idx) => {
+                  const active = hi === idx;
+                  const disabled = !s.active;
+                  return (
+                    <button
+                      key={s.code}
+                      role="menuitem"
+                      onMouseEnter={() => setHi(idx)}
+                      onClick={() => choose(idx)}
+                      disabled={disabled}
+                      title={disabled ? 'Inaktiv (nicht auswählbar)' : (s.isFinal ? 'Finaler Status' : s.label)}
+                      style={styles.menuItem(active, disabled, { bg: s.colorBg, fg: s.colorFg })}
+                    >
+                      <span style={styles.dot(s.colorFg)} />
+                      <span style={{ flex:1 }}>{s.label}</span>
+                      {s.isFinal && <span style={{ fontSize:11, opacity:.85, border:'1px solid #ffffff33', borderRadius:999, padding:'2px 6px' }}>final</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
+
+          {statusErr && <div style={{ marginTop:6, color:'#fecaca', fontSize:12 }}>{statusErr}</div>}
         </div>
       </div>
 
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>Beschreibung</h3>
-        <label style={styles.label} htmlFor="zusätzlicheInfos">Zusätzliche Infos</label>
-        <textarea id="zusätzlicheInfos" style={{ ...styles.input, ...styles.textarea }}
-                  value={form.zusätzlicheInfos || ''} onChange={(e)=>setValue('zusätzlicheInfos', e.target.value)}
+        <label style={styles.label} htmlFor="zusaetzlicheInfos">Zusätzliche Infos</label>
+        <textarea id="zusaetzlicheInfos" style={{ ...styles.input, ...styles.textarea }}
+                  value={form.zusaetzlicheInfos || ''} onChange={(e)=>setValue('zusaetzlicheInfos', e.target.value)}
                   disabled={submitting} placeholder="Optional: Kurzbeschreibung" />
       </div>
     </>
@@ -371,7 +540,7 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
         )}
 
         {errorMsg ? (
-          <div style={{marginTop:8, padding:10, border:'1px solid #7f1d1d', background:'#1f2937', color:'#fecaca', borderRadius:8}}>
+          <div style={{marginTop:8, padding:10, border:'1px solid #7f1d1d', backgroundColor:'#1f2937', color:'#fecaca', borderRadius:8}}>
             {errorMsg}
           </div>
         ) : null}
@@ -383,7 +552,9 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
             </button>
           </div>
           <div style={{ display:'flex', gap:8 }}>
-            <button type="button" style={styles.btnSecondary} onClick={onClose} disabled={submitting}>Abbrechen</button>
+            <button type="button" style={styles.btnSecondary} onClick={onClose} disabled={submitting}>
+              Abbrechen
+            </button>
             <button type="button" style={styles.btnSecondary} onClick={handleCreateAndNew} disabled={submitting}>
               {submitting ? '…' : 'Erstellen & Neu'}
             </button>
