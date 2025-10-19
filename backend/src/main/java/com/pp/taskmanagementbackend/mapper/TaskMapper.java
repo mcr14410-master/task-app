@@ -19,9 +19,11 @@ public class TaskMapper {
         dto.setDateipfad(t.getDateipfad());
         dto.setArbeitsstation(t.getArbeitsstation());
         dto.setStatus(t.getStatus());
+        dto.setStatusCode(t.getStatusCode()); // NEU
         dto.setPrioritaet(t.getPrioritaet());
         dto.setFai(t.isFai());
         dto.setQs(t.isQs());
+        
         return dto;
     }
     public static Task toEntity(TaskDto dto){
