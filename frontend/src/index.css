@@ -2,6 +2,9 @@
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
+  height: 100%;
+  margin: 0;
+  padding: 0;
 
   color-scheme: light dark;
   color: rgba(255, 255, 255, 0.87);
@@ -11,6 +14,9 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  --hard-loader-font-size: 50px;
+
 }
 
 a {
@@ -24,10 +30,9 @@ a:hover {
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
+  background: #0b1220;
 }
 
 h1 {
@@ -66,3 +71,134 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+.hard-loader{
+    /* Vollbild-Overlay */
+  position: fixed;
+  inset: 0;            /* top:0; right:0; bottom:0; left:0 */
+  z-index: 9999;
+    /* Zentrierung & Stil */
+  min-height: 100vh;
+  display:flex; align-items:center; justify-content:center;
+  text-align:center;
+  background:#0b1220; color:#e5e7eb;
+  font-size: var(--hard-loader-font-size);
+  font-weight:600; letter-spacing:.2px;
+}
+
+/* Scroll-Box: beide Richtungen in EINEM Container */
+.board-viewport{
+  position: relative;
+  height: 100vh;
+  overflow: auto;                /* vertikal + horizontal */
+  overscroll-behavior: contain;
+  padding: 16;                     /* bündig oben/unten */
+  box-sizing: border-box;
+  /* WICHTIG: KEIN "scrollbar-gutter: stable both-edges;" mehr! */
+}
+
+/* Board-Inhalt: natürliche Breite (Summe der Spalten), zentriert solange schmaler */
+.board-container{
+  width: max-content;
+  margin: 0 auto;
+  display: block;
+  
+}
+
+/* Spaltenreihe als Flex */
+.columns-wrap{
+  display: flex;
+  gap: 16px;
+  padding: 16px;
+}
+
+/* Side-Fades (Overlay, belegen keinen Platz) */
+:root{ --app-bg: #0b1220; }  /* dein dunkler Hintergrund */
+
+/* Ein Overlay für links UND rechts, bleibt am sichtbaren Rand */
+.board-fade-sides{
+  position: fixed;               /* ⬅️ nimmt keinen Platz ein */
+  inset: 0;                      /* top/right/bottom/left = 0 */
+  pointer-events: none;
+  z-index: 3;
+
+  /* zwei Hintergründe: links → rechts, rechts → links */
+  background-image:
+    linear-gradient(to right, var(--app-bg, #0b1220), rgba(11,18,32,0)),
+    linear-gradient(to left,  var(--app-bg, #0b1220), rgba(11,18,32,0));
+  background-size: 20px 100%, 40px 100%;
+  background-position: left top, right top;
+  background-repeat: no-repeat;
+  opacity: .85;
+  transition: opacity .15s ease;
+}
+
+
+/* Top/Bottom-Fades (schmale sticky Elemente) */
+.board-fade-top,
+.board-fade-bottom{
+  position: fixed;               /* ⬅️ Overlays, kein Layout-Offset */
+  left: 0; right: 0;
+  height: 50px;
+  pointer-events: none;
+  z-index: 3;
+  opacity: .85;
+  transition: opacity .15s ease;
+}
+.board-fade-top{
+  top: 0;
+  background: linear-gradient(to bottom, var(--app-bg), rgba(11,18,32,0));
+}
+.board-fade-bottom{
+  bottom: 0;
+  background: linear-gradient(to top, var(--app-bg), rgba(11,18,32,0));
+}
+
+/* Fades automatisch ausblenden, wenn am Rand */
+.board-viewport.at-left  .board-fade-sides{ background-image:
+  linear-gradient(to right, rgba(11,18,32,0), rgba(11,18,32,0)),
+  linear-gradient(to left,  var(--app-bg, #0b1220), rgba(11,18,32,0)); }
+
+.board-viewport.at-right .board-fade-sides{ background-image:
+  linear-gradient(to right, var(--app-bg, #0b1220), rgba(11,18,32,0)),
+  linear-gradient(to left,  rgba(11,18,32,0), rgba(11,18,32,0)); }
+
+.board-viewport.at-top    .board-fade-top   { opacity: 0; }
+.board-viewport.at-bottom .board-fade-bottom{ opacity: 0; }
+
+/* getrennte Overlays links/rechts statt ein gemeinsames */
+.board-fade-left,
+.board-fade-right,
+.board-fade-top,
+.board-fade-bottom {
+  position: fixed;
+  pointer-events: none;
+  z-index: 3;
+  opacity: .85;
+  transition: opacity .15s ease;
+}
+
+/* Seiten */
+.board-fade-left  { top: 0; bottom: var(--sb-h, 0px); left: 0;  width: 48px;
+  background: linear-gradient(to right, var(--app-bg,#0b1220), rgba(11,18,32,0)); }
+.board-fade-right { top: 0; bottom: var(--sb-h, 0px); right: var(--sb-v, 0px); width: 48px;
+  background: linear-gradient(to left,  var(--app-bg,#0b1220), rgba(11,18,32,0)); }
+
+/* Oben/Unten */
+.board-fade-top    { top: 0;    left: 0; right: var(--sb-v, 0px); height: 48px;
+  background: linear-gradient(to bottom, var(--app-bg,#0b1220), rgba(11,18,32,0)); }
+.board-fade-bottom { bottom: var(--sb-h, 0px); left: 0; right: var(--sb-v, 0px); height: 48px;
+  background: linear-gradient(to top,    var(--app-bg,#0b1220), rgba(11,18,32,0)); }
+
+/* autom. Ausblenden an den Kanten (deine Klassen bleiben) */
+.board-viewport.at-left  .board-fade-left  { opacity: 0; }
+.board-viewport.at-right .board-fade-right { opacity: 0; }
+.board-viewport.at-top   .board-fade-top   { opacity: 0; }
+.board-viewport.at-bottom.board-viewport .board-fade-bottom { opacity: 0; }
+
+
+
+
+/* Container Debug */
+/* .board-container{ outline:2px solid magenta; }
+.columns-wrap{ outline:2px dashed lime; } */

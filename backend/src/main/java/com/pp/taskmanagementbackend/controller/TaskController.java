@@ -8,6 +8,7 @@ import com.pp.taskmanagementbackend.model.TaskStatus;
 import com.pp.taskmanagementbackend.service.TaskService;
 import com.pp.taskmanagementbackend.service.TaskSortService;
 import com.pp.taskmanagementbackend.repository.AttachmentRepository;
+import com.pp.taskmanagementbackend.events.TaskEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -39,14 +40,17 @@ public class TaskController {
     private final TaskSortService sortService;
     private static final Logger log = LoggerFactory.getLogger(TaskController.class);
     private final AttachmentRepository attachmentRepository;
+    private final TaskEventPublisher publisher;
 
 
     public TaskController(TaskService service,
             TaskSortService sortService,
-            AttachmentRepository attachmentRepository) {
+            AttachmentRepository attachmentRepository,
+            TaskEventPublisher publisher) {
 this.service = service;
 this.sortService = sortService;
 this.attachmentRepository = attachmentRepository;
+        this.publisher = publisher;
 }
 
     private Task requireTask(Long id) {
@@ -177,6 +181,7 @@ this.attachmentRepository = attachmentRepository;
       }
 
       sortService.applyOrder(station, ids);
+      publisher.onTaskUpdated();
       log.info("DnD /sort OK: station={} ids={}", station, ids);
       return ResponseEntity.noContent().build();
     }

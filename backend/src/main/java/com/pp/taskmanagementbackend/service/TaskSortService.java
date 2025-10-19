@@ -3,6 +3,7 @@ package com.pp.taskmanagementbackend.service;
 import com.pp.taskmanagementbackend.model.Task;
 import com.pp.taskmanagementbackend.repository.TaskRepository;
 import com.pp.taskmanagementbackend.repository.ArbeitsstationRepository;
+import com.pp.taskmanagementbackend.events.TaskEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -16,11 +17,14 @@ public class TaskSortService {
 
   private final TaskRepository taskRepository;
   private final ArbeitsstationRepository arbeitsstationRepository;
+  private final TaskEventPublisher publisher;
 
   public TaskSortService(TaskRepository taskRepository,
-                         ArbeitsstationRepository arbeitsstationRepository) {
+                         ArbeitsstationRepository arbeitsstationRepository, 
+                         TaskEventPublisher publisher) {
     this.taskRepository = taskRepository;
     this.arbeitsstationRepository = arbeitsstationRepository;
+    this.publisher = publisher;
   }
 
   @Transactional
@@ -54,5 +58,6 @@ public class TaskSortService {
       taskRepository.saveAll(toSave);
       log.info("applyOrder OK: station='{}' (id={}), ids={}", stationName, arbeitsstationId, orderedIds);
     }
+    publisher.onTaskUpdated();
   }
 }

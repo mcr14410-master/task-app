@@ -30,8 +30,16 @@ export default function AttachmentTab({ taskId, toast }) {
       toast?.success?.("Anhang hochgeladen");
       await load();
     } catch (err) {
+      // 413/415 klarer ausgeben, sonst generisch
+      const msg = String(err?.message || "");
       setError(err);
-      toast?.error?.(err?.message || "Upload fehlgeschlagen");
+      if (msg.includes("HTTP 413")) {
+        toast?.error?.("Datei ist zu groß (413). Bitte kleinere Datei wählen.");
+      } else if (msg.includes("HTTP 415")) {
+        toast?.error?.("Dateityp wird nicht akzeptiert (415). Erlaubte Typen prüfen.");
+      } else {
+        toast?.error?.(msg || "Upload fehlgeschlagen");
+      }  
     } finally {
       e.target.value = ""; // Input reset
       setLoading(false);
@@ -45,8 +53,9 @@ export default function AttachmentTab({ taskId, toast }) {
       toast?.success?.("Anhang gelöscht");
       setList(prev => prev.filter(a => a.id !== id));
     } catch (err) {
+      const msg = String(err?.message || "");
       setError(err);
-      toast?.error?.(err?.message || "Löschen fehlgeschlagen");
+      toast?.error?.(msg || "Löschen fehlgeschlagen");	  
     } finally {
       setLoading(false);
     }
@@ -72,7 +81,7 @@ export default function AttachmentTab({ taskId, toast }) {
       )}
 
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-        <input type="file" onChange={onUpload} disabled={loading} />
+        <input type="file" onChange={onUpload} disabled={loading} accept=".pdf,.jpg,.png" />
       </div>
 
       {loading ? (
