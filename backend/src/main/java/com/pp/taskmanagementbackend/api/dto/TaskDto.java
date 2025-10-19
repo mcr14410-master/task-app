@@ -21,6 +21,7 @@ public class TaskDto {
     private String fa;
     private String dateipfad;
     private Integer attachmentCount; // 0,1,2,...
+    private String statusCode;
 
     public Long getId(){return id;} public void setId(Long id){this.id=id;}
     public String getBezeichnung(){return bezeichnung;} public void setBezeichnung(String v){this.bezeichnung=v;}
@@ -41,4 +42,9 @@ public class TaskDto {
 
     public Integer getAttachmentCount() { return attachmentCount; }
     public void setAttachmentCount(Integer attachmentCount) { this.attachmentCount = attachmentCount; }
+ // NEU:
+    public String getStatusCode() { return statusCode; }
+    public void setStatusCode(String statusCode) {this.statusCode = statusCode;}
+    
+    
 }
