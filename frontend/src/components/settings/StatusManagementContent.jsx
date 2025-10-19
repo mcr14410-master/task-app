@@ -2,14 +2,52 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { fetchStatuses, createStatus, updateStatus, deleteStatus } from '@/api/statuses';
 
 const EMPTY = { code:'', label:'', colorBg:'#374151', colorFg:'#e5e7eb', sortOrder:0, isFinal:false, active:true };
+// WCAG-Default für normalen Text
+const TARGET_RATIO = 4.5;
+
+/** --- Farb-Utils: WCAG-Kontrast --- **/
+function hexToRgb(hex) {
+  if (!hex) return null;
+  const h = hex.replace('#','');
+  const v = h.length === 3
+    ? h.split('').map(c => c + c).join('')
+    : h;
+  const n = parseInt(v, 16);
+  if (Number.isNaN(n) || v.length !== 6) return null;
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+function srgbToLin(c) {
+  const cs = c / 255;
+  return (cs <= 0.03928) ? (cs / 12.92) : Math.pow((cs + 0.055)/1.055, 2.4);
+}
+function relativeLuminance({r,g,b}) {
+  const R = srgbToLin(r), G = srgbToLin(g), B = srgbToLin(b);
+  return 0.2126*R + 0.7152*G + 0.0722*B;
+}
+/** Kontrast-Ratio nach WCAG 2.1 */
+function contrastRatio(hexA, hexB) {
+  const a = hexToRgb(hexA), b = hexToRgb(hexB);
+  if (!a || !b) return 0;
+  const L1 = relativeLuminance(a);
+  const L2 = relativeLuminance(b);
+  const lighter = Math.max(L1, L2);
+  const darker  = Math.min(L1, L2);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+/** Wähle Weiß/Schwarz, was den höheren Kontrast zu bg ergibt */
+function bestTextOn(bgHex) {
+  const cWhite = contrastRatio(bgHex, '#ffffff');
+  const cBlack = contrastRatio(bgHex, '#000000');
+  return cWhite >= cBlack ? '#ffffff' : '#000000';
+}
 
 export default function StatusManagementContent() {
   const [items, setItems] = useState([]);
   const [activeOnly, setActiveOnly] = useState(true);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
-  const [edit, setEdit] = useState(null);            // aktueller Entwurf (Objekt)
-  const [editOriginalCode, setEditOriginalCode] = useState(null); // zum Erkennen von Umbenennungen
+  const [edit, setEdit] = useState(null);
+  const [editOriginalCode, setEditOriginalCode] = useState(null);
   const [busy, setBusy] = useState(false);
 
   // Laden
@@ -73,7 +111,6 @@ export default function StatusManagementContent() {
     try {
       setBusy(true);
       await deleteStatus(code);
-      // Nach Soft-Delete neu laden, damit active=false sichtbar wird (oder verschwindet bei activeOnly)
       const list = await fetchStatuses(activeOnly);
       setItems(list);
     } catch (e) {
@@ -82,6 +119,11 @@ export default function StatusManagementContent() {
       setBusy(false);
     }
   };
+
+  // Live-Kontrast im Editor (nur, wenn Drawer offen)
+  const ratio = edit ? contrastRatio(edit.colorBg, edit.colorFg) : null;
+  const ratioOk = edit ? (ratio >= TARGET_RATIO) : true;
+  const ratioFmt = edit ? ratio.toFixed(2) : '';
 
   return (
     <div className="status-mgmt" style={{ display: 'grid', gap: 12 }}>
@@ -115,6 +157,7 @@ export default function StatusManagementContent() {
                 <th style={thStyle}>Code</th>
                 <th style={thStyle}>Bezeichnung</th>
                 <th style={thStyle}>Farben</th>
+                <th style={thStyle}>Kontrast</th>
                 <th style={thStyle}>Final</th>
                 <th style={thStyle}>Aktiv</th>
                 <th style={thStyle}>Vorschau</th>
@@ -122,29 +165,38 @@ export default function StatusManagementContent() {
               </tr>
             </thead>
             <tbody>
-              {sorted.map(s => (
-                <tr key={s.code} style={{ borderBottom: '1px solid #ffffff11' }}>
-                  <td style={tdStyle}>{s.sortOrder ?? 0}</td>
-                  <td style={tdMono}>{s.code}</td>
-                  <td style={tdStyle}>{s.label}</td>
-                  <td style={tdStyle}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                      <Swatch value={s.colorBg} />
-                      <Swatch value={s.colorFg} />
-                    </span>
-                  </td>
-                  <td style={tdStyle}>{s.isFinal ? 'Ja' : 'Nein'}</td>
-                  <td style={tdStyle}>{s.active ? 'Ja' : 'Nein'}</td>
-                  <td style={tdStyle}><Preview label={s.label} bg={s.colorBg} fg={s.colorFg} /></td>
-                  <td style={{ ...tdStyle, textAlign: 'right' }}>
-                    <button className="btn btn-small" onClick={() => startEdit(s)} disabled={busy}>Bearbeiten</button>
-                    <button className="btn btn-small btn-ghost" onClick={() => onDelete(s.code)} disabled={busy}>Deaktivieren</button>
-                  </td>
-                </tr>
-              ))}
+              {sorted.map(s => {
+                const r = contrastRatio(s.colorBg, s.colorFg);
+                const ok = r >= TARGET_RATIO;
+                return (
+                  <tr key={s.code} style={{ borderBottom: '1px solid #ffffff11' }}>
+                    <td style={tdStyle}>{s.sortOrder ?? 0}</td>
+                    <td style={tdStyleMonospace}>{s.code}</td>
+                    <td style={tdStyle}>{s.label}</td>
+                    <td style={tdStyle}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                        <Swatch value={s.colorBg} />
+                        <Swatch value={s.colorFg} />
+                      </span>
+                    </td>
+                    <td style={{ ...tdStyle, color: ok ? '#86efac' : '#fecaca' }}>
+                      {r.toFixed(2)}{!ok ? ' ⚠' : ''}
+                    </td>
+                    <td style={tdStyle}>{s.isFinal ? 'Ja' : 'Nein'}</td>
+                    <td style={tdStyle}>{s.active ? 'Ja' : 'Nein'}</td>
+                    <td style={tdStyle}>
+                      <Preview label={s.label} bg={s.colorBg} fg={s.colorFg} warn={!ok} />
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: 'right' }}>
+                      <button className="btn btn-small" onClick={() => startEdit(s)} disabled={busy}>Bearbeiten</button>
+                      <button className="btn btn-small btn-ghost" onClick={() => onDelete(s.code)} disabled={busy}>Deaktivieren</button>
+                    </td>
+                  </tr>
+                );
+              })}
               {sorted.length === 0 && (
                 <tr>
-                  <td style={tdStyle} colSpan={8}><em>Keine Einträge.</em></td>
+                  <td style={tdStyle} colSpan={9}><em>Keine Einträge.</em></td>
                 </tr>
               )}
             </tbody>
@@ -181,21 +233,59 @@ export default function StatusManagementContent() {
                 />
               </label>
 
-              <label>Hintergrundfarbe
-                <input
-                  type="color"
-                  value={edit.colorBg}
-                  onChange={(e)=> setEdit(s => ({ ...s, colorBg: e.target.value }))}
-                />
-              </label>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                <label>Hintergrundfarbe
+                  <input
+                    type="color"
+                    value={edit.colorBg}
+                    onChange={(e)=> setEdit(s => ({ ...s, colorBg: e.target.value }))}
+                  />
+                </label>
 
-              <label>Textfarbe
-                <input
-                  type="color"
-                  value={edit.colorFg}
-                  onChange={(e)=> setEdit(s => ({ ...s, colorFg: e.target.value }))}
-                />
-              </label>
+                <label>Textfarbe
+                  <input
+                    type="color"
+                    value={edit.colorFg}
+                    onChange={(e)=> setEdit(s => ({ ...s, colorFg: e.target.value }))}
+                  />
+                </label>
+              </div>
+
+              {/* Kontrast-Hinweis */}
+              <div
+                role="status"
+                style={{
+                  display:'flex', alignItems:'center', gap:12,
+                  padding:'8px 10px', borderRadius:10,
+                  border: `1px solid ${ratioOk ? '#14532d' : '#7f1d1d'}`,
+                  background: ratioOk ? '#052e16' : '#3f1212',
+                  color: ratioOk ? '#bbf7d0' : '#fecaca'
+                }}
+              >
+                <span style={{ fontWeight: 700 }}>
+                  Kontrast: {ratioFmt}:1
+                </span>
+                <span style={{ opacity:.9 }}>
+                  Ziel ≥ {TARGET_RATIO}:1 (WCAG AA, normaler Text).
+                </span>
+                {!ratioOk && <span style={{ fontWeight: 600 }}>Zu niedrig – schwer lesbar.</span>}
+                <span style={{ marginLeft: 'auto', display:'inline-flex', gap:8 }}>
+                  <button
+                    className="btn btn-small"
+                    type="button"
+                    onClick={() => setEdit(s => ({ ...s, colorFg: bestTextOn(s.colorBg) }))}
+                  >
+                    Auto-Kontrast
+                  </button>
+                  <button
+                    className="btn btn-small btn-ghost"
+                    type="button"
+                    onClick={() => setEdit(s => ({ ...s, colorBg: s.colorFg, colorFg: s.colorBg }))}
+                  >
+                    Farben tauschen
+                  </button>
+                </span>
+              </div>
 
               <label>Sortierung
                 <input
@@ -217,7 +307,7 @@ export default function StatusManagementContent() {
 
               <div>
                 <div style={{ marginTop: 4 }}>
-                  <Preview label={edit.label || 'Vorschau'} bg={edit.colorBg} fg={edit.colorFg} />
+                  <Preview label={edit.label || 'Vorschau'} bg={edit.colorBg} fg={edit.colorFg} warn={!ratioOk} />
                 </div>
               </div>
 
@@ -243,19 +333,21 @@ function Swatch({ value }) {
   );
 }
 
-function Preview({ label, bg, fg }) {
+function Preview({ label, bg, fg, warn }) {
   return (
     <span
       style={{
         display:'inline-flex', alignItems:'center', gap:6,
         padding:'2px 8px', borderRadius:999,
-        background:bg, color:fg, border:'1px solid #ffffff22'
+        background:bg, color:fg,
+        border: warn ? '2px solid #fca5a5' : '1px solid #ffffff22',
+        boxShadow: warn ? '0 0 0 2px rgba(239,68,68,0.25) inset' : 'none'
       }}
       role="status"
       aria-label={`Status: ${label}`}
       title={label}
     >
-      <span aria-hidden style={{ width:6, height:6, borderRadius:999, background:'currentColor', opacity:.9 }} />
+      {/* optionaler Punkt später möglich */}
       <span>{label}</span>
     </span>
   );
@@ -263,7 +355,7 @@ function Preview({ label, bg, fg }) {
 
 const thStyle = { padding: '8px 8px', fontWeight: 600, fontSize: 12, color: 'var(--muted, #9ca3af)' };
 const tdStyle = { padding: '10px 8px', fontSize: 14, verticalAlign: 'middle' };
-const tdMono = { ...tdStyle, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' };
+const tdStyleMonospace = { ...tdStyle, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' };
 
 const drawerBackdropStyle = {
   position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', display:'grid', placeItems:'center', zIndex:1100
