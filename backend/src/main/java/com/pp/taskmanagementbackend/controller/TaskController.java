@@ -9,6 +9,8 @@ import com.pp.taskmanagementbackend.service.TaskService;
 import com.pp.taskmanagementbackend.service.TaskSortService;
 import com.pp.taskmanagementbackend.repository.AttachmentRepository;
 import com.pp.taskmanagementbackend.events.TaskEventPublisher;
+import com.pp.taskmanagementbackend.repository.TaskStatusRepository;
+import com.pp.taskmanagementbackend.repository.TaskRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -41,16 +43,23 @@ public class TaskController {
     private static final Logger log = LoggerFactory.getLogger(TaskController.class);
     private final AttachmentRepository attachmentRepository;
     private final TaskEventPublisher publisher;
+    private final TaskStatusRepository taskStatusRepository;
+    private final TaskRepository taskRepository;
 
 
     public TaskController(TaskService service,
             TaskSortService sortService,
             AttachmentRepository attachmentRepository,
-            TaskEventPublisher publisher) {
-this.service = service;
-this.sortService = sortService;
-this.attachmentRepository = attachmentRepository;
+            TaskEventPublisher publisher, 
+            TaskRepository taskRepository, 
+            TaskStatusRepository taskStatusRepository) 
+    		{
+    	this.service = service;
+    	this.sortService = sortService;
+    	this.attachmentRepository = attachmentRepository;
         this.publisher = publisher;
+        this.taskRepository = taskRepository;
+        this.taskStatusRepository = taskStatusRepository;
 }
 
     private Task requireTask(Long id) {
@@ -116,18 +125,39 @@ this.attachmentRepository = attachmentRepository;
     @PatchMapping("/{id}/status")
     public TaskDto patchStatus(@PathVariable Long id, @RequestBody Map<String, String> body) {
         Task entity = requireTask(id);
-        String raw = body.getOrDefault("status", null);
-        if (raw == null) {
+
+        // Rohwerte lesen
+        String primary = body.get("statusCode");
+        String fallback = body.get("status");
+
+        // Normalisieren ohne Reassignments, damit wir gleich eine final-Variable bauen können
+        String candidate = (primary != null && !primary.trim().isEmpty())
+                ? primary
+                : (fallback != null && !fallback.trim().isEmpty() ? fallback : null);
+
+        if (candidate == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "status fehlt");
         }
-        try {
-            entity.setStatus(TaskStatus.valueOf(raw));
-        } catch (IllegalArgumentException ex) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ungültiger Status: " + raw);
+
+        final String codeFinal = candidate.trim(); // << final für Lambda-Capture
+
+        // Validieren: Status muss existieren und aktiv sein
+        var status = taskStatusRepository.findByCode(codeFinal)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST, "Ungültiger Status-Code: " + codeFinal));
+        if (!status.isActive()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Status inaktiv: " + codeFinal);
         }
+
+        // Setzen: dynamischer FK über status_code
+        entity.setStatusCode(status.getCode());
+
+        // Speichern & DTO zurück
         Task saved = service.save(entity);
         return TaskMapper.toDto(saved);
     }
+
+
 
  // Akzeptiert BEIDE Frontend-Varianten
     public static class SortRequest {
