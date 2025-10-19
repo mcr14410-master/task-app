@@ -5,7 +5,6 @@ import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import SettingsModal from '@/components/settings/SettingsModal';
 import TaskCreationModal from "./TaskCreationModal";
 import TaskEditModal from "./TaskEditModal";
-import StationManagementContent from "./StationManagementContent";
 import TaskItem from "./TaskItem";
 import "@/config/DueDateTheme.css";           // zentrale Farben/Stripe pro Fälligkeit
 import { dueClassForDate } from "@/config/DueDateConfig"; // zentrale Schwellen → Klasse
@@ -190,7 +189,6 @@ export default function TaskBoard() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editTask, setEditTask] = useState(null);
   const [editInitialTab, setEditInitialTab] = useState("details");   // << neu
-  const [isStationsOpen, setIsStationsOpen] = useState(false);
   const inFlightByColumn = React.useRef(new Map());
   const [loadingHard, setLoadingHard] = useState(false);   // nur initial
   const [loadingSoft, setLoadingSoft] = useState(false);  // alle Refreshes
@@ -555,7 +553,7 @@ export default function TaskBoard() {
 	      </label>
 
 	      <button className="btn-primary" onClick={() => setIsCreateOpen(true)}>+ Neuer Task</button>
-	      <button className="btn-ghost" onClick={() => setIsStationsOpen(true)}>Stationen verwalten</button>
+	   
 
 		  {loadingSoft && <span className="soft-spinner" aria-label="Aktualisieren…" />}
 	     
@@ -698,25 +696,16 @@ export default function TaskBoard() {
         />
       )}
 
-      <Modal
-        open={isStationsOpen}
-        onClose={() => setIsStationsOpen(false)}
-        title="Stationen verwalten"
-        width={760}
-      >
-        <StationManagementContent
-          stations={stations.map((s) => ({ id: pickStationId(s), name: pickStationName(s), sortOrder: s.sort_order ?? s.sortOrder }))}
-		   onUpdate={() => {
-		     setIsStationsOpen(false);
-		     ignoreRefetchUntil.current = Date.now() + 800;
-		     fetchAll({ mode: "soft" });
-		   }}      
-		/>
-      </Modal>
+
 	  
-	  {/* NEU: Einstellungen-Modal */}
 	  {openSettings && (
-	    <SettingsModal onClose={() => setOpenSettings(false)} />
+	    <SettingsModal
+	      open={openSettings}
+	      onClose={() => setOpenSettings(false)}
+		     initialTab="stations"
+		     stations={stations}   
+		     onUpdate={() => fetchAll({ mode: "soft" })} 
+	    />
 	  )}
 	  
 	  

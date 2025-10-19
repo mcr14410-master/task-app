@@ -1,82 +1,128 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import StatusManagementContent from '@/components/settings/StatusManagementContent'; // NEU
+// frontend/src/components/settings/SettingsModal.jsx
+import React, { useEffect, useRef, useState } from "react";
+import StatusManagementContent from "./StatusManagementContent";
+import StationManagementContent from "./StationManagementContent";
 
-export default function SettingsModal({ onClose }) {
-  const [tab, setTab] = useState('stations'); // 'stations' | 'statuses'
+export default function SettingsModal({
+  open,
+  onClose,
+  initialTab = "statuses",    // "stations" | "statuses"
+  // Stationen-Props vom TaskBoard:
+  stations = [],
+  onUpdate = () => {},        // wird in StationManagementContent nach "Reihenfolge speichern" aufgerufen
+}) {
+  const [tab, setTab] = useState(initialTab);
+  const dialogRef = useRef(null);
 
-  // ESC zum Schließen
-  const onKey = useCallback((e) => {
-    if (e.key === 'Escape') onClose?.();
-  }, [onClose]);
-
+  // ESC schließt
   useEffect(() => {
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onKey]);
+    if (!open) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose?.();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  // Bei Öffnen initialen Tab setzen & Fokus ins Modal
+  useEffect(() => {
+    if (open) {
+      setTab(initialTab);
+      setTimeout(() => dialogRef.current?.focus(), 0);
+    }
+  }, [open, initialTab]);
+
+  if (!open) return null;
 
   return (
     <div
-      id="settings-modal"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="settings-title"
-      className="modal-backdrop"
+      aria-label="Einstellungen"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose?.(); }}
       style={{
-        position: 'fixed', inset: 0, display: 'grid', placeItems: 'center',
-        background: 'rgba(0,0,0,0.5)', zIndex: 1000
+        position: "fixed", inset: 0, zIndex: 1100,
+        background: "rgba(0,0,0,0.45)",
+        display: "grid", placeItems: "center"
       }}
     >
       <div
-        className="modal"
+        ref={dialogRef}
+        tabIndex={-1}
         style={{
-          width: 720, maxWidth: '90vw', maxHeight: '85vh', overflow: 'hidden',
-          background: 'var(--color-surface, #111827)', color: 'var(--color-text, #e5e7eb)',
-          borderRadius: 16, boxShadow: '0 10px 40px rgba(0,0,0,0.6)'
+          width: 1000, maxWidth: "95vw", maxHeight: "90vh", overflow: "hidden",
+          background: "var(--color-surface, #111827)",
+          color: "var(--color-text, #e5e7eb)",
+          borderRadius: 16, boxShadow: "0 10px 40px rgba(0,0,0,0.6)",
+          display: "grid", gridTemplateRows: "auto auto 1fr"
         }}
       >
-        <div
-          className="modal-header"
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid #ffffff22' }}
-        >
-          <h2 id="settings-title" style={{ margin: 0, fontSize: 18 }}>Einstellungen</h2>
+        {/* Header */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 12,
+          padding: "12px 16px",
+          borderBottom: "1px solid #ffffff22"
+        }}>
+          <strong style={{ fontSize: 18 }}>Einstellungen</strong>
+          <span style={{ marginLeft: "auto" }} />
           <button
             onClick={onClose}
             aria-label="Schließen"
+            title="Schließen"
             style={{
-              background: 'transparent', border: 'none', color: 'inherit',
-              fontSize: 24, lineHeight: 1, cursor: 'pointer'
+              border: "none", background: "transparent", color: "inherit",
+              fontSize: 22, cursor: "pointer", lineHeight: 1, padding: 4
             }}
           >
             ×
           </button>
         </div>
 
-        <div className="tabs" style={{ display: 'flex', gap: 8, padding: '8px 12px', borderBottom: '1px solid #ffffff22' }}>
-          <button
-            className={tab==='stations'?'tab active':'tab'}
-            onClick={()=>setTab('stations')}
-            style={tabButtonStyle(tab === 'stations')}
+        {/* Tabs */}
+        <div
+          role="tablist"
+          aria-label="Einstellungen Kategorien"
+          style={{
+            display: "flex", gap: 6, padding: 8, borderBottom: "1px solid #ffffff16",
+            background: "rgba(255,255,255,0.02)"
+          }}
+        >
+          <TabButton
+            active={tab === "stations"}
+            onClick={() => setTab("stations")}
+            id="tab-stations"
+            controls="panel-stations"
           >
             Stationen
-          </button>
-          <button
-            className={tab==='statuses'?'tab active':'tab'}
-            onClick={()=>setTab('statuses')}
-            style={tabButtonStyle(tab === 'statuses')}
+          </TabButton>
+          <TabButton
+            active={tab === "statuses"}
+            onClick={() => setTab("statuses")}
+            id="tab-statuses"
+            controls="panel-statuses"
           >
             Status
-          </button>
+          </TabButton>
         </div>
 
-        <div className="modal-content" style={{ padding: 12, overflow: 'auto', maxHeight: 'calc(85vh - 110px)' }}>
-          {tab === 'stations' && (
-            <div style={{ opacity: 0.8 }}>
-              {/* Platzhalter – bestehendes StationManagement wird hier später eingebunden */}
-              <em>Stationen-Management kommt hier rein.</em>
-            </div>
+        {/* Inhalt */}
+        <div style={{ overflow: "auto", padding: 12 }}>
+          {tab === "stations" && (
+            <section role="tabpanel" id="panel-stations" aria-labelledby="tab-stations">
+              <StationManagementContent
+                stations={stations}
+                onUpdate={onUpdate}
+              />
+            </section>
           )}
-          {tab === 'statuses' && (
-            <StatusManagementContent />
+
+          {tab === "statuses" && (
+            <section role="tabpanel" id="panel-statuses" aria-labelledby="tab-statuses">
+              <StatusManagementContent />
+            </section>
           )}
         </div>
       </div>
@@ -84,13 +130,25 @@ export default function SettingsModal({ onClose }) {
   );
 }
 
-function tabButtonStyle(active) {
-  return {
-    padding: '6px 10px',
-    borderRadius: 999,
-    border: '1px solid ' + (active ? '#ffffff40' : '#ffffff22'),
-    background: active ? '#ffffff14' : 'transparent',
-    color: 'inherit',
-    cursor: 'pointer'
-  };
+function TabButton({ active, onClick, id, controls, children }) {
+  return (
+    <button
+      role="tab"
+      id={id}
+      aria-selected={active}
+      aria-controls={controls}
+      onClick={onClick}
+      style={{
+        padding: "8px 12px",
+        borderRadius: 10,
+        border: "1px solid " + (active ? "#ffffff44" : "#ffffff22"),
+        background: active ? "#ffffff14" : "transparent",
+        color: "inherit",
+        cursor: "pointer",
+        fontWeight: active ? 700 : 500
+      }}
+    >
+      {children}
+    </button>
+  );
 }
