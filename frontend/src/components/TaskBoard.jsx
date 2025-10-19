@@ -661,10 +661,10 @@ export default function TaskBoard() {
 		  onClose={closeEditModal}
 		  
 		  onDeleted={(id) => {
-		    closeEditModal();
-		    ignoreRefetchUntil.current = Date.now() + 800;
-		    fetchAll({ mode: "soft" });
-		   }}
+		    handleTaskDeleted(id);                            // optimistisches Entfernen
+		    ignoreRefetchUntil.current = Date.now() + 800;   // SSE-Kollision dämpfen
+		    fetchAll({ mode: "soft" });                      // später serverseitig verifizieren
+		  }}
 		  
           initialTab={editInitialTab}                              // << neu
         />

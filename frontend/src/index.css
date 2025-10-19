@@ -199,14 +199,6 @@ button:focus-visible {
 
 
 
-
-
-
-
-
-
-
-
 /* Container Debug */
-.board-container{ outline:2px solid magenta; }
-.columns-wrap{ outline:2px dashed lime; }
+/* .board-container{ outline:2px solid magenta; }
+.columns-wrap{ outline:2px dashed lime; } */
