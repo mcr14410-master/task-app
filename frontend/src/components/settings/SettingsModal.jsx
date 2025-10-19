@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import StatusManagementContent from '@/components/settings/StatusManagementContent'; // NEU
 
 export default function SettingsModal({ onClose }) {
   const [tab, setTab] = useState('stations'); // 'stations' | 'statuses'
@@ -52,15 +53,15 @@ export default function SettingsModal({ onClose }) {
 
         <div className="tabs" style={{ display: 'flex', gap: 8, padding: '8px 12px', borderBottom: '1px solid #ffffff22' }}>
           <button
-            className={tab === 'stations' ? 'tab active' : 'tab'}
-            onClick={() => setTab('stations')}
+            className={tab==='stations'?'tab active':'tab'}
+            onClick={()=>setTab('stations')}
             style={tabButtonStyle(tab === 'stations')}
           >
             Stationen
           </button>
           <button
-            className={tab === 'statuses' ? 'tab active' : 'tab'}
-            onClick={() => setTab('statuses')}
+            className={tab==='statuses'?'tab active':'tab'}
+            onClick={()=>setTab('statuses')}
             style={tabButtonStyle(tab === 'statuses')}
           >
             Status
@@ -75,10 +76,7 @@ export default function SettingsModal({ onClose }) {
             </div>
           )}
           {tab === 'statuses' && (
-            <div style={{ opacity: 0.8 }}>
-              {/* Platzhalter – StatusManagementContent folgt in einem späteren Schritt */}
-              <em>Status-Management kommt hier rein.</em>
-            </div>
+            <StatusManagementContent />
           )}
         </div>
       </div>
