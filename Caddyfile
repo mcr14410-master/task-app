@@ -2,8 +2,6 @@
   root * /srv/frontend
   file_server
 
-
-  # Prefix NICHT strippen:
   handle /api/* {
     reverse_proxy backend:8080
   }
