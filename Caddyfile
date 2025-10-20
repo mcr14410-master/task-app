@@ -1,18 +1,50 @@
 :80 {
+  # Static Frontend ausliefern
   root * /srv/frontend
-  file_server
+  encode zstd gzip
 
-  handle /api/* {
-    reverse_proxy backend:8080
-  }
-  
-  handle /* {
-  try_files {path} /index.html
-  file_server
-}
-
+  # ---- Caching: HTML niemals cachen, Assets sehr lange cachen ----
   @assets {
     path *.js *.css *.png *.jpg *.jpeg *.gif *.svg *.ico *.webp *.woff *.woff2
   }
-  header @assets Cache-Control "public, max-age=600, immutable"
+  header @assets Cache-Control "public, max-age=31536000, immutable"
+
+  @html {
+    path / /index.html
+    path_regexp html ^/(?:$|.*\.html)$
+  }
+  header @html Cache-Control "no-store"
+
+  # ---- API Proxy ----
+  handle /api/* {
+    # CORS-Preflight (sofort beantworten, kein Hop zum Backend)
+    @preflight method OPTIONS
+    header @preflight Access-Control-Allow-Origin "*"
+    header @preflight Access-Control-Allow-Methods "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+    header @preflight Access-Control-Allow-Headers "*"
+    respond @preflight 204
+
+    reverse_proxy backend:8080 {
+      # Gut für SSE/WebSockets; Caddy setzt Upgrade-Header korrekt weiter
+      flush_interval -1
+      transport http {
+        keepalive 30s
+      }
+    }
+  }
+
+  # ---- SPA-Fallback & Fileserver ----
+  handle {
+    try_files {path} /index.html
+    file_server
+  }
+
+  # Optional: Zugrifflogs (auskommentieren, wenn nicht benötigt)
+  # log {
+  #   output file /var/log/caddy/access.log {
+  #     roll_size 10MiB
+  #     roll_keep 5
+  #   }
+  #   format json
+  # }
 }

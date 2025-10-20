@@ -73,6 +73,14 @@ echo "[deploy] starting/updating services..."
 docker compose up -d
 popd >/dev/null
 
+CID="$(docker compose ps -q caddy || true)"
+[ -z "$CID" ] && docker compose up -d caddy && CID="$(docker compose ps -q caddy || true)"
+
+docker exec -i "$CID" caddy validate --config /etc/caddy/Caddyfile \
+ && docker exec -i "$CID" caddy reload --config /etc/caddy/Caddyfile \
+ || docker compose restart caddy
+
+
 # --- Status & Healthcheck ---
 echo "[deploy] status:"
 docker compose ps
