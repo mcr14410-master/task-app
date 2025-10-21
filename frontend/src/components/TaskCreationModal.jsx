@@ -136,8 +136,8 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
       kunde: sanitize(form.kunde),
       endDatum: sanitize(form.endDatum),
       aufwandStunden: Number.isFinite(Number(form.aufwandStunden)) ? Number(form.aufwandStunden) : 0,
-      zustaendig: sanitize(form.zustaendig),
-      zusaetzlicheInfos: sanitize(form.zusaetzlicheInfos),
+      zuständig: sanitize(form.zustaendig),
+      zusätzlicheInfos: sanitize(form.zusaetzlicheInfos),
       arbeitsstation: sanitize(form.arbeitsstation),
       status: sanitize(form.status) ?? 'NEU',
       statusCode: sanitize(form.status) ?? 'NEU', // WICHTIG fürs Backend
