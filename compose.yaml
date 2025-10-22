@@ -23,7 +23,7 @@ services:
       FOLDERPICKER_BASE_PATH: /data/files
       ATTACHMENTS_BASE_PATH: /data/files/attachments
     volumes:
-      - /srv/taskapp/files:/data/files
+      - /srv/taskapp/files/share1:/data/files
       - /srv/taskapp/files/attachments:/data/files/attachments
     ports:
       - "8080:8080"
