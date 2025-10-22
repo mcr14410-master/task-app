@@ -139,7 +139,7 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
       zuständig: sanitize(form.zustaendig),
       zusätzlicheInfos: sanitize(form.zusaetzlicheInfos),
       arbeitsstation: sanitize(form.arbeitsstation),
-      status: sanitize(form.status) ?? 'NEU',
+ //     status: sanitize(form.status) ?? 'NEU',
       statusCode: sanitize(form.status) ?? 'NEU', // WICHTIG fürs Backend
       fai: !!form.fai, qs: !!form.qs, prioritaet: 9999,
       stk: Number.isFinite(Number(form.stk)) ? Number(form.stk) : undefined,

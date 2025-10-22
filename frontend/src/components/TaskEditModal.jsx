@@ -236,7 +236,7 @@ export default function TaskEditModal({
       zuständig: sanitize(form.zustaendig),
       zusätzlicheInfos: sanitize(form.zusaetzlicheInfos),
       arbeitsstation: sanitize(form.arbeitsstation),
-      status: sanitize(form.status) ?? "NEU",
+ //     status: sanitize(form.status) ?? "NEU",
       statusCode: sanitize(form.status) ?? "NEU",
       fai: !!form.fai,
       qs: !!form.qs,
