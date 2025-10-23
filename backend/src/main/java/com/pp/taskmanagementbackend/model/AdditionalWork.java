@@ -2,6 +2,8 @@ package com.pp.taskmanagementbackend.model;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "additional_works")
@@ -23,9 +25,9 @@ public class AdditionalWork {
     @Column(length = 64)
     private String type;
 
-    /** optionale Flags als JSON/Text (DB-agnostisch: TEXT; für PG jsonb mappen wir hier als TEXT) */
-    @Lob
-    @Column(columnDefinition = "text")
+    /** optionale Flags als JSON (PostgreSQL jsonb) */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
     private String flags;
 
     @Column(nullable = false)
