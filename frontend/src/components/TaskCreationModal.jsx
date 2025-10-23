@@ -139,7 +139,6 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
       zuständig: sanitize(form.zustaendig),
       zusätzlicheInfos: sanitize(form.zusaetzlicheInfos),
       arbeitsstation: sanitize(form.arbeitsstation),
- //     status: sanitize(form.status) ?? 'NEU',
       statusCode: sanitize(form.status) ?? 'NEU', // WICHTIG fürs Backend
       fai: !!form.fai, qs: !!form.qs, prioritaet: 9999,
       stk: Number.isFinite(Number(form.stk)) ? Number(form.stk) : undefined,
@@ -157,7 +156,7 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
     let alive = true;
     (async () => {
       try {
-        const list = await fetchStatuses(true); // nur aktive
+        const list = await fetchStatuses(false); // aktuell nur aktive; für echte Gruppierung später false
         if (!alive) return;
         const sorted = (list || []).slice().sort((a, b) =>
           (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
@@ -191,14 +190,31 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
   const [openMenu, setOpenMenu] = useState(false);
   const [hi, setHi] = useState(-1);
 
-  const visibleList = statuses.length ? statuses : [
-    { code:'NEU', label:'Neu', colorBg:'#2e3847', colorFg:'#d7e3ff', sortOrder:0, isFinal:false, active:true },
-    { code:'TO_DO', label:'To do', colorBg:'#374151', colorFg:'#e5e7eb', sortOrder:1, isFinal:false, active:true },
-    { code:'IN_BEARBEITUNG', label:'In Bearbeitung', colorBg:'#1f4a3a', colorFg:'#b5f5d1', sortOrder:2, isFinal:false, active:true },
-    { code:'FERTIG', label:'Fertig', colorBg:'#133b19', colorFg:'#b2fcb8', sortOrder:3, isFinal:true, active:true }
-  ];
+  const visibleList = useMemo(() => {
+    const list = statuses.length ? [...statuses] : [
+      { code: 'NEU', label: 'Neu', colorBg: '#2e3847', colorFg: '#d7e3ff', sortOrder: 0, isFinal: false, active: true },
+      { code: 'TO_DO', label: 'To do', colorBg: '#374151', colorFg: '#e5e7eb', sortOrder: 1, isFinal: false, active: true },
+      { code: 'IN_BEARBEITUNG', label: 'In Bearbeitung', colorBg: '#1f4a3a', colorFg: '#b5f5d1', sortOrder: 2, isFinal: false, active: true },
+      { code: 'FERTIG', label: 'Fertig', colorBg: '#133b19', colorFg: '#b2fcb8', sortOrder: 3, isFinal: true, active: true }
+    ];
+    return list.sort((a, b) => {
+      // aktive zuerst, danach inaktive
+      if (a.active !== b.active) return a.active ? -1 : 1;
+      // innerhalb jeder Gruppe sortOrder + Label
+      return (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
+             String(a.label).localeCompare(String(b.label));
+    });
+  }, [statuses]);
 
-  const enabledIdxs = useMemo(() => visibleList.reduce((acc, s, idx) => (s.active ? (acc.push(idx), acc) : acc), []), [visibleList]);
+  const activeCount = useMemo(
+    () => visibleList.reduce((n, s) => n + (s.active ? 1 : 0), 0),
+    [visibleList]
+  );
+
+  const enabledIdxs = useMemo(
+    () => visibleList.reduce((acc, s, idx) => (s.active ? (acc.push(idx), acc) : acc), []),
+    [visibleList]
+  );
 
   function openStatusMenu() {
     setOpenMenu(true);
@@ -416,19 +432,26 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
                   const active = hi === idx;
                   const disabled = !s.active;
                   return (
-                    <button
-                      key={s.code}
-                      role="menuitem"
-                      onMouseEnter={() => setHi(idx)}
-                      onClick={() => choose(idx)}
-                      disabled={disabled}
-                      title={disabled ? 'Inaktiv (nicht auswählbar)' : (s.isFinal ? 'Finaler Status' : s.label)}
-                      style={styles.menuItem(active, disabled, { bg: s.colorBg, fg: s.colorFg })}
-                    >
-                      <span style={styles.dot(s.colorFg)} />
-                      <span style={{ flex:1 }}>{s.label}</span>
-                      {s.isFinal && <span style={{ fontSize:11, opacity:.85, border:'1px solid #ffffff33', borderRadius:999, padding:'2px 6px' }}>final</span>}
-                    </button>
+                    <React.Fragment key={s.code}>
+                      {idx === activeCount && activeCount > 0 && activeCount < visibleList.length && (
+                        <div role="separator" aria-hidden="true" style={{ padding: '6px 10px', opacity: .6, fontSize: 12 }}>
+                          Inaktiv
+                        </div>
+                      )}
+                      <button
+                        role="menuitem"
+                        onMouseEnter={() => setHi(idx)}
+                        onClick={() => choose(idx)}
+                        disabled={disabled}
+                        className={active ? "active" : ""}
+                        style={styles.menuItem(active, disabled, { bg: s.colorBg, fg: s.colorFg })}
+                        title={s.isFinal ? "Finalstatus" : ""}
+                      >
+                        <span style={styles.dot(s.colorBg || "#2e3847")} />
+                        {s.label ?? s.code}
+                        {!s.active && <span style={{ marginLeft: 8, opacity: .6 }}>(inaktiv)</span>}
+                      </button>
+                    </React.Fragment>
                   );
                 })}
               </div>
