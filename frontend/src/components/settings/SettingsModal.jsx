@@ -4,20 +4,19 @@ import StatusManagementContent from "./StatusManagementContent";
 import StationManagementContent from "./StationManagementContent";
 import CustomersTab from "./CustomersTab";
 import AssigneesTab from "./AssigneesTab";
-
+import InfoTab from "./InfoTab";
 
 export default function SettingsModal({
   open,
   onClose,
-  initialTab = "statuses",    // "stations" | "statuses" | "customers"
-  // Stationen-Props vom TaskBoard:
+  // "stations" | "statuses" | "customers" | "assignees" | "info"
+  initialTab = "statuses",
   stations = [],
-  onUpdate = () => {},        // wird in StationManagementContent nach "Reihenfolge speichern" aufgerufen
+  onUpdate = () => {},
 }) {
   const [tab, setTab] = useState(initialTab);
   const dialogRef = useRef(null);
 
-  // ESC schließt
   useEffect(() => {
     if (!open) return;
     const onKey = (e) => {
@@ -30,7 +29,6 @@ export default function SettingsModal({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  // Bei Öffnen initialen Tab setzen & Fokus ins Modal
   useEffect(() => {
     if (open) {
       setTab(initialTab);
@@ -119,26 +117,31 @@ export default function SettingsModal({
           >
             Kunden
           </TabButton>
-		  
-		  <TabButton
-		    active={tab === "assignees"}
-		    onClick={() => setTab("assignees")}
-		    id="tab-assignees"
-		    controls="panel-assignees"
-		  >
-		    Zuständigkeiten
-		  </TabButton>
 
+          <TabButton
+            active={tab === "assignees"}
+            onClick={() => setTab("assignees")}
+            id="tab-assignees"
+            controls="panel-assignees"
+          >
+            Zuständigkeiten
+          </TabButton>
+
+          <TabButton
+            active={tab === "info"}
+            onClick={() => setTab("info")}
+            id="tab-info"
+            controls="panel-info"
+          >
+            Info
+          </TabButton>
         </div>
 
         {/* Inhalt */}
         <div style={{ overflow: "auto", padding: 12 }}>
           {tab === "stations" && (
             <section role="tabpanel" id="panel-stations" aria-labelledby="tab-stations">
-              <StationManagementContent
-                stations={stations}
-                onUpdate={onUpdate}
-              />
+              <StationManagementContent stations={stations} onUpdate={onUpdate} />
             </section>
           )}
 
@@ -153,12 +156,18 @@ export default function SettingsModal({
               <CustomersTab />
             </section>
           )}
-		  {tab === "assignees" && (
-		    <section role="tabpanel" id="panel-assignees" aria-labelledby="tab-assignees">
-		      <AssigneesTab />
-		    </section>
-		  )}
 
+          {tab === "assignees" && (
+            <section role="tabpanel" id="panel-assignees" aria-labelledby="tab-assignees">
+              <AssigneesTab />
+            </section>
+          )}
+
+          {tab === "info" && (
+            <section role="tabpanel" id="panel-info" aria-labelledby="tab-info">
+              <InfoTab />
+            </section>
+          )}
         </div>
       </div>
     </div>
