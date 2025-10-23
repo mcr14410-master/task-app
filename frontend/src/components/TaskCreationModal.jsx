@@ -9,6 +9,10 @@ import FolderPickerModal from "./FolderPickerModal";
 import { fsExists, fsBaseLabel } from "@/api/fsApi";
 import AttachmentTab from "./AttachmentTab";
 import { fetchStatuses } from "@/api/statuses";
+import { fetchCustomers } from "@/api/customers";
+import { fetchAssignees } from "@/api/assignees";
+
+
 
 /** Farb-Utils */
 function hexToRgb(hex) {
@@ -149,6 +153,61 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
     return payload;
   };
 
+  
+  // Kunden laden (nur aktive)
+  const [customers, setCustomers] = useState([]);
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const [kundeMode, setKundeMode] = useState("select"); // 'select' | 'custom'
+  const [kundeSelect, setKundeSelect] = useState("");   // aktuell gewählte Option (Name)
+  
+  useEffect(() => {
+    let alive = true;
+    setLoadingCustomers(true);
+    fetchCustomers(true)
+      .then(list => {
+        if (!alive) return;
+        const sorted = (list || []).slice().sort((a,b) =>
+          String(a.name).localeCompare(String(b.name))
+        );
+        setCustomers(sorted);
+        // Wenn Form bereits einen Kunden-String hat, schauen ob er existiert:
+        if (form.kunde) {
+          const hit = sorted.find(c => c.name === form.kunde);
+          setKundeMode(hit ? "select" : "custom");
+          setKundeSelect(hit ? hit.name : "");
+        }
+      })
+      .finally(() => alive && setLoadingCustomers(false));
+    return () => { alive = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Assignees laden (nur aktive)
+  const [assignees, setAssignees] = useState([]);
+  const [loadingAssignees, setLoadingAssignees] = useState(false);
+  const [assigneeMode, setAssigneeMode] = useState("select"); // 'select' | 'custom'
+  const [assigneeSelect, setAssigneeSelect] = useState("");
+  
+  useEffect(() => {
+    let alive = true;
+    setLoadingAssignees(true);
+    fetchAssignees(true)
+      .then(list => {
+        if (!alive) return;
+        const sorted = (list || []).slice().sort((a,b) => String(a.name).localeCompare(String(b.name)));
+        setAssignees(sorted);
+        if (form.zustaendig) {
+          const hit = sorted.find(a => a.name === form.zustaendig);
+          setAssigneeMode(hit ? "select" : "custom");
+          setAssigneeSelect(hit ? hit.name : "");
+        }
+      })
+      .finally(() => alive && setLoadingAssignees(false));
+    return () => { alive = false; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+   
+  
   /** Dynamische Status laden */
   const [statuses, setStatuses] = useState([]);
   const [statusErr, setStatusErr] = useState('');
@@ -334,8 +393,56 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
             <input id="teilenummer" type="text" style={styles.input} value={form.teilenummer} onChange={(e)=>setValue('teilenummer', e.target.value)} disabled={submitting}/>
           </div>
           <div>
-            <label style={styles.label} htmlFor="kunde">Kunde</label>
-            <input id="kunde" type="text" style={styles.input} value={form.kunde} onChange={(e)=>setValue('kunde', e.target.value)} disabled={submitting}/>
+		    <label style={styles.label} htmlFor="kunde">Kunde</label>
+		    {kundeMode === "select" ? (
+		      <div style={{ display: "flex", gap: 8 }}>
+		        <select
+		          id="kunde"
+		          style={{ ...styles.input, flex: 1 }}
+		          value={kundeSelect}
+		          onChange={(e) => {
+		            const val = e.target.value;
+		            if (val === "__custom__") {
+		              setKundeMode("custom");
+		              // form.kunde bleibt, falls schon Text drin
+		              return;
+		            }
+		            setKundeSelect(val);
+		            setValue("kunde", val || "");
+		          }}
+		          disabled={submitting || loadingCustomers}
+		        >
+		          <option value="">– bitte wählen –</option>
+		          {customers.map(c => (
+		            <option key={c.id} value={c.name}>{c.name}</option>
+		          ))}
+		          <option value="__custom__">➕ Freitext…</option>
+		        </select>
+		      </div>
+		    ) : (
+		      <div style={{ display: "flex", gap: 8 }}>
+		        <input
+		          id="kunde"
+		          type="text"
+		          style={{ ...styles.input, flex: 1 }}
+		          value={form.kunde || ""}
+		          onChange={(e) => setValue("kunde", e.target.value)}
+		          disabled={submitting}
+		          placeholder="Kunde eingeben"
+		        />
+		        <button
+		          type="button"
+		          style={styles.btnSecondary}
+		          onClick={() => {
+		            // Wenn Freitext leer ist und vorher eine Auswahl bestand, wieder übernehmen
+		            if (!form.kunde && kundeSelect) setValue("kunde", kundeSelect);
+		            setKundeMode("select");
+		          }}
+		        >
+		          Zur Auswahl
+		        </button>
+		      </div>
+		    )}
           </div>
           <div>
             <label style={styles.label} htmlFor="endDatum">Enddatum</label>
@@ -360,8 +467,55 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
         <h3 style={styles.sectionTitle}>Zuweisung & Status</h3>
         <div style={styles.grid2}>
           <div>
-            <label style={styles.label} htmlFor="zustaendig">Zuständigkeit</label>
-            <input id="zustaendig" type="text" style={styles.input} value={form.zustaendig} onChange={(e)=>setValue('zustaendig', e.target.value)} disabled={submitting}/>
+		  <label style={styles.label} htmlFor="zustaendig">Zuständigkeit</label>
+		  {assigneeMode === "select" ? (
+		    <div style={{ display: "flex", gap: 8 }}>
+		      <select
+		        id="zustaendig"
+		        style={{ ...styles.input, flex: 1 }}
+		        value={assigneeSelect}
+		        onChange={(e) => {
+		          const val = e.target.value;
+		          if (val === "__custom__") {
+		            setAssigneeMode("custom");
+		            return;
+		          }
+		          setAssigneeSelect(val);
+		          setValue("zustaendig", val || "");
+		        }}
+		        disabled={submitting || loadingAssignees}
+		      >
+		        <option value="">– bitte wählen –</option>
+		        {assignees.map(a => (
+		          <option key={a.id} value={a.name}>{a.name}{a.email ? ` (${a.email})` : ""}</option>
+		        ))}
+		        <option value="__custom__">➕ Freitext…</option>
+		      </select>
+		    </div>
+		  ) : (
+		    <div style={{ display: "flex", gap: 8 }}>
+		      <input
+		        id="zustaendig"
+		        type="text"
+		        style={{ ...styles.input, flex: 1 }}
+		        value={form.zustaendig || ""}
+		        onChange={(e) => setValue("zustaendig", e.target.value)}
+		        disabled={submitting}
+		        placeholder="Zuständigkeit eingeben"
+		      />
+		      <button
+		        type="button"
+		        style={styles.btnSecondary}
+		        onClick={() => {
+		          if (!form.zustaendig && assigneeSelect) setValue("zustaendig", assigneeSelect);
+		          setAssigneeMode("select");
+		        }}
+		      >
+		        Zur Auswahl
+		      </button>
+		    </div>
+		  )}
+
           </div>
           <div>
             <label style={styles.label} htmlFor="arbeitsstation">Arbeitsstation *</label>
