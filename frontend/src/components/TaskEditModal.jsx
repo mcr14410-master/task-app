@@ -1,4 +1,4 @@
-// components/TaskEditModal.jsx
+// frontend/src/components/TaskEditModal.jsx
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { apiPatch, apiDelete } from "@/config/apiClient";
 import "../config/TaskStatusTheme.css";
@@ -8,6 +8,8 @@ import FolderPickerModal from "./FolderPickerModal";
 import { fsExists, fsBaseLabel } from "@/api/fsApi";
 import AttachmentTab from "./AttachmentTab";
 import { fetchStatuses } from "@/api/statuses";
+import { fetchCustomers } from "@/api/customers";
+import { fetchAssignees } from "@/api/assignees";
 
 const styles = {
   overlay: { position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000 },
@@ -28,31 +30,17 @@ const styles = {
   tabsRow: { display: "flex", gap: 8, marginBottom: 12 },
   tabBtn: (active) => ({ padding: "8px 12px", borderRadius: 8, border: "1px solid #334155", background: active ? "#1f2937" : "transparent", color: "#e5e7eb", cursor: "pointer", fontWeight: 600 }),
 
-  crumbBtn: { background: "#24282e", border: "1px solid #2a2d33", color: "#c6c9cf", padding: "4px 8px", borderRadius: 999, cursor: "pointer" },
-  crumbSep: { color: "#6d7480", margin: "0 4px" },
-  muted: { color: "#9ca3af", fontSize: 12 }
-};
-
-/** Farb-Utils (Hover/Active-Hintergründe) */
-function hexToRgb(hex) {
-  if (!hex) return null;
-  const h = hex.replace('#','');
-  const v = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
-  if (v.length !== 6) return null;
-  const n = parseInt(v, 16);
-  if (Number.isNaN(n)) return null;
-  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
-}
-function toRgba(hex, alpha) {
-  const rgb = hexToRgb(hex);
-  if (!rgb) return `rgba(23,32,50,${alpha})`;
-  return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
-}
-
-const statusStyles = {
   pillBase: { display:'inline-flex', alignItems:'center', gap:8, padding:'6px 10px', borderRadius:999, border:'1px solid #ffffff22', cursor:'pointer', userSelect:'none' },
   menu: { position:'absolute', minWidth:220, maxHeight:260, overflowY:'auto', backgroundColor:'#0b1220', color:'#e5e7eb', border:'1px solid #1f2937', borderRadius:10, boxShadow:'0 20px 60px rgba(0,0,0,.45)', padding:6, zIndex:1200 },
   menuItem: (active, disabled, colors) => {
+    const toRgba = (hex, a) => {
+      if (!hex) return `rgba(23,32,50,${a})`;
+      const h = hex.replace('#','');
+      const v = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+      if (v.length !== 6) return `rgba(23,32,50,${a})`;
+      const n = parseInt(v,16); const r=(n>>16)&255,g=(n>>8)&255,b=n&255;
+      return `rgba(${r}, ${g}, ${b}, ${a})`;
+    };
     const baseBg = colors?.bg ? toRgba(colors.bg, 0.14) : 'transparent';
     const activeBg = colors?.bg ? toRgba(colors.bg, 0.30) : '#172032';
     return {
@@ -81,7 +69,7 @@ export default function TaskEditModal({
   const [submitting, setSubmitting] = useState(false);
   const [showFolderPicker, setShowFolderPicker] = useState(false);
 
-  /** Statusliste laden (aktiv) */
+  // Statusliste
   const [statuses, setStatuses] = useState([]);
   const [statusErr, setStatusErr] = useState('');
 
@@ -89,12 +77,14 @@ export default function TaskEditModal({
     let alive = true;
     (async () => {
       try {
+        // aktive + inaktive, damit Gruppierung funktioniert
         const list = await fetchStatuses(false);
         if (!alive) return;
-        const sorted = (list || []).slice().sort((a, b) =>
-          (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
-          String(a.label).localeCompare(String(b.label))
-        );
+        const sorted = (list || []).slice().sort((a, b) => {
+          if (a.active !== b.active) return a.active ? -1 : 1;
+          return (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
+                 String(a.label).localeCompare(String(b.label));
+        });
         setStatuses(sorted);
         setStatusErr('');
       } catch {
@@ -104,7 +94,7 @@ export default function TaskEditModal({
     return () => { alive = false; };
   }, []);
 
-  /** Base-Pfad für Anzeige */
+  // Base-Pfad (nur Anzeige)
   const [baseLabel, setBaseLabel] = useState("");
   useEffect(() => {
     let cancelled = false;
@@ -117,16 +107,7 @@ export default function TaskEditModal({
     return () => { cancelled = true; };
   }, []);
 
-  function joinBaseAndSub(base, sub) {
-    if (!base) return sub || "";
-    const hasBackslashBase = base.includes("\\") && !base.includes("/");
-    const cleanBase = base.replace(/[/\\]+$/, "");
-    if (!sub) return cleanBase;
-    const sep = hasBackslashBase ? "\\" : "/";
-    return `${cleanBase}${sep}${sub}`;
-  }
-
-  /** Formularzustand – Status bevorzugt aus statusCode */
+  // Formularzustand – Status aus statusCode bevorzugen
   const [form, setForm] = useState(() => ({
     id: task?.id ?? null,
     bezeichnung: task?.bezeichnung ?? "",
@@ -144,10 +125,57 @@ export default function TaskEditModal({
     fai: !!task?.fai,
     qs: !!task?.qs
   }));
-
   const setValue = (name, value) => setForm((prev) => ({ ...prev, [name]: value }));
 
-  /** Status-Pill Dropdown (ohne Auto-Persist) */
+  // Hybrid: Kunden laden + Modus (select/custom)
+  const [customers, setCustomers] = useState([]);
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const [kundeMode, setKundeMode] = useState("select");
+  const [kundeSelect, setKundeSelect] = useState("");
+  useEffect(() => {
+    let alive = true;
+    setLoadingCustomers(true);
+    fetchCustomers(true)
+      .then(list => {
+        if (!alive) return;
+        const sorted = (list || []).slice().sort((a,b) => String(a.name).localeCompare(String(b.name)));
+        setCustomers(sorted);
+        if (form.kunde) {
+          const hit = sorted.find(c => c.name === form.kunde);
+          setKundeMode(hit ? "select" : "custom");
+          setKundeSelect(hit ? hit.name : "");
+        }
+      })
+      .finally(() => { if (alive) setLoadingCustomers(false); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Hybrid: Assignees laden + Modus (select/custom)
+  const [assignees, setAssignees] = useState([]);
+  const [loadingAssignees, setLoadingAssignees] = useState(false);
+  const [assigneeMode, setAssigneeMode] = useState("select");
+  const [assigneeSelect, setAssigneeSelect] = useState("");
+  useEffect(() => {
+    let alive = true;
+    setLoadingAssignees(true);
+    fetchAssignees(true)
+      .then(list => {
+        if (!alive) return;
+        const sorted = (list || []).slice().sort((a,b) => String(a.name).localeCompare(String(b.name)));
+        setAssignees(sorted);
+        if (form.zustaendig) {
+          const hit = sorted.find(a => a.name === form.zustaendig);
+          setAssigneeMode(hit ? "select" : "custom");
+          setAssigneeSelect(hit ? hit.name : "");
+        }
+      })
+      .finally(() => { if (alive) setLoadingAssignees(false); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Status-Menü
   const statusBtnRef = useRef(null);
   const statusMenuRef = useRef(null);
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
@@ -157,28 +185,19 @@ export default function TaskEditModal({
     () => statuses.find(s => s.code === form.status) || null,
     [statuses, form?.status]
   );
-
-  const visibleList = useMemo(() => {
-    const list = statuses.length ? [...statuses] : [
-      { code: 'NEU', label: 'Neu', colorBg: '#2e3847', colorFg: '#d7e3ff', sortOrder: 0, isFinal: false, active: true },
-      { code: 'TO_DO', label: 'To do', colorBg: '#374151', colorFg: '#e5e7eb', sortOrder: 1, isFinal: false, active: true },
-      { code: 'IN_BEARBEITUNG', label: 'In Bearbeitung', colorBg: '#1f4a3a', colorFg: '#b5f5d1', sortOrder: 2, isFinal: false, active: true },
-      { code: 'FERTIG', label: 'Fertig', colorBg: '#133b19', colorFg: '#b2fcb8', sortOrder: 3, isFinal: true, active: true }
-    ];
-    return list.sort((a, b) => {
-      // aktive zuerst, danach inaktive
-      if (a.active !== b.active) return a.active ? -1 : 1;
-      // innerhalb jeder Gruppe sortOrder + Label
-      return (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
-             String(a.label).localeCompare(String(b.label));
-    });
-  }, [statuses]);
+  const visibleList = useMemo(() => (
+    statuses.length ? statuses : [
+      { code:'NEU', label:'Neu', colorBg:'#2e3847', colorFg:'#d7e3ff', sortOrder:0, isFinal:false, active:true },
+      { code:'TO_DO', label:'To do', colorBg:'#374151', colorFg:'#e5e7eb', sortOrder:1, isFinal:false, active:true },
+      { code:'IN_BEARBEITUNG', label:'In Bearbeitung', colorBg:'#1f4a3a', colorFg:'#b5f5d1', sortOrder:2, isFinal:false, active:true },
+      { code:'FERTIG', label:'Fertig', colorBg:'#133b19', colorFg:'#b2fcb8', sortOrder:3, isFinal:true, active:true }
+    ]
+  ), [statuses]);
 
   const activeCount = useMemo(
     () => visibleList.reduce((n, s) => n + (s.active ? 1 : 0), 0),
     [visibleList]
   );
-
   const enabledIdxs = useMemo(
     () => visibleList.reduce((acc, s, idx) => (s.active ? (acc.push(idx), acc) : acc), []),
     [visibleList]
@@ -209,12 +228,9 @@ export default function TaskEditModal({
       const ok = confirm(`Status „${s.label}“ ist final. Trotzdem setzen?`);
       if (!ok) return;
     }
-    // Nur lokal setzen – Persistenz erst bei "Speichern"
     setForm(prev => ({ ...prev, status: s.code }));
     closeStatusMenu();
   }
-
-  // Klick außerhalb schließt
   useEffect(() => {
     if (!statusMenuOpen) return;
     const onDown = (e) => {
@@ -227,7 +243,6 @@ export default function TaskEditModal({
     return () => document.removeEventListener('mousedown', onDown);
   }, [statusMenuOpen]);
 
-  /** Sanitizer */
   const sanitize = (value) => {
     if (value === undefined || value === null) return null;
     if (typeof value === "string") {
@@ -237,7 +252,7 @@ export default function TaskEditModal({
     return value;
   };
 
-  /** Build Payload – statusCode mitgeben (wichtig fürs Backend) */
+  // Payload: nur statusCode, kein altes Enum-Feld
   const buildPayload = () => {
     const payload = {
       bezeichnung: sanitize(form.bezeichnung),
@@ -259,7 +274,6 @@ export default function TaskEditModal({
     return payload;
   };
 
-  /** Speichern (einmaliger Patch) */
   const handleSave = async () => {
     if (!form.id) { toast.error("Ungültige Task-ID"); return; }
     setSubmitting(true);
@@ -291,7 +305,15 @@ export default function TaskEditModal({
     }
   };
 
-  /** Breadcrumbs aus relativem Unterordner */
+  const joinBaseAndSub = (base, sub) => {
+    if (!base) return sub || "";
+    const hasBackslashBase = base.includes("\\") && !base.includes("/");
+    const cleanBase = base.replace(/[/\\]+$/, "");
+    if (!sub) return cleanBase;
+    const sep = hasBackslashBase ? "\\" : "/";
+    return `${cleanBase}${sep}${sub}`;
+  };
+
   const breadcrumbs = useMemo(() => {
     const raw = (form.dateipfad || "").replaceAll("\\", "/").replace(/^\/+/, "");
     if (!raw) return [];
@@ -307,6 +329,7 @@ export default function TaskEditModal({
     <>
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>Basisdaten</h3>
+
         <label style={styles.label} htmlFor="bezeichnung">Bezeichnung *</label>
         <input
           id="bezeichnung"
@@ -317,6 +340,7 @@ export default function TaskEditModal({
           disabled={submitting}
           required
         />
+
         <div style={{ height: 10 }} />
         <div style={styles.grid2}>
           <div>
@@ -330,17 +354,56 @@ export default function TaskEditModal({
               disabled={submitting}
             />
           </div>
+
+          {/* Kunde (Hybrid) */}
           <div>
             <label style={styles.label} htmlFor="kunde">Kunde</label>
-            <input
-              id="kunde"
-              type="text"
-              style={styles.input}
-              value={form.kunde}
-              onChange={(e) => setValue("kunde", e.target.value)}
-              disabled={submitting}
-            />
+            {kundeMode === "select" ? (
+              <div style={{ display: "flex", gap: 8 }}>
+                <select
+                  id="kunde"
+                  style={{ ...styles.input, flex: 1 }}
+                  value={kundeSelect}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === "__custom__") { setKundeMode("custom"); return; }
+                    setKundeSelect(val);
+                    setValue("kunde", val || "");
+                  }}
+                  disabled={submitting || loadingCustomers}
+                >
+                  <option value="">– bitte wählen –</option>
+                  {customers.map(c => (
+                    <option key={c.id} value={c.name}>{c.name}</option>
+                  ))}
+                  <option value="__custom__">➕ Freitext…</option>
+                </select>
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  id="kunde"
+                  type="text"
+                  style={{ ...styles.input, flex: 1 }}
+                  value={form.kunde || ""}
+                  onChange={(e) => setValue("kunde", e.target.value)}
+                  disabled={submitting}
+                  placeholder="Kunde eingeben"
+                />
+                <button
+                  type="button"
+                  style={styles.btnSecondary}
+                  onClick={() => {
+                    if (!form.kunde && kundeSelect) setValue("kunde", kundeSelect);
+                    setKundeMode("select");
+                  }}
+                >
+                  Zur Auswahl
+                </button>
+              </div>
+            )}
           </div>
+
           <div>
             <label style={styles.label} htmlFor="endDatum">Enddatum</label>
             <input
@@ -395,17 +458,56 @@ export default function TaskEditModal({
       <div style={styles.section}>
         <h3 style={styles.sectionTitle}>Zuweisung & Status</h3>
         <div style={styles.grid2}>
+          {/* Zuständigkeit (Hybrid) */}
           <div>
             <label style={styles.label} htmlFor="zustaendig">Zuständigkeit</label>
-            <input
-              id="zustaendig"
-              type="text"
-              style={styles.input}
-              value={form.zustaendig}
-              onChange={(e) => setValue("zustaendig", e.target.value)}
-              disabled={submitting}
-            />
+            {assigneeMode === "select" ? (
+              <div style={{ display: "flex", gap: 8 }}>
+                <select
+                  id="zustaendig"
+                  style={{ ...styles.input, flex: 1 }}
+                  value={assigneeSelect}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === "__custom__") { setAssigneeMode("custom"); return; }
+                    setAssigneeSelect(val);
+                    setValue("zustaendig", val || "");
+                  }}
+                  disabled={submitting || loadingAssignees}
+                >
+                  <option value="">– bitte wählen –</option>
+                  {assignees.map(a => (
+                    <option key={a.id} value={a.name}>{a.name}{a.email ? ` (${a.email})` : ""}</option>
+                  ))}
+                  <option value="__custom__">➕ Freitext…</option>
+                </select>
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  id="zustaendig"
+                  type="text"
+                  style={{ ...styles.input, flex: 1 }}
+                  value={form.zustaendig || ""}
+                  onChange={(e) => setValue("zustaendig", e.target.value)}
+                  disabled={submitting}
+                  placeholder="Zuständigkeit eingeben"
+                />
+                <button
+                  type="button"
+                  style={styles.btnSecondary}
+                  onClick={() => {
+                    if (!form.zustaendig && assigneeSelect) setValue("zustaendig", assigneeSelect);
+                    setAssigneeMode("select");
+                  }}
+                >
+                  Zur Auswahl
+                </button>
+              </div>
+            )}
           </div>
+
+          {/* Arbeitsstation */}
           <div>
             <label style={styles.label} htmlFor="arbeitsstation">Arbeitsstation *</label>
             <select
@@ -442,7 +544,7 @@ export default function TaskEditModal({
               }}
               className="pill"
               style={{
-                ...statusStyles.pillBase,
+                ...styles.pillBase,
                 backgroundColor: (currentStatus?.colorBg ?? '#26303f'),
                 color: (currentStatus?.colorFg ?? '#e5e7eb'),
                 border: '1px solid #ffffff22'
@@ -462,7 +564,7 @@ export default function TaskEditModal({
                 ref={statusMenuRef}
                 role="menu"
                 tabIndex={-1}
-                style={{ ...statusStyles.menu, top:'calc(100% + 6px)', left:0 }}
+                style={{ ...styles.menu, top:'calc(100% + 6px)', left:0 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Escape') { e.preventDefault(); closeStatusMenu(); }
                   else if (e.key === 'ArrowDown') { e.preventDefault(); move(+1); }
@@ -486,10 +588,10 @@ export default function TaskEditModal({
                         onClick={() => choose(idx)}
                         disabled={disabled}
                         className={active ? "active" : ""}
-                        style={statusStyles.menuItem(active, disabled, { bg: s.colorBg, fg: s.colorFg })}
+                        style={styles.menuItem(active, disabled, { bg: s.colorBg, fg: s.colorFg })}
                         title={s.isFinal ? "Finalstatus" : ""}
                       >
-                        <span style={statusStyles.dot(s.colorBg || "#2e3847")} />
+                        <span style={styles.dot(s.colorBg || "#2e3847")} />
                         {s.label ?? s.code}
                         {!s.active && <span style={{ marginLeft: 8, opacity: .6 }}>(inaktiv)</span>}
                       </button>
@@ -499,10 +601,9 @@ export default function TaskEditModal({
               </div>
             )}
 
-            {/* Zusatzarbeiten (FAI/QS) – rechts ausgerichtet */}
+            {/* Zusatzarbeiten rechts */}
             <div style={{ marginLeft: "auto", display: "inline-flex", gap: 8, alignItems: "center" }}>
               <span style={{ fontSize: 12, color: "#94a3b8" }}>Zusatzarbeiten:</span>
-
               <button
                 type="button"
                 className={`pill-add add-fai ${form.fai ? "is-active" : ""} is-clickable`}
@@ -513,7 +614,6 @@ export default function TaskEditModal({
               >
                 FAI
               </button>
-
               <button
                 type="button"
                 className={`pill-add add-qs ${form.qs ? "is-active" : ""} is-clickable`}
@@ -588,7 +688,7 @@ export default function TaskEditModal({
       </div>
 
       {(baseLabel || DEFAULT_BASE_LABEL) && (
-        <div style={{ marginTop: 8, ...styles.muted }}>
+        <div style={{ marginTop: 8, color: "#9ca3af", fontSize: 12 }}>
           Voller Pfad (Info):{" "}
           <code>{joinBaseAndSub(baseLabel || DEFAULT_BASE_LABEL, form.dateipfad?.replaceAll("\\", "/"))}</code>
         </div>
@@ -601,30 +701,30 @@ export default function TaskEditModal({
             type="button"
             onClick={() => setValue("dateipfad", "")}
             title={baseLabel || DEFAULT_BASE_LABEL}
-            style={styles.crumbBtn}
+            style={{ background: "#24282e", border: "1px solid #2a2d33", color: "#c6c9cf", padding: "4px 8px", borderRadius: 999, cursor: "pointer" }}
             disabled={submitting}
           >
             Basis
           </button>
         </span>
-        {breadcrumbs.length > 0 && <span style={styles.crumbSep}>/</span>}
+        {breadcrumbs.length > 0 && <span style={{ color: "#6d7480", margin: "0 4px" }}>/</span>}
         {breadcrumbs.map((b, idx) => (
           <span key={b.sub} style={{ display: "inline-flex", alignItems: "center" }}>
             <button
               type="button"
               onClick={() => setValue("dateipfad", b.sub)}
               title={joinBaseAndSub(baseLabel || DEFAULT_BASE_LABEL, b.sub)}
-              style={styles.crumbBtn}
+              style={{ background: "#24282e", border: "1px solid #2a2d33", color: "#c6c9cf", padding: "4px 8px", borderRadius: 999, cursor: "pointer" }}
               disabled={submitting}
             >
               {b.label}
             </button>
-            {idx < breadcrumbs.length - 1 && <span style={styles.crumbSep}>/</span>}
+            {idx < breadcrumbs.length - 1 && <span style={{ color: "#6d7480", margin: "0 4px" }}>/</span>}
           </span>
         ))}
       </div>
 
-      <div style={{ marginTop: 8, ...styles.muted }}>
+      <div style={{ marginTop: 8, color: "#9ca3af", fontSize: 12 }}>
         Hinweis: Basispräfix wird serverseitig konfiguriert (z. B. <code>\\\\server\\share\\</code>). Hier nur den <em>Unterordner</em> wählen/eintragen.
       </div>
     </div>
