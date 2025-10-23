@@ -3,6 +3,8 @@ import React, { useEffect, useRef, useState } from "react";
 import StatusManagementContent from "./StatusManagementContent";
 import StationManagementContent from "./StationManagementContent";
 import CustomersTab from "./CustomersTab";
+import AssigneesTab from "./AssigneesTab";
+
 
 export default function SettingsModal({
   open,
@@ -117,6 +119,16 @@ export default function SettingsModal({
           >
             Kunden
           </TabButton>
+		  
+		  <TabButton
+		    active={tab === "assignees"}
+		    onClick={() => setTab("assignees")}
+		    id="tab-assignees"
+		    controls="panel-assignees"
+		  >
+		    Zuständigkeiten
+		  </TabButton>
+
         </div>
 
         {/* Inhalt */}
@@ -141,6 +153,12 @@ export default function SettingsModal({
               <CustomersTab />
             </section>
           )}
+		  {tab === "assignees" && (
+		    <section role="tabpanel" id="panel-assignees" aria-labelledby="tab-assignees">
+		      <AssigneesTab />
+		    </section>
+		  )}
+
         </div>
       </div>
     </div>
