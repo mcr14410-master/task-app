@@ -89,7 +89,7 @@ export default function TaskEditModal({
     let alive = true;
     (async () => {
       try {
-        const list = await fetchStatuses(true);
+        const list = await fetchStatuses(false);
         if (!alive) return;
         const sorted = (list || []).slice().sort((a, b) =>
           (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
@@ -137,8 +137,8 @@ export default function TaskEditModal({
     stk: Number.isFinite(Number(task?.stk)) ? Number(task?.stk) : 0,
     fa: task?.fa ?? "",
     dateipfad: task?.dateipfad ?? "",
-	zustaendig: task?.zustaendig ?? task?.zuständig ?? "",
-	zusaetzlicheInfos: task?.zusaetzlicheInfos ?? task?.zusätzlicheInfos ?? "",
+    zustaendig: task?.zustaendig ?? task?.zuständig ?? "",
+    zusaetzlicheInfos: task?.zusaetzlicheInfos ?? task?.zusätzlicheInfos ?? "",
     arbeitsstation: task?.arbeitsstation ?? (stations[0]?.name ?? ""),
     status: task?.statusCode ?? task?.status ?? "NEU",
     fai: !!task?.fai,
@@ -158,14 +158,26 @@ export default function TaskEditModal({
     [statuses, form?.status]
   );
 
-  const visibleList = useMemo(() => (
-    statuses.length ? statuses : [
-      { code:'NEU', label:'Neu', colorBg:'#2e3847', colorFg:'#d7e3ff', sortOrder:0, isFinal:false, active:true },
-      { code:'TO_DO', label:'To do', colorBg:'#374151', colorFg:'#e5e7eb', sortOrder:1, isFinal:false, active:true },
-      { code:'IN_BEARBEITUNG', label:'In Bearbeitung', colorBg:'#1f4a3a', colorFg:'#b5f5d1', sortOrder:2, isFinal:false, active:true },
-      { code:'FERTIG', label:'Fertig', colorBg:'#133b19', colorFg:'#b2fcb8', sortOrder:3, isFinal:true, active:true }
-    ]
-  ), [statuses]);
+  const visibleList = useMemo(() => {
+    const list = statuses.length ? [...statuses] : [
+      { code: 'NEU', label: 'Neu', colorBg: '#2e3847', colorFg: '#d7e3ff', sortOrder: 0, isFinal: false, active: true },
+      { code: 'TO_DO', label: 'To do', colorBg: '#374151', colorFg: '#e5e7eb', sortOrder: 1, isFinal: false, active: true },
+      { code: 'IN_BEARBEITUNG', label: 'In Bearbeitung', colorBg: '#1f4a3a', colorFg: '#b5f5d1', sortOrder: 2, isFinal: false, active: true },
+      { code: 'FERTIG', label: 'Fertig', colorBg: '#133b19', colorFg: '#b2fcb8', sortOrder: 3, isFinal: true, active: true }
+    ];
+    return list.sort((a, b) => {
+      // aktive zuerst, danach inaktive
+      if (a.active !== b.active) return a.active ? -1 : 1;
+      // innerhalb jeder Gruppe sortOrder + Label
+      return (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
+             String(a.label).localeCompare(String(b.label));
+    });
+  }, [statuses]);
+
+  const activeCount = useMemo(
+    () => visibleList.reduce((n, s) => n + (s.active ? 1 : 0), 0),
+    [visibleList]
+  );
 
   const enabledIdxs = useMemo(
     () => visibleList.reduce((acc, s, idx) => (s.active ? (acc.push(idx), acc) : acc), []),
@@ -232,11 +244,10 @@ export default function TaskEditModal({
       teilenummer: sanitize(form.teilenummer),
       kunde: sanitize(form.kunde),
       endDatum: sanitize(form.endDatum),
-      aufwandStunden: Number.isFinite(Number(form.aufwandStunden)) ? Number(form.aufwandStunden) : 0,
+      aufwandStunden: Number.isFinite(Number(form.aufswandStunden)) ? Number(form.aufswandStunden) : 0,
       zuständig: sanitize(form.zustaendig),
       zusätzlicheInfos: sanitize(form.zusaetzlicheInfos),
       arbeitsstation: sanitize(form.arbeitsstation),
- //     status: sanitize(form.status) ?? "NEU",
       statusCode: sanitize(form.status) ?? "NEU",
       fai: !!form.fai,
       qs: !!form.qs,
@@ -349,7 +360,7 @@ export default function TaskEditModal({
               min="0"
               step="0.25"
               style={styles.input}
-              value={form.aufwandStunden}
+              value={form.aufswandStunden}
               onChange={(e) => setValue("aufwandStunden", e.target.value)}
               disabled={submitting}
             />
@@ -463,57 +474,58 @@ export default function TaskEditModal({
                   const active = hi === idx;
                   const disabled = !s.active;
                   return (
-                    <button
-                      key={s.code}
-                      role="menuitem"
-                      onMouseEnter={() => setHi(idx)}
-                      onClick={() => choose(idx)}
-                      disabled={disabled}
-                      title={disabled ? 'Inaktiv (nicht auswählbar)' : (s.isFinal ? 'Finaler Status' : s.label)}
-                      style={statusStyles.menuItem(active, disabled, { bg: s.colorBg, fg: s.colorFg })}
-                    >
-                      <span style={statusStyles.dot(s.colorFg)} />
-                      <span style={{ flex:1 }}>{s.label}</span>
-                      {s.isFinal && (
-                        <span style={{ fontSize:11, opacity:.85, border:'1px solid #ffffff33', borderRadius:999, padding:'2px 6px' }}>
-                          final
-                        </span>
+                    <React.Fragment key={s.code}>
+                      {idx === activeCount && activeCount > 0 && activeCount < visibleList.length && (
+                        <div role="separator" aria-hidden="true" style={{ padding: '6px 10px', opacity: .6, fontSize: 12 }}>
+                          Inaktiv
+                        </div>
                       )}
-                    </button>
+                      <button
+                        role="menuitem"
+                        onMouseEnter={() => setHi(idx)}
+                        onClick={() => choose(idx)}
+                        disabled={disabled}
+                        className={active ? "active" : ""}
+                        style={statusStyles.menuItem(active, disabled, { bg: s.colorBg, fg: s.colorFg })}
+                        title={s.isFinal ? "Finalstatus" : ""}
+                      >
+                        <span style={statusStyles.dot(s.colorBg || "#2e3847")} />
+                        {s.label ?? s.code}
+                        {!s.active && <span style={{ marginLeft: 8, opacity: .6 }}>(inaktiv)</span>}
+                      </button>
+                    </React.Fragment>
                   );
                 })}
               </div>
             )}
 
-			{/* Zusatzarbeiten (FAI/QS) – rechts ausgerichtet */}
-			<div style={{ marginLeft: "auto", display: "inline-flex", gap: 8, alignItems: "center" }}>
-			  <span style={{ fontSize: 12, color: "#94a3b8" }}>Zusatzarbeiten:</span>
+            {/* Zusatzarbeiten (FAI/QS) – rechts ausgerichtet */}
+            <div style={{ marginLeft: "auto", display: "inline-flex", gap: 8, alignItems: "center" }}>
+              <span style={{ fontSize: 12, color: "#94a3b8" }}>Zusatzarbeiten:</span>
 
-			  <button
-			    type="button"
-			    className={`pill-add add-fai ${form.fai ? "is-active" : ""} is-clickable`}
-			    onClick={() => setForm((prev) => ({ ...prev, fai: !prev.fai }))}
-			    disabled={submitting}
-			    aria-pressed={!!form.fai}
-			    title="FAI"
-			  >
-			    FAI
-			  </button>
+              <button
+                type="button"
+                className={`pill-add add-fai ${form.fai ? "is-active" : ""} is-clickable`}
+                onClick={() => setForm((prev) => ({ ...prev, fai: !prev.fai }))}
+                disabled={submitting}
+                aria-pressed={!!form.fai}
+                title="FAI"
+              >
+                FAI
+              </button>
 
-			  <button
-			    type="button"
-			    className={`pill-add add-qs ${form.qs ? "is-active" : ""} is-clickable`}
-			    onClick={() => setForm((prev) => ({ ...prev, qs: !prev.qs }))}
-			    disabled={submitting}
-			    aria-pressed={!!form.qs}
-			    title="QS"
-			  >
-			    QS
-			  </button>
-			</div>
+              <button
+                type="button"
+                className={`pill-add add-qs ${form.qs ? "is-active" : ""} is-clickable`}
+                onClick={() => setForm((prev) => ({ ...prev, qs: !prev.qs }))}
+                disabled={submitting}
+                aria-pressed={!!form.qs}
+                title="QS"
+              >
+                QS
+              </button>
+            </div>
 
-			
-			
             {statusErr && <div style={{ marginTop:6, color:'#fecaca', fontSize:12 }}>{statusErr}</div>}
           </div>
         </div>
