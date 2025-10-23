@@ -2,11 +2,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import StatusManagementContent from "./StatusManagementContent";
 import StationManagementContent from "./StationManagementContent";
+import CustomersTab from "./CustomersTab";
 
 export default function SettingsModal({
   open,
   onClose,
-  initialTab = "statuses",    // "stations" | "statuses"
+  initialTab = "statuses",    // "stations" | "statuses" | "customers"
   // Stationen-Props vom TaskBoard:
   stations = [],
   onUpdate = () => {},        // wird in StationManagementContent nach "Reihenfolge speichern" aufgerufen
@@ -98,6 +99,7 @@ export default function SettingsModal({
           >
             Stationen
           </TabButton>
+
           <TabButton
             active={tab === "statuses"}
             onClick={() => setTab("statuses")}
@@ -105,6 +107,15 @@ export default function SettingsModal({
             controls="panel-statuses"
           >
             Status
+          </TabButton>
+
+          <TabButton
+            active={tab === "customers"}
+            onClick={() => setTab("customers")}
+            id="tab-customers"
+            controls="panel-customers"
+          >
+            Kunden
           </TabButton>
         </div>
 
@@ -122,6 +133,12 @@ export default function SettingsModal({
           {tab === "statuses" && (
             <section role="tabpanel" id="panel-statuses" aria-labelledby="tab-statuses">
               <StatusManagementContent />
+            </section>
+          )}
+
+          {tab === "customers" && (
+            <section role="tabpanel" id="panel-customers" aria-labelledby="tab-customers">
+              <CustomersTab />
             </section>
           )}
         </div>
