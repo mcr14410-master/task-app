@@ -23,8 +23,17 @@ export default function InfoTab({
   newsItems
 }) {
   const fallbackChangelog = useMemo(() => ([
+	
+	{
+	  version: "v0.7.1",
+	  date: "2025-10-25",
+	  changes: [
+	    { type: "fix",  text: "AufwandStd wird im Edit wieder richtig übergeben" },
+  	  ]
+	},
+	
     {
-      version: "v0.12.0",
+      version: "v0.7.0",
       date: "2025-10-23",
       changes: [
         { type: "feat", text: "Settings: Kunden & Zuständigkeiten mit Inline-CRUD" },
@@ -34,7 +43,7 @@ export default function InfoTab({
       ]
     },
     {
-      version: "v0.11.1",
+      version: "v0.6.1",
       date: "2025-10-22",
       changes: [
         { type: "fix", text: "Anhänge werden beim Task-Löschen korrekt entfernt" }
