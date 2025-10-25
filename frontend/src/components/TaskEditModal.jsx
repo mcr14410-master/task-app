@@ -259,7 +259,7 @@ export default function TaskEditModal({
       teilenummer: sanitize(form.teilenummer),
       kunde: sanitize(form.kunde),
       endDatum: sanitize(form.endDatum),
-      aufwandStunden: Number.isFinite(Number(form.aufswandStunden)) ? Number(form.aufswandStunden) : 0,
+      aufwandStunden: Number.isFinite(Number(form.aufwandStunden)) ? Number(form.aufwandStunden) : 0,
       zuständig: sanitize(form.zustaendig),
       zusätzlicheInfos: sanitize(form.zusaetzlicheInfos),
       arbeitsstation: sanitize(form.arbeitsstation),
@@ -423,7 +423,7 @@ export default function TaskEditModal({
               min="0"
               step="0.25"
               style={styles.input}
-              value={form.aufswandStunden}
+              value={form.aufwandStunden}
               onChange={(e) => setValue("aufwandStunden", e.target.value)}
               disabled={submitting}
             />
