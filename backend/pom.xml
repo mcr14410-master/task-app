@@ -13,7 +13,7 @@
 
     <groupId>com.pp</groupId>
     <artifactId>task-management-backend</artifactId>
-    <version>0.6.0</version>
+    <version>0.8.0</version>
     <name>task-management-backend</name>
     <description>Task Management Backend</description>
 

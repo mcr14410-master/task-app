@@ -25,6 +25,15 @@ export default function InfoTab({
   const fallbackChangelog = useMemo(() => ([
 	
 	{
+	  version: "v0.8.0",
+	  date: "2025-10-28",
+	  changes: [
+	    { type: "feat",  text: "Zusatzarbeiten-Management (Einstellungen → Zusatzarbeiten)" },
+	
+	  ]
+	},
+	
+	{
 	  version: "v0.7.1",
 	  date: "2025-10-25",
 	  changes: [
@@ -53,11 +62,32 @@ export default function InfoTab({
 
   const fallbackNews = useMemo(() => ([
     {
-      title: "Neuer Info-Tab",
-      date: "2025-10-23",
-      body: "Hier findest du ab sofort Changelog & Projekt-News zentral an einer Stelle.",
+      title: "Info-Tab",
+      date: "2025-10-24",
+      body: 	  [
+	          "Zusatzarbeiten-Management (Einstellungen → Zusatzarbeiten):",
+	          "• Neue Zusatzarbeit anlegen (Code, Bezeichnung, Farbe, Flags).",
+	          "• Aktiv / inaktiv schalten, ohne sie zu löschen.",
+	          "• Reihenfolge per Drag & Drop festlegen (sortOrder wird automatisch gespeichert).",
+	          "• Farb-/Kontrast-Vorschau nach WCAG, inkl. Auto-Kontrast-Knopf.",
+	          "• Flags-Feld (frei definierbar), vorbereitet für spätere Auswertungen / Filter.",
+	          "",
+	          "Aufgaben unterstützen jetzt mehrere Zusatzarbeiten gleichzeitig:",
+	          "• TaskEditModal und TaskCreationModal zeigen Checkboxen für alle aktiven Zusatzarbeiten.",
+	          "• Auswahl wird als Liste gespeichert (z. B. ['fai','qs']).",
+	          "• Das Board rendert diese Liste als farbige Pills direkt aus der Konfiguration.",
+	        ],
       tags: ["product"]
     },
+	
+	{
+	  title: "Info-Tab",
+	  date: "2025-10-28",
+	  body: "Hier findest du ab sofort Changelog & Projekt-News zentral an einer Stelle.",
+	  
+	  tags: ["product"]
+	},
+	
     {
       title: "Nächste Schritte",
       date: "2025-10-24",
