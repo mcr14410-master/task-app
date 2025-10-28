@@ -5,6 +5,7 @@ import "@/config/DueDateTheme.css";
 import "@/config/AdditionalWorkTheme.css";
 import { dueClassForDate } from "@/config/DueDateConfig";
 import { fetchStatuses } from "@/api/statuses";
+import { fetchAdditionalWorks } from "@/api/additionalWorks";
 
 const Icon = ({ size = 16, stroke = "#9ca3af", path }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size}
@@ -68,14 +69,6 @@ function statusKey(raw) {
   }
 }
 
-function AddPills({ task }) {
-  const pills = [];
-  if (task?.fai) pills.push(<span key="fai" className="pill-add add-fai is-active">FAI</span>);
-  if (task?.qs)  pills.push(<span key="qs"  className="pill-add add-qs  is-active">QS</span>);
-  return pills.length ? (
-    <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>{pills}</span>
-  ) : null;
-}
 
 export default function TaskItem({ task, openAttachmentsModal }) {
   const { bezeichnung, titel, teilenummer, kunde, zuständig, aufwandStunden, endDatum } = task || {};
@@ -107,6 +100,92 @@ export default function TaskItem({ task, openAttachmentsModal }) {
   const pillRef = useRef(null);
   const menuRef = useRef(null);
 
+  // 1. Alle konfigurierten Zusatzarbeiten vom Backend holen (FAI, QS, etc.)
+  const [awList, setAwList] = useState([]);
+
+  useEffect(() => {
+    let alive = true;
+    fetchAdditionalWorks()
+      .then(list => {
+        if (!alive) return;
+        // nur aktive zusatzarbeiten für Board
+        setAwList((list || []).filter(w => w.active));
+      })
+      .catch(() => {
+        // Board darf nicht crashen
+      });
+    return () => { alive = false; };
+  }, []);
+
+  // 2. Map von code -> Zusatzarbeit-Objekt (schnelles Lookup)
+  const awByCode = useMemo(() => {
+    const map = {};
+    for (const w of awList) {
+      if (w && w.code) {
+        map[w.code.toLowerCase()] = w;
+      }
+    }
+    return map;
+  }, [awList]);
+
+  // 3. Baue die Pills, die wir anzeigen wollen
+  const pills = useMemo(() => {
+    const out = [];
+
+    // (A) Neuer Weg: additionalWorks aus TaskDTO (kommt jetzt vom Backend)
+    if (Array.isArray(task.additionalWorks)) {
+      for (const code of task.additionalWorks) {
+        const lower = String(code).toLowerCase();
+        const w = awByCode[lower];
+        if (w) {
+          out.push({
+            key: lower,
+            label: w.label || w.code.toUpperCase(),
+            bg: w.colorBg || "#374151",
+            fg: w.colorFg || "#e5e7eb",
+          });
+        } else {
+          // falls Task hat "whatever" aber Settings kennt es (noch) nicht
+          out.push({
+            key: lower,
+            label: code.toUpperCase(),
+            bg: "#374151",
+            fg: "#e5e7eb",
+          });
+        }
+      }
+    }
+
+    // (B) Fallback: alte Booleans weiter unterstützen,
+    // damit bestehende Tasks nicht leer aussehen
+    if (out.length === 0) {
+      if (task.fai) {
+        const w = awByCode["fai"];
+        out.push({
+          key: "fai",
+          label: w?.label || "FAI",
+          bg: w?.colorBg || "var(--fai-bg)",
+          fg: w?.colorFg || "var(--fai-fg)",
+        });
+      }
+      if (task.qs) {
+        const w = awByCode["qs"];
+        out.push({
+          key: "qs",
+          label: w?.label || "QS",
+          bg: w?.colorBg || "var(--qs-bg)",
+          fg: w?.colorFg || "var(--qs-fg)",
+        });
+      }
+    }
+
+    return out;
+  }, [task, awByCode]);
+
+  
+  
+  
+  
   // Status laden (aktive + inaktive)
   useEffect(() => {
     let alive = true;
@@ -249,265 +328,282 @@ export default function TaskItem({ task, openAttachmentsModal }) {
   const iconBtnStyle = { border: "none", background: "transparent", padding: 4, cursor: "pointer", opacity: 0.85 };
   const rightZoneStyle = { position: "relative", marginLeft: "auto", display: "inline-flex", gap: 6, alignItems: "center" };
 
-  return (
-    <>
-      <h4 className="title" style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
-        <span>{bezeichnung ?? titel ?? "(ohne Bezeichnung)"}</span>
+    return (
+      <>
+        <h4 className="title" style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+          <span>{bezeichnung ?? titel ?? "(ohne Bezeichnung)"}</span>
 
-        <span style={{display:"inline-flex",gap:8,alignItems:"center"}}>
-          {hasAttachments ? (
-            <button
-              className="icon-btn"
-              style={iconBtnStyle}
-              title={`${attachCount} Anhang${attachCount === 1 ? "" : "e"} anzeigen`}
-              onClick={(e) => {
-                e.stopPropagation();
-                if (typeof openAttachmentsModal === "function") {
-                  openAttachmentsModal(task);
-                } else {
-                  window.open(`/api/tasks/${task.id}/attachments`, "_blank", "noopener");
-                }
-              }}
-            >
-              <IconPaperclip />
-              <span style={{fontSize:12, marginLeft:4}}>{attachCount}</span>
-            </button>
-          ) : null}
-
-          {hasPath ? (
-            <button
-              className="icon-btn"
-              style={iconBtnStyle}
-              title={`Dateipfad kopieren: ${task.dateipfad}`}
-              onClick={async (e) => {
-                e.stopPropagation();
-                try {
-                  await navigator.clipboard.writeText(task.dateipfad);
-                } catch {
-                  try { window.open(task.dateipfad, "_blank", "noopener"); } catch {}
-                }
-              }}
-            >
-              <IconFolderOpen />
-            </button>
-          ) : null}
-        </span>
-      </h4>
-
-      <div className="row" style={{ marginBottom: 6 }}>
-        <div className="meta" title={teilenummer || "-"}>
-          <IconTag />
-          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {teilenummer || "-"}
-            {task?.fa ? <span className="badge" style={{ marginLeft: 8 }}>FA: {task.fa}</span> : null}
-            {(Number.isFinite(task?.stk) && task.stk > 0) ? <span className="badge" style={{ marginLeft: 8 }}>Stk × {task.stk}</span> : null}
-          </span>
-        </div>
-        <div className="meta" title={kunde || "-"} style={{ justifyContent: "flex-end" }}>
-          <IconBriefcase />
-          <span className="meta-right">{kunde || "-"}</span>
-        </div>
-      </div>
-
-      <div className="row" style={{ marginBottom: 6 }}>
-        <div className="meta" title={zuständig || "offen"}>
-          <IconUser />
-          <span>{zuständig || "offen"}</span>
-        </div>
-        <div className="meta" title={`${aufwandStunden || 0}h`}>
-          <IconClock />
-          <span>{aufwandStunden ? `${aufwandStunden}h` : "0h"}</span>
-        </div>
-      </div>
-
-      {/* Datum links | rechts Zusatz + Status */}
-      <div className="row">
-        {endDatum ? (
-          <div className={`meta date ${dueCls}`} title={formatDate(endDatum)}>
-            <IconCalendar />
-            <span className="date-text">{formatDate(endDatum)}</span>
-          </div>
-        ) : <div />}
-
-        <div style={rightZoneStyle}>
-          <AddPills task={task} />
-
-          {/* Klickbare Status-Pill (öffnet Menü) */}
-          {currentStatus?.colorBg && currentStatus?.colorFg ? (
-            <button
-              ref={pillRef}
-              type="button"
-              className="pill"
-              onClick={() => {
-                setPickerOpen(v => {
-                  const next = !v;
-                  if (next) {
-                    let idx = flatItems.findIndex(x => x.code === (currentStatus?.code || task?.statusCode));
-                    if (idx < 0) idx = 0;
-                    if (!flatItems[idx]?.active) idx = findNextActive(idx);
-                    setFocusIndex(idx);
+          <span style={{display:"inline-flex",gap:8,alignItems:"center"}}>
+            {hasAttachments ? (
+              <button
+                className="icon-btn"
+                style={iconBtnStyle}
+                title={`${attachCount} Anhang${attachCount === 1 ? "" : "e"} anzeigen`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (typeof openAttachmentsModal === "function") {
+                    openAttachmentsModal(task);
+                  } else {
+                    window.open(`/api/tasks/${task.id}/attachments`, "_blank", "noopener");
                   }
-                  return next;
-                });
-              }}
-              disabled={loadingStatuses || savingStatus}
-              aria-haspopup="menu"
-              aria-expanded={pickerOpen}
-              title={`Status: ${currentStatus.label} (klicken zum Ändern)`}
-              style={{
-                display:'inline-flex', alignItems:'center', gap:6,
-                padding:'2px 8px', borderRadius:999,
-                background: currentStatus.colorBg, color: currentStatus.colorFg,
-                border:'1px solid #ffffff22', cursor:'pointer'
-              }}
-            >
-              {/* optionaler Punkt (Feature-Flag oben) */}
-              {/* {SHOW_STATUS_DOT && (
-                <span aria-hidden style={{ width:6, height:6, borderRadius:999, background:'currentColor', opacity:.9 }} />
-              )} */}
-              <span>{currentStatus.label}</span>
-            </button>
-          ) : (
-            <button
-              ref={pillRef}
-              type="button"
-              className={pillClass}
-              data-status={key}
-              onClick={() => setPickerOpen(v => !v)}
-              disabled={loadingStatuses || savingStatus}
-              aria-haspopup="menu"
-              aria-expanded={pickerOpen}
-              title={`Status: ${key} (klicken zum Ändern)`}
-              style={{ cursor:'pointer' }}
-            >
-              {key}
-            </button>
-          )}
+                }}
+              >
+                <IconPaperclip />
+                <span style={{fontSize:12, marginLeft:4}}>{attachCount}</span>
+              </button>
+            ) : null}
 
-          {/* Kontextmenü */}
-          {pickerOpen && (
-            <div
-              ref={menuRef}
-              role="menu"
-              aria-label="Status auswählen"
-              tabIndex={-1}
-              onKeyDown={(e) => {
-                if (e.key === 'Escape') {
-                  e.preventDefault();
-                  setPickerOpen(false);
-                  setFocusIndex(-1);
-                  return;
-                }
-                if (!flatItems.length) return;
+            {hasPath ? (
+              <button
+                className="icon-btn"
+                style={iconBtnStyle}
+                title={`Dateipfad kopieren: ${task.dateipfad}`}
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  try {
+                    await navigator.clipboard.writeText(task.dateipfad);
+                  } catch {
+                    try { window.open(task.dateipfad, "_blank", "noopener"); } catch {}
+                  }
+                }}
+              >
+                <IconFolderOpen />
+              </button>
+            ) : null}
+          </span>
+        </h4>
 
-                if (e.key === 'ArrowDown') {
-                  e.preventDefault();
-                  setFocusIndex(i => {
-                    const base = i >= 0 ? i : 0;
-                    return findNextActive(base);
-                  });
-                } else if (e.key === 'ArrowUp') {
-                  e.preventDefault();
-                  setFocusIndex(i => {
-                    const base = i >= 0 ? i : 0;
-                    return findPrevActive(base);
-                  });
-                } else if (e.key === 'Enter' || e.key === 'NumpadEnter') {
-                  e.preventDefault();
-                  const idx = focusIndex >= 0 ? focusIndex : 0;
-                  const item = flatItems[idx];
-                  if (item?.active && !savingStatus) changeStatus(item.code);
-                }
-              }}
-              style={{
-                position:'absolute', top:'calc(100% + 6px)', right:0,
-                minWidth: 260, maxHeight: '50vh', overflowY: 'auto',
-                background:'var(--color-surface, #111827)', color:'var(--color-text, #e5e7eb)',
-                border:'1px solid #ffffff22', borderRadius:12, boxShadow:'0 10px 30px rgba(0,0,0,0.45)',
-                padding:6, zIndex: 50
-              }}
-            >
-              {/* Abschnitt: Aktiv */}
-              <div style={{ padding: '6px 10px', fontSize: 12, opacity:.8 }}>Aktiv</div>
-              {activeItems.map((s, aIdx) => {
-                const idx = aIdx; // Position im flatItems
-                const isActiveSel = s.code === currentStatus?.code || s.code === task?.statusCode;
-                return (
-                  <button
-                    key={s.code}
-                    role="menuitemradio"
-                    aria-checked={isActiveSel}
-                    onClick={() => changeStatus(s.code)}
-                    onMouseEnter={() => setFocusIndex(idx)}
-                    disabled={savingStatus}
-                    title={s.label}
-                    ref={el => { if (el && focusIndex === idx) el.scrollIntoView({ block:'nearest' }); }}
-                    style={{
-                      width:'100%', textAlign:'left',
-                      display:'flex', alignItems:'center', gap:8,
-                      padding:'8px 10px', borderRadius:8, border:'none',
-                      background: (isActiveSel ? '#ffffff14' : (focusIndex === idx ? '#ffffff10' : 'transparent')),
-                      outline: (focusIndex === idx ? '1px solid #ffffff33' : 'none'),
-                      color:'inherit', cursor:'pointer'
-                    }}
-                  >
-                    <span style={{ width:12, height:12, borderRadius:999, border:'1px solid #00000033', background: s.colorBg }} />
-                    <span style={{ flex: 1 }}>{s.label}</span>
-                    {isActiveSel && <span aria-hidden>✓</span>}
-                  </button>
-                );
-              })}
-
-              {/* Abschnitt: Inaktiv */}
-              {inactiveItems.length > 0 && (
-                <>
-                  <div style={{ height:8 }} />
-                  <div style={{ padding: '6px 10px', fontSize: 12, opacity:.6 }}>Inaktiv</div>
-                  {inactiveItems.map((s, iIdx) => {
-                    const idx = activeItems.length + iIdx; // Position im flatItems
-                    const isActiveSel = s.code === currentStatus?.code || s.code === task?.statusCode;
-                    return (
-                      <button
-                        key={s.code}
-                        role="menuitemradio"
-                        aria-checked={isActiveSel}
-                        aria-disabled="true"
-                        disabled
-                        onMouseEnter={() => setFocusIndex(idx)}
-                        title="Inaktiv – nicht wählbar"
-                        ref={el => { if (el && focusIndex === idx) el.scrollIntoView({ block:'nearest' }); }}
-                        style={{
-                          width:'100%', textAlign:'left',
-                          display:'flex', alignItems:'center', gap:8,
-                          padding:'8px 10px', borderRadius:8, border:'none',
-                          background: (isActiveSel ? '#ffffff14' : (focusIndex === idx ? '#ffffff10' : 'transparent')),
-                          outline: (focusIndex === idx ? '1px solid #ffffff33' : 'none'),
-                          color:'inherit', cursor:'not-allowed', opacity:.5
-                        }}
-                      >
-                        <span style={{ width:12, height:12, borderRadius:999, border:'1px solid #00000033', background: s.colorBg }} />
-                        <span style={{ flex: 1 }}>{s.label}</span>
-                        {isActiveSel && <span aria-hidden>✓</span>}
-                      </button>
-                    );
-                  })}
-                </>
-              )}
-              {!flatItems.length && (
-                <div style={{ padding:'10px 12px', opacity:.8 }}>
-                  {loadingStatuses ? 'Lade Status…' : 'Keine Status gefunden.'}
-                </div>
-              )}
-            </div>
-          )}
+        <div className="row" style={{ marginBottom: 6 }}>
+          <div className="meta" title={teilenummer || "-"}>
+            <IconTag />
+            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {teilenummer || "-"}
+              {task?.fa ? <span className="badge" style={{ marginLeft: 8 }}>FA: {task.fa}</span> : null}
+              {(Number.isFinite(task?.stk) && task.stk > 0) ? <span className="badge" style={{ marginLeft: 8 }}>Stk × {task.stk}</span> : null}
+            </span>
+          </div>
+          <div className="meta" title={kunde || "-"} style={{ justifyContent: "flex-end" }}>
+            <IconBriefcase />
+            <span className="meta-right">{kunde || "-"}</span>
+          </div>
         </div>
-      </div>
 
-      {(task?.["zusätzlicheInfos"] ?? task?.zusatzlicheInfos) && (
-        <p className="desc" title={task?.["zusätzlicheInfos"] ?? task?.zusatzlicheInfos}>
-          {task?.["zusätzlicheInfos"] ?? task?.zusatzlicheInfos}
-        </p>
-      )}
-    </>
-  );
-}
+        <div className="row" style={{ marginBottom: 6 }}>
+          <div className="meta" title={zuständig || "offen"}>
+            <IconUser />
+            <span>{zuständig || "offen"}</span>
+          </div>
+          <div className="meta" title={`${aufwandStunden || 0}h`}>
+            <IconClock />
+            <span>{aufwandStunden ? `${aufwandStunden}h` : "0h"}</span>
+          </div>
+        </div>
+
+        {/* Datum links | rechts Zusatz + Status */}
+        <div className="row">
+          {endDatum ? (
+            <div className={`meta date ${dueCls}`} title={formatDate(endDatum)}>
+              <IconCalendar />
+              <span className="date-text">{formatDate(endDatum)}</span>
+            </div>
+          ) : <div />}
+
+          <div style={rightZoneStyle}>
+            {/* NEU: dynamische Zusatzarbeits-Pills */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+              {pills.map(p => (
+                <span
+                  key={p.key}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    borderRadius: "999px",
+                    padding: "3px 6px",
+                    fontSize: "0.7rem",
+                    fontWeight: 600,
+                    backgroundColor: p.bg,
+                    color: p.fg,
+                    border: "1px solid #ffffff33",
+                    lineHeight: 1.2
+                  }}
+                  title={p.label}
+                >
+                  {p.label}
+                </span>
+              ))}
+            </div>
+
+            {/* Klickbare Status-Pill (öffnet Menü) */}
+            {currentStatus?.colorBg && currentStatus?.colorFg ? (
+              <button
+                ref={pillRef}
+                type="button"
+                className="pill"
+                onClick={() => {
+                  setPickerOpen(v => {
+                    const next = !v;
+                    if (next) {
+                      let idx = flatItems.findIndex(x => x.code === (currentStatus?.code || task?.statusCode));
+                      if (idx < 0) idx = 0;
+                      if (!flatItems[idx]?.active) idx = findNextActive(idx);
+                      setFocusIndex(idx);
+                    }
+                    return next;
+                  });
+                }}
+                disabled={loadingStatuses || savingStatus}
+                aria-haspopup="menu"
+                aria-expanded={pickerOpen}
+                title={`Status: ${currentStatus.label} (klicken zum Ändern)`}
+                style={{
+                  display:'inline-flex', alignItems:'center', gap:6,
+                  padding:'2px 8px', borderRadius:999,
+                  background: currentStatus.colorBg, color: currentStatus.colorFg,
+                  border:'1px solid #ffffff22', cursor:'pointer'
+                }}
+              >
+                <span>{currentStatus.label}</span>
+              </button>
+            ) : (
+              <button
+                ref={pillRef}
+                type="button"
+                className={pillClass}
+                data-status={key}
+                onClick={() => setPickerOpen(v => !v)}
+                disabled={loadingStatuses || savingStatus}
+                aria-haspopup="menu"
+                aria-expanded={pickerOpen}
+                title={`Status: ${key} (klicken zum Ändern)`}
+                style={{ cursor:'pointer' }}
+              >
+                {key}
+              </button>
+            )}
+
+            {/* Kontextmenü */}
+            {pickerOpen && (
+              <div
+                ref={menuRef}
+                role="menu"
+                aria-label="Status auswählen"
+                tabIndex={-1}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setPickerOpen(false);
+                    setFocusIndex(-1);
+                    return;
+                  }
+                  if (!flatItems.length) return;
+
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setFocusIndex(i => {
+                      const base = i >= 0 ? i : 0;
+                      return findNextActive(base);
+                    });
+                  } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setFocusIndex(i => {
+                      const base = i >= 0 ? i : 0;
+                      return findPrevActive(base);
+                    });
+                  } else if (e.key === 'Enter' || e.key === 'NumpadEnter') {
+                    e.preventDefault();
+                    const idx = focusIndex >= 0 ? focusIndex : 0;
+                    const item = flatItems[idx];
+                    if (item?.active && !savingStatus) changeStatus(item.code);
+                  }
+                }}
+                style={{
+                  position:'absolute', top:'calc(100% + 6px)', right:0,
+                  minWidth: 260, maxHeight: '50vh', overflowY: 'auto',
+                  background:'var(--color-surface, #111827)', color:'var(--color-text, #e5e7eb)',
+                  border:'1px solid #ffffff22', borderRadius:12, boxShadow:'0 10px 30px rgba(0,0,0,0.45)',
+                  padding:6, zIndex: 50
+                }}
+              >
+                <div style={{ padding: '6px 10px', fontSize: 12, opacity:.8 }}>Aktiv</div>
+                {activeItems.map((s, aIdx) => {
+                  const idx = aIdx;
+                  const isActiveSel = s.code === currentStatus?.code || s.code === task?.statusCode;
+                  return (
+                    <button
+                      key={s.code}
+                      role="menuitemradio"
+                      aria-checked={isActiveSel}
+                      onClick={() => changeStatus(s.code)}
+                      onMouseEnter={() => setFocusIndex(idx)}
+                      disabled={savingStatus}
+                      title={s.label}
+                      ref={el => { if (el && focusIndex === idx) el.scrollIntoView({ block:'nearest' }); }}
+                      style={{
+                        width:'100%', textAlign:'left',
+                        display:'flex', alignItems:'center', gap:8,
+                        padding:'8px 10px', borderRadius:8, border:'none',
+                        background: (isActiveSel ? '#ffffff14' : (focusIndex === idx ? '#ffffff10' : 'transparent')),
+                        outline: (focusIndex === idx ? '1px solid #ffffff33' : 'none'),
+                        color:'inherit', cursor:'pointer'
+                      }}
+                    >
+                      <span style={{ width:12, height:12, borderRadius:999, border:'1px solid #00000033', background: s.colorBg }} />
+                      <span style={{ flex: 1 }}>{s.label}</span>
+                      {isActiveSel && <span aria-hidden>✓</span>}
+                    </button>
+                  );
+                })}
+
+                {inactiveItems.length > 0 && (
+                  <>
+                    <div style={{ height:8 }} />
+                    <div style={{ padding: '6px 10px', fontSize: 12, opacity:.6 }}>Inaktiv</div>
+                    {inactiveItems.map((s, iIdx) => {
+                      const idx = activeItems.length + iIdx;
+                      const isActiveSel = s.code === currentStatus?.code || s.code === task?.statusCode;
+                      return (
+                        <button
+                          key={s.code}
+                          role="menuitemradio"
+                          aria-checked={isActiveSel}
+                          aria-disabled="true"
+                          disabled
+                          onMouseEnter={() => setFocusIndex(idx)}
+                          title="Inaktiv – nicht wählbar"
+                          ref={el => { if (el && focusIndex === idx) el.scrollIntoView({ block:'nearest' }); }}
+                          style={{
+                            width:'100%', textAlign:'left',
+                            display:'flex', alignItems:'center', gap:8,
+                            padding:'8px 10px', borderRadius:8, border:'none',
+                            background: (isActiveSel ? '#ffffff14' : (focusIndex === idx ? '#ffffff10' : 'transparent')),
+                            outline: (focusIndex === idx ? '1px solid #ffffff33' : 'none'),
+                            color:'inherit', cursor:'not-allowed', opacity:.5
+                          }}
+                        >
+                          <span style={{ width:12, height:12, borderRadius:999, border:'1px solid #00000033', background: s.colorBg }} />
+                          <span style={{ flex: 1 }}>{s.label}</span>
+                          {isActiveSel && <span aria-hidden>✓</span>}
+                        </button>
+                      );
+                    })}
+                  </>
+                )}
+
+                {!flatItems.length && (
+                  <div style={{ padding:'10px 12px', opacity:.8 }}>
+                    {loadingStatuses ? 'Lade Status…' : 'Keine Status gefunden.'}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {(task?.["zusätzlicheInfos"] ?? task?.zusatzlicheInfos) && (
+          <p className="desc" title={task?.["zusätzlicheInfos"] ?? task?.zusatzlicheInfos}>
+            {task?.["zusätzlicheInfos"] ?? task?.zusatzlicheInfos}
+          </p>
+        )}
+      </>
+    );
+  }

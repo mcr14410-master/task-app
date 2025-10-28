@@ -86,6 +86,11 @@ ATTACHMENTS_BASE_PATH=/data/files/attachments
 
 **Starten:**
 ```bash
+
+docker compose down
+docker compose --env-file .env.dev.docker build --no-cache
+docker compose --env-file .env.dev.docker up -d
+
 docker compose --env-file .env.dev.docker up -d
 docker compose logs -f --tail=200 backend
 ```

@@ -23,7 +23,7 @@ public class Task {
     @Column(name="dateipfad", length=512) private String dateipfad;
     @Version @Column(name = "version", nullable = false) private Integer version = 0;
     @Column(name = "status_code", nullable = false, length = 64) private String statusCode;
-    
+    @Column(name = "additional_works") private String additionalWorks;
     
 
     public Long getId(){return id;} public void setId(Long id){this.id=id;}
@@ -51,5 +51,6 @@ public class Task {
     public String getStatusCode(){ return statusCode; }
     public void setStatusCode(String statusCode) {this.statusCode = statusCode; }
   
-
+    public String getAdditionalWorks() {return additionalWorks;}
+    public void setAdditionalWorks(String additionalWorks) {this.additionalWorks = additionalWorks;}
 }

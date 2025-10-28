@@ -1,6 +1,7 @@
 package com.pp.taskmanagementbackend.controller;
 
 import com.pp.taskmanagementbackend.model.AdditionalWork;
+import com.pp.taskmanagementbackend.api.dto.AdditionalWorkDto;
 import com.pp.taskmanagementbackend.repository.AdditionalWorkRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -19,42 +20,58 @@ public class AdditionalWorkController {
     }
 
     @GetMapping
-    public List<AdditionalWork> list(@RequestParam(name = "activeOnly", defaultValue = "false") boolean activeOnly) {
-        return activeOnly
-                ? repo.findByActiveTrueOrderBySortOrderAscLabelAsc()
-                : repo.findAllByOrderByActiveDescSortOrderAscLabelAsc();
+    public ResponseEntity<List<AdditionalWorkDto>> list() {
+        var all = repo.findAll();
+        // map Entity -> DTO für saubere flags-Handhabung
+        var dtoList = all.stream()
+                .map(AdditionalWorkDto::fromEntity)
+                .toList();
+        return ResponseEntity.ok(dtoList);
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<AdditionalWorkDto> get(@PathVariable Long id) {
+        return repo.findById(id)
+                .map(aw -> ResponseEntity.ok(AdditionalWorkDto.fromEntity(aw)))
+                .orElse(ResponseEntity.notFound().build());
     }
 
     @PostMapping
-    public ResponseEntity<AdditionalWork> create(@RequestBody AdditionalWork w) {
-        if (w.getCode() == null || w.getCode().isBlank()) return ResponseEntity.badRequest().build();
-        if (w.getLabel() == null || w.getLabel().isBlank()) return ResponseEntity.badRequest().build();
+    public ResponseEntity<AdditionalWorkDto> create(@RequestBody AdditionalWorkDto dto) {
+        // Pflichtvalidierung
+        if (dto.getCode() == null || dto.getCode().isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
+        if (dto.getLabel() == null || dto.getLabel().isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
 
-        w.setId(null);
-        if (w.getActive() == null) w.setActive(Boolean.TRUE);
-        if (w.getSortOrder() == null) w.setSortOrder(0);
+        AdditionalWork w = new AdditionalWork();
+        dto.applyToNewEntity(w);
 
         var saved = repo.save(w);
-        return ResponseEntity.created(URI.create("/api/additional-works/" + saved.getId())).body(saved);
+        var body = AdditionalWorkDto.fromEntity(saved);
+
+        return ResponseEntity
+                .created(URI.create("/api/additional-works/" + saved.getId()))
+                .body(body);
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<AdditionalWork> update(@PathVariable Long id, @RequestBody AdditionalWork w) {
-        var existing = repo.findById(id).orElse(null);
-        if (existing == null) return ResponseEntity.notFound().build();
+    public ResponseEntity<AdditionalWorkDto> update(@PathVariable Long id,
+                                                    @RequestBody AdditionalWorkDto dto) {
 
-        if (w.getCode() != null && !w.getCode().isBlank()) existing.setCode(w.getCode());
-        if (w.getLabel() != null && !w.getLabel().isBlank()) existing.setLabel(w.getLabel());
-        if (w.getType() != null) existing.setType(w.getType());
-        if (w.getFlags() != null) existing.setFlags(w.getFlags());
-        if (w.getActive() != null) existing.setActive(w.getActive());
-        if (w.getSortOrder() != null) existing.setSortOrder(w.getSortOrder());
-        if (w.getColorBg() != null) existing.setColorBg(w.getColorBg());
-        if (w.getColorFg() != null) existing.setColorFg(w.getColorFg());
-        if (w.getIsFinal() != null) existing.setIsFinal(w.getIsFinal());
+        var existingOpt = repo.findById(id);
+        if (existingOpt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        var existing = existingOpt.get();
+        dto.applyPatchToEntity(existing);
 
         var saved = repo.save(existing);
-        return ResponseEntity.ok(saved);
+        var body = AdditionalWorkDto.fromEntity(saved);
+        return ResponseEntity.ok(body);
     }
 
     @DeleteMapping("/{id}")

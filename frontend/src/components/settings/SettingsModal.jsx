@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import StatusManagementContent from "./StatusManagementContent";
 import StationManagementContent from "./StationManagementContent";
+import AdditionalWorksManagementContent from "./AdditionalWorksManagementContent";
 import CustomersTab from "./CustomersTab";
 import AssigneesTab from "./AssigneesTab";
 import InfoTab from "./InfoTab";
@@ -108,6 +109,15 @@ export default function SettingsModal({
           >
             Status
           </TabButton>
+		  
+		  <TabButton
+		    active={tab === "additionalworks"}
+		    onClick={() => setTab("additionalworks")}
+		    id="tab-additionalworks"
+		    controls="panel-additionalworks"
+		  >
+		    Zusatzarbeiten
+		  </TabButton>	  
 
           <TabButton
             active={tab === "customers"}
@@ -150,6 +160,17 @@ export default function SettingsModal({
               <StatusManagementContent />
             </section>
           )}
+		  
+		  {tab === "additionalworks" && (
+		    <section
+		      role="tabpanel"
+		      id="panel-additionalworks"
+		      aria-labelledby="tab-additionalworks"
+		    >
+		      <AdditionalWorksManagementContent />
+		    </section>
+		  )}		  
+		  
 
           {tab === "customers" && (
             <section role="tabpanel" id="panel-customers" aria-labelledby="tab-customers">

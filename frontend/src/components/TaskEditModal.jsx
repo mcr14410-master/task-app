@@ -10,6 +10,8 @@ import AttachmentTab from "./AttachmentTab";
 import { fetchStatuses } from "@/api/statuses";
 import { fetchCustomers } from "@/api/customers";
 import { fetchAssignees } from "@/api/assignees";
+import { fetchAdditionalWorks } from "@/api/additionalWorks";
+
 
 const styles = {
   overlay: { position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,.5)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000 },
@@ -123,7 +125,9 @@ export default function TaskEditModal({
     arbeitsstation: task?.arbeitsstation ?? (stations[0]?.name ?? ""),
     status: task?.statusCode ?? task?.status ?? "NEU",
     fai: !!task?.fai,
-    qs: !!task?.qs
+    qs: !!task?.qs,
+	additionalWorks: Array.isArray(task?.additionalWorks) ? task.additionalWorks.slice() : []
+
   }));
   const setValue = (name, value) => setForm((prev) => ({ ...prev, [name]: value }));
 
@@ -175,6 +179,32 @@ export default function TaskEditModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  
+  // Zusatzarbeiten laden
+  const [additionalWorks, setAdditionalWorks] = useState([]);
+  const [loadingAW, setLoadingAW] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setLoadingAW(true);
+    fetchAdditionalWorks()
+      .then(list => {
+        if (!alive) return;
+        const active = (list || []).filter(w => w.active);
+        // sortieren nach sortOrder, Label
+        const sorted = active.sort((a,b) =>
+          (a.sortOrder ?? 0) - (b.sortOrder ?? 0) ||
+          String(a.label).localeCompare(String(b.label))
+        );
+        setAdditionalWorks(sorted);
+      })
+      .finally(() => { if (alive) setLoadingAW(false); });
+    return () => { alive = false; };
+  }, []);
+ 
+  
+  
+  
   // Status-Menü
   const statusBtnRef = useRef(null);
   const statusMenuRef = useRef(null);
@@ -268,7 +298,9 @@ export default function TaskEditModal({
       qs: !!form.qs,
       stk: Number.isFinite(Number(form.stk)) ? Number(form.stk) : undefined,
       fa: sanitize(form.fa),
-      dateipfad: sanitize(form.dateipfad)
+      dateipfad: sanitize(form.dateipfad),
+	  additionalWorks: Array.isArray(form.additionalWorks) ? form.additionalWorks : []
+
     };
     Object.keys(payload).forEach((k) => { if (payload[k] == null) delete payload[k]; });
     return payload;
@@ -602,29 +634,47 @@ export default function TaskEditModal({
             )}
 
             {/* Zusatzarbeiten rechts */}
-            <div style={{ marginLeft: "auto", display: "inline-flex", gap: 8, alignItems: "center" }}>
-              <span style={{ fontSize: 12, color: "#94a3b8" }}>Zusatzarbeiten:</span>
-              <button
-                type="button"
-                className={`pill-add add-fai ${form.fai ? "is-active" : ""} is-clickable`}
-                onClick={() => setForm((prev) => ({ ...prev, fai: !prev.fai }))}
-                disabled={submitting}
-                aria-pressed={!!form.fai}
-                title="FAI"
-              >
-                FAI
-              </button>
-              <button
-                type="button"
-                className={`pill-add add-qs ${form.qs ? "is-active" : ""} is-clickable`}
-                onClick={() => setForm((prev) => ({ ...prev, qs: !prev.qs }))}
-                disabled={submitting}
-                aria-pressed={!!form.qs}
-                title="QS"
-              >
-                QS
-              </button>
-            </div>
+			{/* Zusatzarbeiten dynamisch */}
+			<div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+			  <span style={{ fontSize: 12, color: "#94a3b8" }}>Zusatzarbeiten:</span>
+			  {loadingAW && <span style={{ fontSize: 12, color: "#64748b" }}>Lade…</span>}
+			  {!loadingAW && additionalWorks.map(w => {
+			    const checked = form.additionalWorks.includes(w.code);
+			    return (
+			      <label key={w.code} style={{
+			        display: "inline-flex",
+			        alignItems: "center",
+			        gap: 4,
+			        background: checked ? (w.colorBg || "#374151") : "transparent",
+			        color: checked ? (w.colorFg || "#e5e7eb") : "#e5e7eb",
+			        border: "1px solid #334155",
+			        borderRadius: 999,
+			        padding: "3px 8px",
+			        cursor: "pointer",
+			        userSelect: "none",
+			        fontSize: 12,
+			        fontWeight: 600
+			      }}>
+			        <input
+			          type="checkbox"
+			          checked={checked}
+			          disabled={submitting}
+			          onChange={(e) => {
+			            setForm(prev => {
+			              const next = new Set(prev.additionalWorks);
+			              if (e.target.checked) next.add(w.code);
+			              else next.delete(w.code);
+			              return { ...prev, additionalWorks: Array.from(next) };
+			            });
+			          }}
+			          style={{ accentColor: w.colorBg || "#3b82f6" }}
+			        />
+			        {w.label || w.code.toUpperCase()}
+			      </label>
+			    );
+			  })}
+			</div>
+
 
             {statusErr && <div style={{ marginTop:6, color:'#fecaca', fontSize:12 }}>{statusErr}</div>}
           </div>

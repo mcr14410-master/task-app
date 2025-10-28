@@ -2,6 +2,7 @@ package com.pp.taskmanagementbackend.api.dto;
 
 import com.pp.taskmanagementbackend.model.TaskStatus;
 import java.time.LocalDate;
+import java.util.List;
 
 public class TaskDto {
     private Long id;
@@ -22,6 +23,7 @@ public class TaskDto {
     private String dateipfad;
     private Integer attachmentCount; // 0,1,2,...
     private String statusCode;
+    private List<String> additionalWorks;
 
     public Long getId(){return id;} public void setId(Long id){this.id=id;}
     public String getBezeichnung(){return bezeichnung;} public void setBezeichnung(String v){this.bezeichnung=v;}
@@ -46,5 +48,7 @@ public class TaskDto {
     public String getStatusCode() { return statusCode; }
     public void setStatusCode(String statusCode) {this.statusCode = statusCode;}
     
+    public List<String> getAdditionalWorks() { return additionalWorks; }
+    public void setAdditionalWorks(List<String> additionalWorks) { this.additionalWorks = additionalWorks; }
     
 }
