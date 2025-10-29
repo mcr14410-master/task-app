@@ -6,7 +6,6 @@ import SettingsModal from '@/components/settings/SettingsModal';
 import TaskCreationModal from "./TaskCreationModal";
 import TaskEditModal from "./TaskEditModal";
 import TaskItem from "./TaskItem";
-import { dueClassForDate } from "@/config/DueDateConfig"; // zentrale Schwellen → Klasse
 import useToast from "@/components/ui/useToast";
 import apiErrorMessage from "@/utils/apiErrorMessage";
 import { apiGet, apiPatch, apiPut } from "../config/apiClient";
@@ -456,6 +455,42 @@ export default function TaskBoard({ showDashboard = false, onToggleDashboard = (
   if (error) return <div style={{ padding: 24, color: "#ef4444" }}>Fehler: {String(error)}</div>;
   
   
+  // Hilfsfunktion: bestimmt die CSS-Klasse "due-<key>" für einen Task
+  function getDueClass(task) {
+    if (!task) return "";
+
+    // 1) Bevorzugt: vom Backend geliefertes Feld nehmen
+    // Wir decken beide Varianten ab: als String oder als Objekt mit .key
+    const keyFromApi =
+      task.dueSeverityVisualKey ??
+      (typeof task.dueSeverityVisual === "string" ? task.dueSeverityVisual : task.dueSeverityVisual?.key);
+    if (keyFromApi) {
+      return `due-${String(keyFromApi).toLowerCase()}`;
+    }
+
+    // 2) Fallback: simple Berechnung aus endDatum (Kalendertage)
+    const end = task.endDatum ? new Date(task.endDatum) : null;
+    if (!end || isNaN(end.getTime())) return ""; // kein Datum -> keine Klasse
+
+    const today = new Date();
+    // nur Datumsteil vergleichen (Mitternacht)
+    const toMidnight = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const diffDays = Math.floor(
+      (toMidnight(end).getTime() - toMidnight(today).getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    let key = "";
+    if (diffDays < 0) key = "overdue";
+    else if (diffDays === 0) key = "today";
+    else if (diffDays <= 3) key = "soon";
+    else if (diffDays <= 7) key = "week";
+    else key = "future";
+
+    return `due-${key}`;
+  }
+
+  
+  
   // Style für Buttons in der Toolbar, wir benutzen den Stil für beide Buttons
   const toolbarButtonStyle = {backgroundColor: "#3b82f6", border: "1px solid #3b82f6", borderRadius: "0.5rem", color: "white", fontSize: "0.8rem", lineHeight: 1.2, padding: "0.4rem 0.6rem", cursor: "pointer", };
   
@@ -487,7 +522,8 @@ export default function TaskBoard({ showDashboard = false, onToggleDashboard = (
         .btn-primary { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--brand); background: var(--brand); color: white; }
         .btn-ghost { padding: 8px 12px; border-radius: 8px; border: 1px solid #334155; background: transparent; color: #cbd5e1; }
         .col { background: var(--panel); border: 1px solid var(--border); padding: 12px; border-radius: 12px; box-shadow: 0 8px 24px var(--shadow) }
-        /* Task Card (keine due-spezifischen Farben hier; Stripe & Textfarbe kommen zentral aus DueDateTheme.css) */
+		
+        /* Task Card  */
         .task-card { position: relative; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 12px 12px 16px; box-shadow: 0 4px 16px var(--shadow); transition: box-shadow .12s ease, background .18s ease, opacity .18s ease, filter .18s ease; user-select: none; }
         .task-card:hover { box-shadow: 0 10px 24px var(--shadow); }
 
@@ -649,7 +685,7 @@ export default function TaskBoard({ showDashboard = false, onToggleDashboard = (
                     </div>
 
                     {visibleList.map((t, index) => {
-                      const dueCls = dueClassForDate(t?.endDatum); // "due-overdue" | "due-today" | "due-soon" | "due-week" | "due-future"
+						const dueCls = getDueClass(t);  // "due-overdue" | "due-today" | "due-soon" | "due-week" | "due-future"
                       const isMatch = matchesQuery(t, q);
 
                       return (
