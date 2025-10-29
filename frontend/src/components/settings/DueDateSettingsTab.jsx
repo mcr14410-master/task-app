@@ -7,6 +7,11 @@ import React, { useEffect, useMemo, useState } from "react";
  * - Speichert Änderungen via PUT /api/settings/dueDate
  * - Beibehalt: lokale Bearbeitung, Validierung, Add/Remove
  * - Fix-Buckets: overdue (<0), today (=0) -> nur Farbe/Label/Role veränderbar, Range fix
+ *
+ * Neu in diesem Schritt:
+ * - Nach erfolgreichem Speichern oder Server-Reload:
+ *   window.dispatchEvent(new CustomEvent("due-settings-updated"))
+ *   → App.jsx hört darauf und injiziert die CSS-Variablen/Klassen neu.
  */
 
 export default function DueDateSettingsTab() {
@@ -34,7 +39,6 @@ export default function DueDateSettingsTab() {
         setDirtyBuckets(fromApi);
         setTouched(false);
       } catch (e) {
-        // Falls API (noch) fehlt, weiter mit Defaults – aber Hinweis zeigen
         setError("Konnte DueDate-Einstellungen nicht laden – verwende Default-Konfiguration.");
       } finally {
         if (alive) setLoading(false);
@@ -91,6 +95,9 @@ export default function DueDateSettingsTab() {
       setDirtyBuckets(fromApi);
       setTouched(false);
       setInfo("Vom Server neu geladen.");
+
+      // NEU: Styles live aktualisieren
+      window.dispatchEvent(new CustomEvent("due-settings-updated"));
     } catch (e) {
       setError("Neu laden vom Server fehlgeschlagen.");
     } finally {
@@ -102,6 +109,7 @@ export default function DueDateSettingsTab() {
     setBuckets(dirtyBuckets);
     setTouched(false);
     setInfo("Lokal übernommen (nicht gespeichert).");
+    // Kein Event hier: App injiziert aus Serverzustand; lokales Apply ist nur Vorschau.
   };
 
   const saveToServer = async () => {
@@ -118,7 +126,6 @@ export default function DueDateSettingsTab() {
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
-        // Versuch, Server-Fehlertext zu lesen (z. B. aus ResponseStatusException)
         let msg = "Speichern fehlgeschlagen.";
         try {
           const t = await res.text();
@@ -132,6 +139,9 @@ export default function DueDateSettingsTab() {
       setDirtyBuckets(fromApi);
       setTouched(false);
       setInfo("Gespeichert.");
+
+      // NEU: Styles live aktualisieren
+      window.dispatchEvent(new CustomEvent("due-settings-updated"));
     } catch (e) {
       setError(e?.message || "Speichern fehlgeschlagen.");
     } finally {
@@ -143,7 +153,6 @@ export default function DueDateSettingsTab() {
   const validation = useMemo(() => validateBuckets(dirtyBuckets), [dirtyBuckets]);
   const hasErrors = validation.errors.length > 0;
 
-  // --- UI helpers/Styles ---
   if (loading) {
     return (
       <section role="tabpanel" aria-label="Fälligkeit">
@@ -356,7 +365,6 @@ function validateBuckets(dirtyBuckets) {
     seen.add(b.key);
   });
 
-  // fixed ranges enforcement (clientseitige Vorprüfung)
   const overdue = dirtyBuckets.find(b => b.key === "overdue");
   const today = dirtyBuckets.find(b => b.key === "today");
   if (!overdue) errors.push({ field: "range", msg: "Pflicht-Bucket 'overdue' fehlt." });
@@ -364,7 +372,6 @@ function validateBuckets(dirtyBuckets) {
   if (overdue && !(overdue.min === undefined && overdue.max === -1)) errors.push({ field: "range", msg: "overdue: Bereich ist fix (<0)." });
   if (today && !(today.min === 0 && today.max === 0)) errors.push({ field: "range", msg: "today: Bereich ist fix (=0)." });
 
-  // overlaps
   const intervals = dirtyBuckets.map(b => ({ key: b.key, min: b.min, max: b.max }));
   const toBounds = (min, max) => ({
     lo: min === undefined ? -Infinity : Number(min),
@@ -381,7 +388,6 @@ function validateBuckets(dirtyBuckets) {
     }
   }
 
-  // optional: Lückenhinweis
   const sorted = [...intervals].sort((a, b) => {
     const alo = a.min === undefined ? -Infinity : Number(a.min);
     const blo = b.min === undefined ? -Infinity : Number(b.min);
