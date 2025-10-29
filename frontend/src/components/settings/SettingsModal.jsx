@@ -39,12 +39,14 @@ export default function SettingsModal({
   if (!open) return null;
 
   // --- Feste Demo-Buckets (read-only) ---
+  // Vorgabe: overdue & today sind FIX (nur Farben später änderbar).
+  // Die restlichen (soon, week, future) sind später variabel.
   const buckets = [
     { key: "overdue", label: "Überfällig", range: "< 0", color: "#ef4444", fixed: true },
     { key: "today", label: "Heute", range: "= 0", color: "rgb(245,86,10)", fixed: true },
-    { key: "soon", label: "Bald (≤ 3 Tage)", range: "1–3", color: "rgb(255,255,0)", fixed: false },
+    { key: "soon", label: "Bald (≤ 3 Tage)", range: "1–3", color: "#facc15", fixed: false },
     { key: "week", label: "Woche (≤ 7 Tage)", range: "4–7", color: "#0ea5e9", fixed: false },
-    { key: "future", label: "Zukunft (>7 Tage)", range: "> 7", color: "#94a3b8", fixed: false },
+    { key: "future", label: "Zukunft (> 7 Tage)", range: "> 7", color: "#94a3b8", fixed: false },
   ];
 
   return (
@@ -145,10 +147,11 @@ export default function SettingsModal({
             </section>
           )}
 
-          {/* --- NEU: Tab Fälligkeit --- */}
+          {/* --- NEU: Tab Fälligkeit (Lesemodus) --- */}
           {tab === "due" && (
             <section role="tabpanel" id="panel-due" aria-labelledby="tab-due">
               <h3 style={{ margin: "8px 0 12px 0" }}>Fälligkeit – Buckets (Lesemodus)</h3>
+
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
                 <thead>
                   <tr style={{ borderBottom: "1px solid #555" }}>
@@ -192,11 +195,11 @@ export default function SettingsModal({
                 borderRadius: 8,
               }}>
                 <p style={{ margin: 0 }}>
-                  <strong>Hinweis:</strong> „Überfällig“ und „Heute“ sind System-Buckets – Grenzen fix, Farben anpassbar.
-                  Weitere Buckets (z. B. „14 Tage“) folgen als konfigurierbare Erweiterung.
+                  <strong>Hinweis:</strong> „Überfällig“ und „Heute“ sind System-Buckets – Grenzen fix (nur Farbe änderbar).
+                  „Bald“, „Woche“ und „Zukunft“ werden später frei konfigurierbar, inkl. neuer zusätzlicher Buckets.
                 </p>
                 <p style={{ margin: "8px 0 0 0" }}>
-                  Das Dashboard verwendet Arbeitstage (Sa/So ausgenommen); Feiertagsliste folgt in v0.9.
+                  Das Dashboard nutzt Arbeitstage (Sa/So ausgenommen). Feiertage werden in einem späteren Schritt konfigurierbar.
                 </p>
               </div>
             </section>
