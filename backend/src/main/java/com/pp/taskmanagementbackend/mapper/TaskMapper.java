@@ -5,9 +5,12 @@ import com.pp.taskmanagementbackend.model.Task;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import com.pp.taskmanagementbackend.service.DueDateEvaluator; // NEU
+import java.time.LocalDate;                                   // NEU
+import java.util.Collections;                                 // NEU
+import java.util.List;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.List;
 
 public class TaskMapper {
 
@@ -31,7 +34,7 @@ public class TaskMapper {
         dto.setFai(t.isFai());
         dto.setQs(t.isQs());
 
-        // --- NEU: Zusatzarbeiten-Parsing ---
+        // --- Zusatzarbeiten-Parsing (bereits vorhanden) ---
         {
             ObjectMapper mapper = new ObjectMapper();
             String raw = t.getAdditionalWorks(); // Task hat String-Feld additionalWorks (JSON)
@@ -48,6 +51,19 @@ public class TaskMapper {
             } else {
                 dto.setAdditionalWorks(new ArrayList<>());
             }
+        }
+
+        // --- NEU: Fälligkeits-/Dringlichkeits-Bewertung ---
+        {
+            LocalDate today = LocalDate.now();
+            LocalDate due = t.getEndDatum();
+
+            // Feiertage-Liste aktuell leer; später aus Settings befüllbar
+            String vis = DueDateEvaluator.calcVisualSeverity(due, today);
+            String plan = DueDateEvaluator.calcPlanningSeverity(due, today, Collections.emptySet());
+
+            dto.setDueSeverityVisual(vis);
+            dto.setDueSeverityPlanning(plan);
         }
 
         return dto;
@@ -78,12 +94,12 @@ public class TaskMapper {
         // statusCode absichtlich nicht gesetzt? Falls dein Backend statusCode separat patcht, lassen wir es hier raus.
         // Falls doch erlaubt: if (dto.getStatusCode()!=null) t.setStatusCode(dto.getStatusCode());
 
-        // --- NEU: Zusatzarbeiten speichern ---
+        // --- Zusatzarbeiten speichern ---
         if (dto.getAdditionalWorks() != null) {
             ObjectMapper mapper = new ObjectMapper();
             try {
                 String json = mapper.writeValueAsString(dto.getAdditionalWorks());
-                t.setAdditionalWorks(json); // hier t, nicht entity
+                t.setAdditionalWorks(json);
             } catch (IOException e) {
                 t.setAdditionalWorks(null);
             }
