@@ -6,7 +6,6 @@ import SettingsModal from '@/components/settings/SettingsModal';
 import TaskCreationModal from "./TaskCreationModal";
 import TaskEditModal from "./TaskEditModal";
 import TaskItem from "./TaskItem";
-import "@/config/DueDateTheme.css";           // zentrale Farben/Stripe pro Fälligkeit
 import { dueClassForDate } from "@/config/DueDateConfig"; // zentrale Schwellen → Klasse
 import useToast from "@/components/ui/useToast";
 import apiErrorMessage from "@/utils/apiErrorMessage";
