@@ -3,24 +3,19 @@ import { useEffect, useState } from "react";
 /**
  * Dashboard.jsx
  *
- * Zeigt die Auslastung pro Arbeitsstation basierend auf dem Backend-Endpoint
- *   GET /api/stats/auslastung
+ * Zeigt die Auslastung / Engpässe pro Arbeitsstation.
+ * Erwartet jetzt optional zwei Props:
+ *   - showDashboard (bool)
+ *   - onToggleDashboard (funktion)
  *
- * Jeder Eintrag vom Backend sieht so aus:
- * {
- *   "arbeitsstation": "Grob G350",
- *   "hoursTotal": 8.8,
- *   "tasksTotal": 4,
- *   "tasksWarn": 1,
- *   "tasksOverdue": 3
- * }
- *
- * Dieses Dashboard rendert erstmal eine einfache Liste.
- * Styling ist absichtlich minimal/plain.
- * Wir verschönern das in einem eigenen, späteren Schritt.
+ * Wenn onToggleDashboard übergeben ist, wird oben rechts ein Button angezeigt,
+ * damit man zurück aufs Board wechseln kann.
  */
 
-export default function Dashboard() {
+export default function Dashboard({
+  showDashboard = true,
+  onToggleDashboard = () => {},
+}) {
   const [loading, setLoading] = useState(true);
   const [stations, setStations] = useState([]);
   const [error, setError] = useState(null);
@@ -41,10 +36,12 @@ export default function Dashboard() {
         const data = await res.json();
 
         if (alive) {
-          // defensive sort: kritischste zuerst (viel OVERDUE/WARN)
+          // kritischste Stationen zuerst (viel rot > viel gelb)
           const sorted = [...data].sort((a, b) => {
-            const scoreA = (a.tasksOverdue ?? 0) * 100 + (a.tasksWarn ?? 0) * 10;
-            const scoreB = (b.tasksOverdue ?? 0) * 100 + (b.tasksWarn ?? 0) * 10;
+            const scoreA =
+              (a.tasksOverdue ?? 0) * 100 + (a.tasksWarn ?? 0) * 10;
+            const scoreB =
+              (b.tasksOverdue ?? 0) * 100 + (b.tasksWarn ?? 0) * 10;
             return scoreB - scoreA;
           });
 
@@ -67,9 +64,52 @@ export default function Dashboard() {
     };
   }, []);
 
+  // Gleicher Button-Style wie im Board-Header (TaskBoard.jsx)
+  const toolbarButtonStyle = {backgroundColor: "#3b82f6", border: "1px solid #3b82f6", borderRadius: "0.5rem", color: "white", fontSize: "0.8rem", lineHeight: 1.2, padding: "0.4rem 0.6rem", cursor: "pointer", };
+
+
+  // Wenn wir im Dashboard sind, soll der Button "Board" heißen.
+  const backLabel = "Board";
+
   if (loading) {
     return (
-      <div style={{ padding: "1rem", color: "#ccc", fontFamily: "sans-serif" }}>
+      <div
+        style={{
+          padding: "1rem",
+          color: "#ccc",
+          fontFamily: "sans-serif",
+          backgroundColor: "#1e1e1e",
+          minHeight: "100vh",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            marginBottom: "1rem",
+          }}
+        >
+          <h1
+            style={{
+              fontSize: "1.25rem",
+              fontWeight: "600",
+              color: "#fff",
+              margin: 0,
+            }}
+          >
+            Auslastung / Engpässe
+          </h1>
+
+          <button
+            style={toolbarButtonStyle}
+            onClick={onToggleDashboard}
+            title="Zurück zum Board"
+          >
+            {backLabel}
+          </button>
+        </div>
+
         Lade Auslastung…
       </div>
     );
@@ -77,7 +117,43 @@ export default function Dashboard() {
 
   if (error) {
     return (
-      <div style={{ padding: "1rem", color: "#f87171", fontFamily: "sans-serif" }}>
+      <div
+        style={{
+          padding: "1rem",
+          color: "#f87171",
+          fontFamily: "sans-serif",
+          backgroundColor: "#1e1e1e",
+          minHeight: "100vh",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            marginBottom: "1rem",
+          }}
+        >
+          <h1
+            style={{
+              fontSize: "1.25rem",
+              fontWeight: "600",
+              color: "#fff",
+              margin: 0,
+            }}
+          >
+            Auslastung / Engpässe
+          </h1>
+
+          <button
+            style={toolbarButtonStyle}
+            onClick={onToggleDashboard}
+            title="Zurück zum Board"
+          >
+            {backLabel}
+          </button>
+        </div>
+
         {error}
       </div>
     );
@@ -88,14 +164,39 @@ export default function Dashboard() {
       style={{
         padding: "1rem",
         color: "#eee",
-        backgroundColor: "#1e1e1e",
+        backgroundColor: "#0b1220",
         fontFamily: "sans-serif",
         minHeight: "100vh",
       }}
     >
-      <h1 style={{ fontSize: "1.25rem", fontWeight: "600", marginBottom: "1rem" }}>
-        Auslastung / Engpässe
-      </h1>
+      {/* Kopfzeile mit Überschrift links, Rück-Button rechts */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          marginBottom: "1rem",
+        }}
+      >
+        <h1
+          style={{
+            fontSize: "1.25rem",
+            fontWeight: "600",
+            color: "#fff",
+            margin: 0,
+          }}
+        >
+          Auslastung / Engpässe
+        </h1>
+
+        <button
+          style={toolbarButtonStyle}
+          onClick={onToggleDashboard}
+          title="Zurück zum Board"
+        >
+          {backLabel}
+        </button>
+      </div>
 
       {stations.length === 0 ? (
         <div style={{ color: "#888" }}>Keine offenen Aufgaben gefunden.</div>
@@ -104,7 +205,8 @@ export default function Dashboard() {
           style={{
             display: "grid",
             gap: "0.75rem",
-            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+            gridTemplateColumns:
+              "repeat(auto-fit, minmax(260px, 1fr))",
           }}
         >
           {stations.map((st) => {
@@ -113,7 +215,7 @@ export default function Dashboard() {
             const total = st.tasksTotal ?? 0;
             const hours = st.hoursTotal ?? 0;
 
-            // kleine Ampel-Einschätzung für Kopfzeile
+            // Ampelfarbe für Überschrift der Karte
             let headlineColor = "#9ca3af"; // grau
             if (overdue > 0) {
               headlineColor = "#ef4444"; // rot
@@ -125,14 +227,14 @@ export default function Dashboard() {
               <div
                 key={st.arbeitsstation}
                 style={{
-                  backgroundColor: "#2a2a2a",
+                  backgroundColor: "#0f172a",
                   borderRadius: "0.75rem",
                   padding: "0.75rem 1rem",
                   border: "1px solid #3a3a3a",
                   boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
                 }}
               >
-                {/* Kopfzeile: Stationsname + grobe Ampel */}
+                {/* Kopf der Karte */}
                 <div
                   style={{
                     display: "flex",
@@ -161,11 +263,12 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Detailzahlen */}
+                {/* Zahlenraster */}
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(2, minmax(0,1fr))",
+                    gridTemplateColumns:
+                      "repeat(2, minmax(0,1fr))",
                     rowGap: "0.35rem",
                     columnGap: "0.75rem",
                     fontSize: "0.8rem",
@@ -176,26 +279,34 @@ export default function Dashboard() {
                 >
                   <div style={{ color: "#d1d5db" }}>
                     Tasks gesamt:
-                    <div style={{ fontWeight: 600 }}>{total}</div>
+                    <div style={{ fontWeight: 600 }}>
+                      {total}
+                    </div>
                   </div>
 
-                  <div style={{ color: "#f87171" }}>
+                  <div style={{ color: "#ef4444" }}>
                     Überfällig:
-                    <div style={{ fontWeight: 600 }}>{overdue}</div>
+                    <div style={{ fontWeight: 600 }}>
+                      {overdue}
+                    </div>
                   </div>
 
                   <div style={{ color: "#facc15" }}>
                     Kritisch bald:
-                    <div style={{ fontWeight: 600 }}>{warn}</div>
+                    <div style={{ fontWeight: 600 }}>
+                      {warn}
+                    </div>
                   </div>
 
                   <div style={{ color: "#9ca3af" }}>
                     Auslastung (h):
-                    <div style={{ fontWeight: 600 }}>{hours.toFixed(1)}</div>
+                    <div style={{ fontWeight: 600 }}>
+                      {hours.toFixed(1)}
+                    </div>
                   </div>
                 </div>
 
-                {/* Kleine Interpretationsleiste unten */}
+                {/* Interpretation */}
                 <div
                   style={{
                     marginTop: "0.75rem",

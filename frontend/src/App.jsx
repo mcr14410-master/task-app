@@ -15,17 +15,17 @@ export default function App() {
   return (
     <ToastProvider>
       <ErrorBoundary>
-        {showDashboard ? (
-          <Dashboard
-            // später könnte Dashboard auch selbst wieder zurückschalten
-            // z. B. kleiner Button "Zurück zum Board"
-          />
-        ) : (
-          <TaskBoard
-            showDashboard={showDashboard}
-            onToggleDashboard={handleToggleView}
-          />
-        )}
+	  {showDashboard ? (
+	    <Dashboard
+	      showDashboard={showDashboard}
+	      onToggleDashboard={handleToggleView}
+	    />
+	  ) : (
+	    <TaskBoard
+	      showDashboard={showDashboard}
+	      onToggleDashboard={handleToggleView}
+	    />
+	  )}
       </ErrorBoundary>
     </ToastProvider>
   );

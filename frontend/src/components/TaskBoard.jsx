@@ -179,7 +179,7 @@ function Modal({ open, onClose, title, children, width = 760 }) {
 }
 
 /** ====================== Component ====================== */
-export default function TaskBoard() {
+export default function TaskBoard({ showDashboard = false, onToggleDashboard = () => {} }) {
   const toast = useToast();
   const [stations, setStations] = useState([]);              // [{id, name, sort_order}]
   const [idToLabel, setIdToLabel] = useState({});           // {id: name}
@@ -455,6 +455,13 @@ export default function TaskBoard() {
   if (loadingHard) { return ( <div className="hard-loader">Lade…</div> );}
   
   if (error) return <div style={{ padding: 24, color: "#ef4444" }}>Fehler: {String(error)}</div>;
+  
+  
+  // Style für Buttons in der Toolbar, wir benutzen den Stil für beide Buttons
+  const toolbarButtonStyle = {backgroundColor: "#3b82f6", border: "1px solid #3b82f6", borderRadius: "0.5rem", color: "white", fontSize: "0.8rem", lineHeight: 1.2, padding: "0.4rem 0.6rem", cursor: "pointer", };
+  
+  // Button-Label abhängig von showDashboard
+  const viewToggleLabel = showDashboard ? "Board" : "Dashboard";
 
   return (
 	<div
@@ -509,6 +516,10 @@ export default function TaskBoard() {
 		 @keyframes spin{to{transform:rotate(360deg)}}
 			
       `}</style>
+	  
+	  
+	  
+	  
 
 	  {/* Toolbar */}
 	  <div
@@ -516,7 +527,7 @@ export default function TaskBoard() {
 	    style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 0, marginTop: 5 }}
 	  >
 	    {/* LEFT: Suche, Filter, Aktionen */}
-	    <div className="toolbar-left" style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+	    <div className="toolbar-left" style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginLeft: 10 }}>
 	      <span className="search-wrap">
 	        <input
 	          type="text"
@@ -552,8 +563,30 @@ export default function TaskBoard() {
 	        Hart filtern (ausblenden)
 	      </label>
 
-	      <button className="btn-primary" onClick={() => setIsCreateOpen(true)}>+ Neuer Task</button>
-	   
+		  
+		  
+		  
+		  {/* Neuer Task */}
+		  <button
+		    style={toolbarButtonStyle}
+		    onClick={() => setIsCreateOpen(true)}
+		    title="Neuen Task anlegen"
+		  >
+		    + Neuer Task
+		  </button>
+
+
+
+		  {/* Toggle Board/Dashboard */}
+		  <button
+		    style={toolbarButtonStyle}
+		    onClick={onToggleDashboard}
+		    title={showDashboard ? "Zurück zum Board" : "Auslastung / Engpässe anzeigen"}
+		  >
+		    {viewToggleLabel}
+		  </button>		  
+		  
+		  
 
 		  {loadingSoft && <span className="soft-spinner" aria-label="Aktualisieren…" />}
 	     
@@ -564,17 +597,25 @@ export default function TaskBoard() {
 	      )}
 	    </div>
 
+		
+		
+		
 	    {/* RIGHT: Einstellungen (rechtsbündig per margin-left:auto) */}
-	    <div className="toolbar-right" style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-	      <button
-	        className="btn"
-	        onClick={() => setOpenSettings(true)}
-	        aria-haspopup="dialog"
-	        aria-controls="settings-modal"
-	        title="Einstellungen"
-	      >
-	        Einstellungen
-	      </button>
+	    <div className="toolbar-right" style={{ marginLeft: "auto", display: "flex", gap: 8, marginRight: 10 }}>
+		
+		{/* Settings */}
+		<button
+		  style={toolbarButtonStyle}
+		  onClick={() => setOpenSettings(true)}
+		  aria-haspopup="dialog"
+		  aria-controls="settings-modal"
+		  title="Einstellungen"
+		>
+		  ⚙ Einstellungen
+		</button>
+		
+		
+		
 	    </div>
 	  </div>
 
