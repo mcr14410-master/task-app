@@ -8,7 +8,7 @@ import React, { useEffect, useMemo, useState } from "react";
  * - Gruppiert nach Arbeitsstation, sortiert nach Fällig (älteste zuerst)
  * - Spalten: Bezeichnung, Kunde, Teilenummer, Fällig am, Aufwand (h), Status, Zusatzarbeiten
  * - Summen je Station + Gesamtsumme
- * - Druck-Button und Print-CSS (helle Version, UI-Elemente ausgeblendet)
+ * - Druck-Button (Browser) + **neue** separate PDF/Druckansicht in neuem Fenster (hell, ohne Dark-Chrome)
  */
 
 export default function PrintableBacklog() {
@@ -36,14 +36,12 @@ export default function PrintableBacklog() {
         if (!res.ok) throw new Error("HTTP " + res.status);
         const json = await res.json();
         if (!alive) return;
-        // Erwartet Array von Stationen mit name/bezeichnung
         const names = (Array.isArray(json) ? json : [])
           .map(s => s.name || s.bezeichnung || "")
           .filter(Boolean)
           .sort((a,b) => a.localeCompare(b, "de"));
         setStations(["nicht zugeordnet", ...names]);
       } catch {
-        // Falls Endpoint anders heißt: Fallback nur mit „nicht zugeordnet“
         if (!alive) return;
         setStations(["nicht zugeordnet"]);
       }
@@ -80,27 +78,7 @@ export default function PrintableBacklog() {
   }, [from, to, station, includeNoDate]);
 
   // Gruppierung nach Station
-  const grouped = useMemo(() => {
-    const map = new Map();
-    for (const r of rows) {
-      const key = r.station || "nicht zugeordnet";
-      if (!map.has(key)) map.set(key, []);
-      map.get(key).push(r);
-    }
-    // Innerhalb jeder Gruppe: sort by endDatum asc (nulls last), dann Bezeichnung
-    for (const [k, arr] of map.entries()) {
-      arr.sort((a, b) => {
-        const da = a.endDatum ? a.endDatum : "9999-12-31";
-        const db = b.endDatum ? b.endDatum : "9999-12-31";
-        if (da !== db) return da.localeCompare(db);
-        const aa = (a.bezeichnung || "").toLocaleLowerCase("de");
-        const bb = (b.bezeichnung || "").toLocaleLowerCase("de");
-        return aa.localeCompare(bb, "de");
-      });
-    }
-    // Sort Station namen
-    return Array.from(map.entries()).sort((a,b) => (a[0]||"").localeCompare(b[0]||"", "de"));
-  }, [rows]);
+  const grouped = useMemo(() => groupRows(rows), [rows]);
 
   // Summen
   const totals = useMemo(() => {
@@ -113,6 +91,33 @@ export default function PrintableBacklog() {
     }
     return { perStation, overall: round2(overall) };
   }, [grouped]);
+
+  // --- NEU: Helle Druck-/PDF-Ansicht in neuem Fenster ---
+  const openPrintWindow = () => {
+    const title = "Rückstandsliste";
+    const meta = [
+      `Zeitraum: ${formatDate(from)} – ${formatDate(to)}`,
+      station ? `Station: ${station}` : "Station: Alle",
+      includeNoDate ? "inkl. ohne Datum" : ""
+    ].filter(Boolean).join(" · ");
+
+    // Daten für das Fenster vorbereiten
+    const blocks = Array.from(grouped).map(([stName, arr]) => ({
+      station: stName,
+      sum: round2(arr.reduce((a,r)=>a+toNumber(r.aufwandStunden),0)),
+      rows: arr
+    }));
+    const overall = round2(blocks.reduce((a,b)=>a+b.sum,0));
+
+    const html = buildPrintHtml({ title, meta, blocks, overall });
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    // Auto-Print, kleiner Delay für Rendering
+    setTimeout(() => { try { w.focus(); w.print(); } catch {} }, 50);
+  };
 
   return (
     <section style={S.wrap}>
@@ -146,11 +151,13 @@ export default function PrintableBacklog() {
             />
             <label htmlFor="inod" style={S.lbl}>Ohne Fälligkeitsdatum einbeziehen</label>
           </div>
-          <button style={S.btnPrimary} onClick={() => window.print()}>Drucken</button>
+
+          <button style={S.btn} onClick={() => window.print()}>Browser-Druck</button>
+          <button style={S.btnPrimary} onClick={openPrintWindow}>Als PDF / Druckansicht</button>
         </div>
       </header>
 
-      {/* Titel für Druck */}
+      {/* Titel für Browser-Druck */}
       <div style={S.printHeader} className="only-print">
         <h1 style={{ margin: 0, fontSize: 18 }}>Rückstandsliste</h1>
         <div style={{ fontSize: 12 }}>
@@ -165,12 +172,10 @@ export default function PrintableBacklog() {
         <div style={S.muted}>Lade…</div>
       ) : (
         <>
-          {/* Gesamtsumme */}
           <div style={S.summary} className="no-print">
             Gesamtstunden: <strong>{totals.overall} h</strong>
           </div>
 
-          {/* Gruppen */}
           {grouped.length === 0 && (
             <div style={S.muted}>Keine Daten im gewählten Zeitraum.</div>
           )}
@@ -209,7 +214,6 @@ export default function PrintableBacklog() {
             </section>
           ))}
 
-          {/* Gesamtsumme (Print unten) */}
           <div className="only-print" style={{ marginTop: 12, fontSize: 12 }}>
             Gesamtstunden: <strong>{totals.overall} h</strong>
           </div>
@@ -219,32 +223,102 @@ export default function PrintableBacklog() {
   );
 }
 
+/* ------------------------ Print-HTML-Builder (neu) ------------------------ */
+
+function buildPrintHtml({ title, meta, blocks, overall }) {
+  const esc = (s) => String(s ?? "").replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  const fmtDate = (s) => s ? new Date(s + "T00:00:00").toLocaleDateString("de-DE") : "—";
+
+  const sections = blocks.map(b => `
+    <section class="block">
+      <div class="head">
+        <h2>${esc(b.station)}</h2>
+        <div class="sum">Summe: ${esc(b.sum)} h</div>
+      </div>
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th>Bezeichnung</th>
+            <th>Kunde</th>
+            <th>Teilenummer</th>
+            <th>Fällig am</th>
+            <th>Aufwand (h)</th>
+            <th>Status</th>
+            <th>Zusatzarbeiten</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${b.rows.map(r => `
+            <tr>
+              <td>${esc(r.bezeichnung || "—")}</td>
+              <td>${esc(r.kunde || "—")}</td>
+              <td>${esc(r.teilenummer || "—")}</td>
+              <td class="tc">${esc(r.endDatum ? fmtDate(r.endDatum) : "—")}</td>
+              <td class="mono">${esc(round1(r.aufwandStunden))}</td>
+              <td class="tc">${esc(r.statusCode || "—")}</td>
+              <td>${esc(r.zusatzarbeiten || "")}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </section>
+  `).join("");
+
+  return `
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>${esc(title)}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --ink:#111; --muted:#4b5563; --line:#d1d5db; --bg:#fff; }
+  * { box-sizing: border-box; }
+  body { font: 12pt/1.35 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: var(--ink); background: var(--bg); margin: 12mm; }
+  header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8mm; }
+  h1 { margin: 0; font-size: 18pt; }
+  .meta { color: var(--muted); font-size: 10pt; }
+  .total { margin: 2mm 0 6mm; font-weight: 700; }
+  .block { break-inside: avoid; page-break-inside: avoid; margin: 0 0 8mm; }
+  .head { display:flex; justify-content: space-between; align-items: baseline; margin-bottom: 2mm; }
+  .head h2 { margin:0; font-size: 13pt; }
+  .sum { border:1px solid var(--line); padding: 2mm 3mm; border-radius: 4px; font-weight:700; }
+  table.tbl { width: 100%; border-collapse: collapse; }
+  .tbl th, .tbl td { border: 1px solid var(--line); padding: 2.5mm; vertical-align: top; font-size: 10pt; }
+  .tbl th { background: #f3f4f6; }
+  .tbl td.tc { text-align: center; }
+  .tbl td.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; text-align: right; }
+  @page { size: A4 portrait; margin: 12mm; }
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>${esc(title)}</h1>
+  <div class="meta">${esc(meta)}</div>
+</header>
+<div class="total">Gesamtstunden: ${esc(overall)} h</div>
+${sections}
+</body>
+</html>
+  `;
+}
+
 /* ------------------------ Styles (Screen & Print) ------------------------ */
 
 function PrintStyles() {
   return (
     <style>
       {`
-      @media screen {
-        .only-print { display: none !important; }
-      }
+      @media screen { .only-print { display: none !important; } }
       @media print {
         @page { size: A4 portrait; margin: 12mm; }
-        body {
-          -webkit-print-color-adjust: exact;
-          print-color-adjust: exact;
-          background: #fff !important;
-        }
+        body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: #fff !important; }
         .no-print { display: none !important; }
         .only-print { display: block !important; }
-        /* Karten auflösen, Tabellen vollbreit */
-        .print-section {
-          break-inside: avoid;
-          page-break-inside: avoid;
-          border: 1px solid #ddd !important;
-          background: #fff !important;
-          color: #000 !important;
-        }
+        .print-section { break-inside: avoid; page-break-inside: avoid; border: 1px solid #ddd !important; background: #fff !important; color: #000 !important; }
         table, th, td { color: #000 !important; }
         th { background: #f3f4f6 !important; -webkit-print-color-adjust: exact; }
       }
@@ -252,6 +326,8 @@ function PrintStyles() {
     </style>
   );
 }
+
+/* ----------------------------- Layout styles ----------------------------- */
 
 const S = {
   wrap: { padding: 12, color: "#e5e7eb", background: "#0b0c10", minHeight: "100%" },
@@ -313,7 +389,7 @@ function weekRangeFromDate(d) {
 }
 function presetOverdueToday() {
   const today = new Date();
-  const from = iso(new Date(today.getFullYear() - 1, today.getMonth(), today.getDate())); // großzügig
+  const from = iso(new Date(today.getFullYear() - 1, today.getMonth(), today.getDate()));
   const to = iso(today);
   return { from, to };
 }
@@ -338,6 +414,26 @@ function presetNextMonth() {
 }
 
 /* ----------------------------- Utils ----------------------------- */
+
+function groupRows(rows) {
+  const map = new Map();
+  for (const r of rows) {
+    const key = r.station || "nicht zugeordnet";
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(r);
+  }
+  for (const [k, arr] of map.entries()) {
+    arr.sort((a, b) => {
+      const da = a.endDatum ? a.endDatum : "9999-12-31";
+      const db = b.endDatum ? b.endDatum : "9999-12-31";
+      if (da !== db) return da.localeCompare(db);
+      const aa = (a.bezeichnung || "").toLocaleLowerCase("de");
+      const bb = (b.bezeichnung || "").toLocaleLowerCase("de");
+      return aa.localeCompare(bb, "de");
+    });
+  }
+  return Array.from(map.entries()).sort((a,b) => (a[0]||"").localeCompare(b[0]||"", "de"));
+}
 
 function iso(d) {
   const y = d.getFullYear();

@@ -18,13 +18,11 @@ import java.util.stream.Collectors;
  *
  * GET /api/dashboard/utilization?from=YYYY-MM-DD&to=YYYY-MM-DD
  *
- * - Summiert Task-Aufwände (task.aufwandStunden) am jeweiligen endDatum (nur wenn gesetzt).
- * - Gruppiert pro Arbeitsstation und Tag.
- * - Liefert pro Station die dailyCapacityHours (Default 8.00, wenn nicht gefunden).
- *
- * Hinweise:
- * - V0.8: Buchungslogik = alle Stunden am endDatum.
- * - Vorbereitung für Arbeitstage/Feiertage erfolgt später serverseitig (separate Settings).
+ * v0.8 Logik:
+ * - Stunden werden am endDatum gebucht.
+ * - Überfällige, noch nicht fertige Tasks (endDatum < from) werden als Carry-In
+ *   auf den ersten sichtbaren Tag (from) gebucht.
+ * - Fertige Tasks werden ausgeschlossen (Status "FERTIG"/"DONE" etc.).
  */
 @RestController
 @RequestMapping("/api/dashboard")
@@ -51,46 +49,49 @@ public class DashboardUtilizationController {
         if (from == null) from = today;
         if (to == null) to = today.plusDays(6);
         if (to.isBefore(from)) {
-            // tauschen, falls verdreht
             LocalDate tmp = from;
             from = to;
             to = tmp;
         }
 
-        // Kalender-Tage im Bereich vorbereiten (inklusive)
+        // Tage im Bereich
         List<LocalDate> days = enumerateDays(from, to);
 
-        // Kapazitäten je Station mappen
+        // Kapazitäten je Station
         Map<String, BigDecimal> capacityByStation = stationRepository.findAll().stream()
                 .collect(Collectors.toMap(
-                        // Key: Name der Station (muss mit Task.arbeitsstation matchen)
                         Arbeitsstation::getName,
                         st -> st.getDailyCapacityHours() != null ? st.getDailyCapacityHours() : new BigDecimal("8.00")
                 ));
 
-        // Alle Tasks einlesen (pragmatisch für V0.8); Filterung in Java
-        // (Optional: später ein Repo-Query by endDatum BETWEEN from AND to)
+        // Alle Tasks (pragmatisch)
         List<Task> tasks = taskRepository.findAll();
 
-        // Map: station -> (date -> sum hours)
+        // station -> (date -> sum hours)
         Map<String, Map<LocalDate, Double>> sum = new HashMap<>();
 
         for (Task t : tasks) {
+            if (isFinished(t)) continue; // fertige Tasks ignorieren
+
             LocalDate end = t.getEndDatum();
-            if (end == null) continue; // Tasks ohne Datum derzeit nicht berücksichtigen
-            if (end.isBefore(from) || end.isAfter(to)) continue;
+            if (end == null) continue; // ohne Datum derzeit nicht berücksichtigen
+
+            // Nur Tasks mit endDatum <= to sind relevant (älter = überfällig)
+            if (end.isAfter(to)) continue;
+
+            // Carry-In: wenn endDatum < from, buche auf from
+            LocalDate bookDay = end.isBefore(from) ? from : end;
 
             String station = normalizeStationName(t.getArbeitsstation());
-
             double hrs = safeHours(t.getAufwandStunden());
             if (hrs <= 0.0) continue;
 
             sum.computeIfAbsent(station, k -> new HashMap<>());
             Map<LocalDate, Double> perDay = sum.get(station);
-            perDay.put(end, perDay.getOrDefault(end, 0.0) + hrs);
+            perDay.put(bookDay, perDay.getOrDefault(bookDay, 0.0) + hrs);
         }
 
-        // Auch Stationen ohne Tasks im Zeitraum liefern (für konsistente Heatmaps)
+        // Stationen ohne Einträge ergänzen (für stabile Heatmap)
         Set<String> allStationNames = new HashSet<>(capacityByStation.keySet());
         allStationNames.addAll(sum.keySet());
 
@@ -105,13 +106,19 @@ public class DashboardUtilizationController {
             out.add(new StationUtilizationDto(station, cap, dayEntries));
         }
 
-        // Stabil sortieren: Stationsname
         out.sort(Comparator.comparing(o -> o.station == null ? "" : o.station));
-
         return ResponseEntity.ok(out);
     }
 
     /* ---------------------- Helpers & DTOs ---------------------- */
+
+    private static boolean isFinished(Task t) {
+        String code = t.getStatusCode();
+        if (code == null) return false;
+        String c = code.trim().toUpperCase(Locale.ROOT);
+        // robust: typische "fertig"-Codes
+        return c.equals("FERTIG") || c.equals("DONE") || c.equals("COMPLETE") || c.equals("COMPLETED");
+    }
 
     private static String normalizeStationName(String s) {
         return (s == null || s.isBlank()) ? "nicht zugeordnet" : s.trim();

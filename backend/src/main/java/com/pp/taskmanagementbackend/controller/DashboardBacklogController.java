@@ -13,8 +13,10 @@ import java.util.stream.Collectors;
 
 /**
  * /api/dashboard/backlog
- * Liefert eine flache Rückstandsliste von Tasks (für Ausdruck / CSV),
- * optional gefiltert nach Zeitraum und Station.
+ * Rückstandsliste für Druck/CSV:
+ *  - zeigt alle NICHT FERTIGEN Tasks, deren endDatum <= to liegt
+ *  - optional: Tasks ohne Datum, wenn includeNoDate=true
+ *  - optional: Filter nach Station
  *
  * GET /api/dashboard/backlog?from=YYYY-MM-DD&to=YYYY-MM-DD&station=Grob%20G350&includeNoDate=false
  */
@@ -41,33 +43,35 @@ public class DashboardBacklogController {
         if (from == null) from = today.minusDays(14);
         if (to == null) to = today.plusDays(30);
         if (to.isBefore(from)) {
-            LocalDate tmp = from;
-            from = to;
-            to = tmp;
+            LocalDate tmp = from; from = to; to = tmp;
         }
 
-        // Wichtig für Streams/Lambdas: "effectively final" Kopien
-        final LocalDate fromF = from;
+        // Für Lambdas: final Kopien
         final LocalDate toF = to;
         final String stationFilter = (station == null) ? null : station.trim();
+        final boolean includeNoDateF = includeNoDate;
 
-        // Alle Tasks holen (v0.8 pragmatisch; später via Repo-Query einschränken)
+        // Alle Tasks (v0.8 pragmatisch)
         List<Task> all = taskRepository.findAll();
 
-        // Filtern
+        // Filterlogik:
+        // - exclude FINISHED
+        // - if end==null -> nur bei includeNoDate
+        // - sonst end <= to
         List<Task> filtered = all.stream()
+                .filter(t -> !isFinished(t))
                 .filter(t -> {
                     if (stationFilter != null && !stationFilter.isBlank()) {
                         String s = normalizeStation(t.getArbeitsstation());
                         if (!s.equalsIgnoreCase(stationFilter)) return false;
                     }
                     LocalDate end = t.getEndDatum();
-                    if (end == null) return includeNoDate;
-                    return !(end.isBefore(fromF) || end.isAfter(toF));
+                    if (end == null) return includeNoDateF;
+                    return !end.isAfter(toF); // <= to
                 })
                 .collect(Collectors.toList());
 
-        // DTO wandeln + sortieren
+        // DTOs + Sortierung (station, datum asc, bezeichnung)
         List<TaskBacklogDto> dtos = filtered.stream()
                 .map(DashboardBacklogController::toDto)
                 .sorted(Comparator
@@ -77,6 +81,36 @@ public class DashboardBacklogController {
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(dtos);
+    }
+
+    /* ---------------------------- Helpers ---------------------------- */
+
+    private static boolean isFinished(Task t) {
+        String code = t.getStatusCode();
+        if (code == null) return false;
+        String c = code.trim().toUpperCase(Locale.ROOT);
+        return c.equals("FERTIG") || c.equals("DONE") || c.equals("COMPLETE") || c.equals("COMPLETED");
+    }
+
+    private static String normalizeStation(String s) {
+        return (s == null || s.isBlank()) ? "nicht zugeordnet" : s.trim();
+    }
+
+    private static String safe(String s) {
+        return (s == null) ? "" : s;
+    }
+
+    private static String extractAdditionalWorks(Task t) {
+        // Robust gegen unterschiedliche Feldnamen/Refactors
+        try {
+            Method m = t.getClass().getMethod("getAdditionalWorks");
+            Object val = m.invoke(t);
+            if (val instanceof Collection<?>) {
+                Collection<?> col = (Collection<?>) val;
+                return col.stream().map(String::valueOf).collect(Collectors.joining(", "));
+            }
+        } catch (ReflectiveOperationException ignore) { }
+        return "";
     }
 
     private static TaskBacklogDto toDto(Task t) {
@@ -92,31 +126,8 @@ public class DashboardBacklogController {
         );
     }
 
-    private static String extractAdditionalWorks(Task t) {
-        // Robust gegen unterschiedliche Feldnamen/Refactors:
-        // Versuche getAdditionalWorks(); wenn nicht vorhanden, leere Zeichenkette.
-        try {
-            Method m = t.getClass().getMethod("getAdditionalWorks");
-            Object val = m.invoke(t);
-            if (val instanceof Collection<?>) {
-                Collection<?> col = (Collection<?>) val;
-                return col.stream().map(String::valueOf).collect(Collectors.joining(", "));
-            }
-        } catch (ReflectiveOperationException ignore) {
-            // Fallback: nichts
-        }
-        return "";
-    }
+    /* ----------------------------- DTO ------------------------------ */
 
-    private static String normalizeStation(String s) {
-        return (s == null || s.isBlank()) ? "nicht zugeordnet" : s.trim();
-    }
-
-    private static String safe(String s) {
-        return (s == null) ? "" : s;
-    }
-
-    // --- DTO ---
     public static class TaskBacklogDto {
         private String station;
         private String bezeichnung;
