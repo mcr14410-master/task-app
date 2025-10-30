@@ -1,5 +1,6 @@
 import React from "react";
 import UtilizationDashboard from "./UtilizationDashboard";
+import PrintableBacklog from "./PrintableBacklog";
 
 /**
  * Dashboard.jsx
@@ -68,6 +69,9 @@ export default function Dashboard({
 
       {/* Neuer visueller Inhalt */}
       <UtilizationDashboard />
+	  
+
+	  <PrintableBacklog />
     </div>
   );
 }
