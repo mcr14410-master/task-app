@@ -33,7 +33,7 @@ const styles = {
   stationList: {
     padding: '10px',
     borderRadius: '8px',
-    backgroundColor: '#202225',
+    backgroundColor: '#0f172a',
     minHeight: '200px',
     marginBottom: '10px',
     border: '1px solid #2a2d33',
@@ -43,7 +43,7 @@ const styles = {
     padding: '14px 12px',
     margin: '0 0 8px 0',
     borderRadius: '10px',
-    backgroundColor: isDragging ? '#2a2f3a' : '#1f2329',
+    backgroundColor: isDragging ? '#1f2329' : '#111827',
     color: '#e5e7eb',
     border: `1px solid ${hasError ? '#b91c1c' : (isDragging ? '#364152' : '#2f3540')}`,
     display: 'flex',
@@ -51,7 +51,7 @@ const styles = {
     gap: 12,
     boxShadow: isDragging ? '0 8px 24px rgba(0,0,0,0.35)' : '0 2px 8px rgba(0,0,0,0.25)',
     transition: 'background-color 0.2s, border 0.2s, box-shadow 0.2s',
-    opacity: isDragging ? 0.98 : 1,
+    opacity: isDragging ? 0.98 : 0,
   }),
   handle: {
     fontSize: '1.1rem',
