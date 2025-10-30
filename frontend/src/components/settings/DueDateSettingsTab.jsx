@@ -300,6 +300,7 @@ export default function DueDateSettingsTab() {
 
                 {/* Key */}
                 <td style={td}>
+				<div style={{ display: "flex", gap: 2, alignItems: "center" }}>
                   <input
                     type="text"
                     value={b.key}
@@ -308,10 +309,12 @@ export default function DueDateSettingsTab() {
                     style={input(keyDisabled)}
                     placeholder="z. B. soon-14"
                   />
+				  </div>
                 </td>
 
                 {/* Label */}
                 <td style={td}>
+				<div style={{ display: "flex", gap: 2, alignItems: "center" }}>
                   <input
                     type="text"
                     value={b.label || ""}
@@ -320,11 +323,12 @@ export default function DueDateSettingsTab() {
                     style={input(labelDisabled)}
                     placeholder="Anzeigename"
                   />
+				  </div>
                 </td>
 
                 {/* Min */}
                 <td style={{ ...td, whiteSpace: "nowrap" }}>
-                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
                     <input
                       type="number"
                       value={b.min ?? ""}
@@ -351,7 +355,7 @@ export default function DueDateSettingsTab() {
 
                 {/* Max */}
                 <td style={{ ...td, whiteSpace: "nowrap" }}>
-                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
                     <input
                       type="number"
                       value={b.max ?? ""}
@@ -411,6 +415,7 @@ export default function DueDateSettingsTab() {
 
                 {/* Role */}
                 <td style={td}>
+				<div style={{ display: "flex", gap: 2, alignItems: "center" }}>
                   <select
                     value={b.role || "ok"}
                     disabled={roleDisabled}
@@ -422,6 +427,7 @@ export default function DueDateSettingsTab() {
                     <option value="warn">warn</option>
                     <option value="ok">ok</option>
                   </select>
+				  </div>
                 </td>
 
                 {/* Remove */}
