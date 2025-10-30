@@ -10,12 +10,10 @@ import java.util.List;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
-
 @Service
 public class ArbeitsstationService {
 
     private final ArbeitsstationRepository arbeitsstationRepository;
-    
 
     public ArbeitsstationService(ArbeitsstationRepository arbeitsstationRepository) {
         this.arbeitsstationRepository = arbeitsstationRepository;
@@ -63,15 +61,26 @@ public class ArbeitsstationService {
         arbeitsstationRepository.delete(station);
     }
 
-    // --- Reihenfolge mehrerer Stationen aktualisieren ---
+    // --- Reihenfolge mehrerer Stationen aktualisieren (+ Kapazität übernehmen) ---
     @Transactional
     public void updateSortOrder(List<Arbeitsstation> stations) {
-        for (Arbeitsstation station : stations) {
-            Arbeitsstation existing = arbeitsstationRepository.findById(station.getId())
-                    .orElseThrow(() -> new StationNotFoundException(station.getId()));
+        for (Arbeitsstation req : stations) {
+            Arbeitsstation existing = arbeitsstationRepository.findById(req.getId())
+                    .orElseThrow(() -> new StationNotFoundException(req.getId()));
 
-            existing.setSortOrder(station.getSortOrder());
-            existing.setName(station.getName()); // optional, falls Name auch geändert werden darf
+            // SortOrder aus Request übernehmen
+            existing.setSortOrder(req.getSortOrder());
+
+            // Name optional übernehmen (falls Controller ihn mitschickt)
+            if (req.getName() != null && !req.getName().isBlank()) {
+                existing.setName(req.getName());
+            }
+
+            // NEU: Tageskapazität übernehmen, wenn übermittelt
+            if (req.getDailyCapacityHours() != null) {
+                existing.setDailyCapacityHours(normalizeCapacity(req.getDailyCapacityHours()));
+            }
+
             arbeitsstationRepository.save(existing);
         }
     }
