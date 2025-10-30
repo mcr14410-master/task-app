@@ -9,6 +9,7 @@ import TaskItem from "./TaskItem";
 import useToast from "@/components/ui/useToast";
 import apiErrorMessage from "@/utils/apiErrorMessage";
 import { apiGet, apiPatch, apiPut } from "../config/apiClient";
+import { keyFromTask } from "@/utils/dueStyles";
 
 /** ====================== Utilities ====================== */
 const norm = (v) =>
@@ -685,7 +686,8 @@ export default function TaskBoard({ showDashboard = false, onToggleDashboard = (
                     </div>
 
                     {visibleList.map((t, index) => {
-						const dueCls = getDueClass(t);  // "due-overdue" | "due-today" | "due-soon" | "due-week" | "due-future"
+					  const dueKey = keyFromTask(t);
+					  const dueCls = dueKey ? `due-${dueKey}` : "";
                       const isMatch = matchesQuery(t, q);
 
                       return (
@@ -704,6 +706,7 @@ export default function TaskBoard({ showDashboard = false, onToggleDashboard = (
                                 {...dProvided.dragHandleProps}
                                 className={`task-card ${dueCls} ${!hardFilter && queryActive ? (isMatch ? "match" : "dim") : ""}`}
                                 style={{
+									position: "relative",
                                   ...base,
                                   boxShadow: snapshot.isDragging
                                     ? "0 18px 40px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.25)"
