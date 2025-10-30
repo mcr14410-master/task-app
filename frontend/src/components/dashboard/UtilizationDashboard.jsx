@@ -8,7 +8,8 @@ import React, { useEffect, useMemo, useState } from "react";
  * - Charts:
  *    1) Balken je Station: Sum(h) vs. Kapazität (dailyCapacityHours * Tage)
  *    2) Heatmap: Station × Tag, Farbe = Auslastung %
- * - Keine externen Chart-Libs (reines SVG/Div), Dark-UI
+ * - Dark-UI
+ * - Hinweis: Überfällige, nicht fertige Tasks (endDatum < from) werden als Carry-In auf "from" gebucht.
  */
 
 export default function UtilizationDashboard() {
@@ -27,12 +28,10 @@ export default function UtilizationDashboard() {
   const numDays = days.length;
 
   const stations = useMemo(() => {
-    // stabil sortiert wie Backend liefert
     return Array.isArray(data) ? data : [];
   }, [data]);
 
   const bars = useMemo(() => {
-    // Für Balkendiagramm: Summe je Station + Kapazität
     return stations.map(s => {
       const sum = (s.days || []).reduce((acc, d) => acc + (Number(d.hoursPlanned) || 0), 0);
       const capPerDay = toNumber(s.dailyCapacityHours, 8.0);
@@ -48,7 +47,6 @@ export default function UtilizationDashboard() {
   }, [stations, numDays]);
 
   const overall = useMemo(() => {
-    // Gesamtübersicht für Legende/Prozent
     const totHours = bars.reduce((a, b) => a + b.hours, 0);
     const totCap = bars.reduce((a, b) => a + b.capacity, 0);
     const pct = totCap > 0 ? (totHours / totCap) : 0;
@@ -96,6 +94,13 @@ export default function UtilizationDashboard() {
           </div>
         </div>
       </header>
+
+      {/* NEU: Hinweis zur Einbeziehung Überfälliger / Carry-In */}
+      <div style={S.info}>
+        <span style={S.infoDot} />
+        Anzeige umfasst <strong>alle nicht fertigen</strong> Tasks mit <code>endDatum ≤ „bis“</code>.
+        Überfällige (<code>endDatum &lt; „von“</code>) werden als <em>Carry-In</em> dem ersten Tag der Ansicht zugerechnet.
+      </div>
 
       {err && <div style={S.error}>🚨 {err}</div>}
 
@@ -149,7 +154,7 @@ function Bars({ bars }) {
   if (!bars || bars.length === 0) {
     return <div style={S.muted}>Keine Daten im Zeitraum.</div>;
   }
-  const maxCap = Math.max(1, ...bars.map(b => b.capacity)); // avoid 0-div
+  const maxCap = Math.max(1, ...bars.map(b => b.capacity));
   return (
     <div style={{ display: "grid", gap: 10 }}>
       {bars.map((b) => {
@@ -276,13 +281,29 @@ const S = {
     padding: "4px 8px", borderRadius: 8, border: "1px solid", fontWeight: 700, background: "#15171b"
   },
 
+  // Info-Hinweis (neu)
+  info: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    margin: "-4px 0 12px",
+    padding: "8px 10px",
+    borderRadius: 10,
+    background: "rgba(59,130,246,0.08)",
+    border: "1px solid rgba(59,130,246,0.35)",
+    color: "#cbd5e1",
+    fontSize: 13
+  },
+  infoDot: {
+    width: 8, height: 8, borderRadius: 9999, background: "#3b82f6", display: "inline-block"
+  },
+
   // Bars
   barRow: { display: "grid", gridTemplateColumns: "220px 1fr 120px", alignItems: "center", gap: 10 },
   barLabel: { color: "#e5e7eb", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
   barTrack: { position: "relative", height: 18, background: "#0f1116", borderRadius: 9, border: "1px solid #262b36", overflow: "hidden" },
   barCap: { position: "absolute", left: 0, top: 0, bottom: 0, background: "#1f2937" },
   barVal: { position: "absolute", left: 0, top: 0, bottom: 0, borderRadius: 0 },
-
   barValText: { color: "#9ca3af", fontFamily: "monospace", textAlign: "right" },
 
   // Heatmap
