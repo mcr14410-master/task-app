@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import ToastProvider from "./components/ui/ToastsProvider";
 import ErrorBoundary from "./components/ErrorBoundary";
 import TaskBoard from "@/components/TaskBoard";
-import Dashboard from "@/components/Dashboard";
+import Dashboard from "@/components/dashboard/Dashboard";
 
 // NEU: Utility importieren
 import { injectDueStyles, setupDueSettingsAutoReload } from "./utils/dueStyles";

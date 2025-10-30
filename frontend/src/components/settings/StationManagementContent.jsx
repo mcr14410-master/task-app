@@ -51,7 +51,7 @@ const styles = {
     gap: 12,
     boxShadow: isDragging ? '0 8px 24px rgba(0,0,0,0.35)' : '0 2px 8px rgba(0,0,0,0.25)',
     transition: 'background-color 0.2s, border 0.2s, box-shadow 0.2s',
-    opacity: isDragging ? 0.98 : 0,
+    opacity: isDragging ? 0.98 : 1,
   }),
   handle: {
     fontSize: '1.1rem',
