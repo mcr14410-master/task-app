@@ -6,11 +6,11 @@ import AdditionalWorksManagementContent from "./AdditionalWorksManagementContent
 import CustomersTab from "./CustomersTab";
 import AssigneesTab from "./AssigneesTab";
 import InfoTab from "./InfoTab";
+import DueDateSettingsTab from "./DueDateSettingsTab"; // NEU
 
 export default function SettingsModal({
   open,
   onClose,
-  // "stations" | "statuses" | "customers" | "assignees" | "info"
   initialTab = "statuses",
   stations = [],
   onUpdate = () => {},
@@ -44,30 +44,44 @@ export default function SettingsModal({
       role="dialog"
       aria-modal="true"
       aria-label="Einstellungen"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose?.(); }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose?.();
+      }}
       style={{
-        position: "fixed", inset: 0, zIndex: 1100,
+        position: "fixed",
+        inset: 0,
+        zIndex: 1100,
         background: "rgba(0,0,0,0.45)",
-        display: "grid", placeItems: "center"
+        display: "grid",
+        placeItems: "center",
       }}
     >
       <div
         ref={dialogRef}
         tabIndex={-1}
         style={{
-          width: 1000, maxWidth: "95vw", maxHeight: "90vh", overflow: "hidden",
+          width: 1000,
+          maxWidth: "95vw",
+          maxHeight: "90vh",
+          overflow: "hidden",
           background: "var(--color-surface, #111827)",
           color: "var(--color-text, #e5e7eb)",
-          borderRadius: 16, boxShadow: "0 10px 40px rgba(0,0,0,0.6)",
-          display: "grid", gridTemplateRows: "auto auto 1fr"
+          borderRadius: 16,
+          boxShadow: "0 10px 40px rgba(0,0,0,0.6)",
+          display: "grid",
+          gridTemplateRows: "auto auto 1fr",
         }}
       >
         {/* Header */}
-        <div style={{
-          display: "flex", alignItems: "center", gap: 12,
-          padding: "12px 16px",
-          borderBottom: "1px solid #ffffff22"
-        }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            padding: "12px 16px",
+            borderBottom: "1px solid #ffffff22",
+          }}
+        >
           <strong style={{ fontSize: 18 }}>Einstellungen</strong>
           <span style={{ marginLeft: "auto" }} />
           <button
@@ -75,8 +89,13 @@ export default function SettingsModal({
             aria-label="Schließen"
             title="Schließen"
             style={{
-              border: "none", background: "transparent", color: "inherit",
-              fontSize: 22, cursor: "pointer", lineHeight: 1, padding: 4
+              border: "none",
+              background: "transparent",
+              color: "inherit",
+              fontSize: 22,
+              cursor: "pointer",
+              lineHeight: 1,
+              padding: 4,
             }}
           >
             ×
@@ -88,8 +107,11 @@ export default function SettingsModal({
           role="tablist"
           aria-label="Einstellungen Kategorien"
           style={{
-            display: "flex", gap: 6, padding: 8, borderBottom: "1px solid #ffffff16",
-            background: "rgba(255,255,255,0.02)"
+            display: "flex",
+            gap: 6,
+            padding: 8,
+            borderBottom: "1px solid #ffffff16",
+            background: "rgba(255,255,255,0.02)",
           }}
         >
           <TabButton
@@ -100,7 +122,6 @@ export default function SettingsModal({
           >
             Stationen
           </TabButton>
-
           <TabButton
             active={tab === "statuses"}
             onClick={() => setTab("statuses")}
@@ -109,16 +130,23 @@ export default function SettingsModal({
           >
             Status
           </TabButton>
-		  
-		  <TabButton
-		    active={tab === "additionalworks"}
-		    onClick={() => setTab("additionalworks")}
-		    id="tab-additionalworks"
-		    controls="panel-additionalworks"
-		  >
-		    Zusatzarbeiten
-		  </TabButton>	  
-
+          <TabButton
+            active={tab === "additionalworks"}
+            onClick={() => setTab("additionalworks")}
+            id="tab-additionalworks"
+            controls="panel-additionalworks"
+          >
+            Zusatzarbeiten
+          </TabButton>
+          {/* NEU: Fälligkeit */}
+          <TabButton
+            active={tab === "due"}
+            onClick={() => setTab("due")}
+            id="tab-due"
+            controls="panel-due"
+          >
+            Fälligkeit
+          </TabButton>
           <TabButton
             active={tab === "customers"}
             onClick={() => setTab("customers")}
@@ -127,7 +155,6 @@ export default function SettingsModal({
           >
             Kunden
           </TabButton>
-
           <TabButton
             active={tab === "assignees"}
             onClick={() => setTab("assignees")}
@@ -136,7 +163,6 @@ export default function SettingsModal({
           >
             Zuständigkeiten
           </TabButton>
-
           <TabButton
             active={tab === "info"}
             onClick={() => setTab("info")}
@@ -150,36 +176,58 @@ export default function SettingsModal({
         {/* Inhalt */}
         <div style={{ overflow: "auto", padding: 12 }}>
           {tab === "stations" && (
-            <section role="tabpanel" id="panel-stations" aria-labelledby="tab-stations">
+            <section
+              role="tabpanel"
+              id="panel-stations"
+              aria-labelledby="tab-stations"
+            >
               <StationManagementContent stations={stations} onUpdate={onUpdate} />
             </section>
           )}
 
           {tab === "statuses" && (
-            <section role="tabpanel" id="panel-statuses" aria-labelledby="tab-statuses">
+            <section
+              role="tabpanel"
+              id="panel-statuses"
+              aria-labelledby="tab-statuses"
+            >
               <StatusManagementContent />
             </section>
           )}
-		  
-		  {tab === "additionalworks" && (
-		    <section
-		      role="tabpanel"
-		      id="panel-additionalworks"
-		      aria-labelledby="tab-additionalworks"
-		    >
-		      <AdditionalWorksManagementContent />
-		    </section>
-		  )}		  
-		  
+
+          {tab === "additionalworks" && (
+            <section
+              role="tabpanel"
+              id="panel-additionalworks"
+              aria-labelledby="tab-additionalworks"
+            >
+              <AdditionalWorksManagementContent />
+            </section>
+          )}
+
+          {/* NEU: Tab Fälligkeit (Lesemodus über eigene Komponente) */}
+          {tab === "due" && (
+            <section role="tabpanel" id="panel-due" aria-labelledby="tab-due">
+              <DueDateSettingsTab />
+            </section>
+          )}
 
           {tab === "customers" && (
-            <section role="tabpanel" id="panel-customers" aria-labelledby="tab-customers">
+            <section
+              role="tabpanel"
+              id="panel-customers"
+              aria-labelledby="tab-customers"
+            >
               <CustomersTab />
             </section>
           )}
 
           {tab === "assignees" && (
-            <section role="tabpanel" id="panel-assignees" aria-labelledby="tab-assignees">
+            <section
+              role="tabpanel"
+              id="panel-assignees"
+              aria-labelledby="tab-assignees"
+            >
               <AssigneesTab />
             </section>
           )}
@@ -210,7 +258,7 @@ function TabButton({ active, onClick, id, controls, children }) {
         background: active ? "#ffffff14" : "transparent",
         color: "inherit",
         cursor: "pointer",
-        fontWeight: active ? 700 : 500
+        fontWeight: active ? 700 : 500,
       }}
     >
       {children}

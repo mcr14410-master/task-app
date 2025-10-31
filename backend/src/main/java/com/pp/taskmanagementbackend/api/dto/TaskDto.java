@@ -24,6 +24,10 @@ public class TaskDto {
     private Integer attachmentCount; // 0,1,2,...
     private String statusCode;
     private List<String> additionalWorks;
+    private String dueSeverityVisual;
+    private String dueSeverityPlanning;   
+    
+    
 
     public Long getId(){return id;} public void setId(Long id){this.id=id;}
     public String getBezeichnung(){return bezeichnung;} public void setBezeichnung(String v){this.bezeichnung=v;}
@@ -50,5 +54,12 @@ public class TaskDto {
     
     public List<String> getAdditionalWorks() { return additionalWorks; }
     public void setAdditionalWorks(List<String> additionalWorks) { this.additionalWorks = additionalWorks; }
+    
+    public String getDueSeverityVisual() {return dueSeverityVisual;}
+    public void setDueSeverityVisual(String dueSeverityVisual) { this.dueSeverityVisual = dueSeverityVisual;}
+
+    public String getDueSeverityPlanning() {return dueSeverityPlanning;}
+    public void setDueSeverityPlanning(String dueSeverityPlanning) {this.dueSeverityPlanning = dueSeverityPlanning;}
+    
     
 }

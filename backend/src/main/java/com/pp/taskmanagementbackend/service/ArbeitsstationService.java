@@ -7,6 +7,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 @Service
 public class ArbeitsstationService {
@@ -34,9 +36,11 @@ public class ArbeitsstationService {
                 .orElseThrow(() -> new StationNotFoundException(name, true));
     }
 
-    // --- Neue Station speichern ---
+    // --- Neue/aktualisierte Station speichern ---
     @Transactional
     public Arbeitsstation save(Arbeitsstation station) {
+        // Tageskapazität defensiv normalisieren (Default 8.00, clamp 0..24, 2 Nachkommastellen)
+        station.setDailyCapacityHours(normalizeCapacity(station.getDailyCapacityHours()));
         return arbeitsstationRepository.save(station);
     }
 
@@ -57,16 +61,35 @@ public class ArbeitsstationService {
         arbeitsstationRepository.delete(station);
     }
 
-    // --- Reihenfolge mehrerer Stationen aktualisieren ---
+    // --- Reihenfolge mehrerer Stationen aktualisieren (+ Kapazität übernehmen) ---
     @Transactional
     public void updateSortOrder(List<Arbeitsstation> stations) {
-        for (Arbeitsstation station : stations) {
-            Arbeitsstation existing = arbeitsstationRepository.findById(station.getId())
-                    .orElseThrow(() -> new StationNotFoundException(station.getId()));
+        for (Arbeitsstation req : stations) {
+            Arbeitsstation existing = arbeitsstationRepository.findById(req.getId())
+                    .orElseThrow(() -> new StationNotFoundException(req.getId()));
 
-            existing.setSortOrder(station.getSortOrder());
-            existing.setName(station.getName()); // optional, falls Name auch geändert werden darf
+            // SortOrder aus Request übernehmen
+            existing.setSortOrder(req.getSortOrder());
+
+            // Name optional übernehmen (falls Controller ihn mitschickt)
+            if (req.getName() != null && !req.getName().isBlank()) {
+                existing.setName(req.getName());
+            }
+
+            // NEU: Tageskapazität übernehmen, wenn übermittelt
+            if (req.getDailyCapacityHours() != null) {
+                existing.setDailyCapacityHours(normalizeCapacity(req.getDailyCapacityHours()));
+            }
+
             arbeitsstationRepository.save(existing);
         }
+    }
+
+    // --- Helper: Kapazität normalisieren ---
+    private BigDecimal normalizeCapacity(BigDecimal cap) {
+        if (cap == null) cap = new BigDecimal("8.00");
+        if (cap.compareTo(BigDecimal.ZERO) < 0) cap = BigDecimal.ZERO;
+        if (cap.compareTo(new BigDecimal("24.00")) > 0) cap = new BigDecimal("24.00");
+        return cap.setScale(2, RoundingMode.HALF_UP);
     }
 }

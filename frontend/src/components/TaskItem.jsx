@@ -1,11 +1,10 @@
 // frontend/src/components/TaskItem.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import "@/config/TaskStatusTheme.css";
-import "@/config/DueDateTheme.css";
 import "@/config/AdditionalWorkTheme.css";
-import { dueClassForDate } from "@/config/DueDateConfig";
 import { fetchStatuses } from "@/api/statuses";
 import { fetchAdditionalWorks } from "@/api/additionalWorks";
+import { keyFromTask } from "@/utils/dueStyles";
 
 const Icon = ({ size = 16, stroke = "#9ca3af", path }) => (
   <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size}
@@ -54,6 +53,53 @@ function formatDate(d) {
     return d;
   }
 }
+
+
+
+
+// Hilfsfunktion: bestimmt CSS-Klasse für Fälligkeits-Bucket
+function getDueClass(task) {
+  if (!task) return "";
+
+  // 1) Versuche, einen konkreten Bucket-Key vom Backend zu verwenden
+  let keyFromApi =
+    task.dueSeverityVisualKey ??
+    (typeof task.dueSeverityVisual === "string"
+      ? task.dueSeverityVisual
+      : task.dueSeverityVisual?.key);
+
+  if (keyFromApi) {
+    const k = String(keyFromApi).toLowerCase();
+    // Wenn das nur eine Rolle ist (warn/ok), NICHT verwenden – wir wollen konkrete Buckets
+    const isRoleOnly = k === "warn" || k === "ok";
+    if (!isRoleOnly) {
+      // bekannte Buckets direkt nehmen (inkl. evtl. custom-keys)
+      return `due-${k}`;
+    }
+  }
+
+  // 2) Fallback: exakten Bucket lokal aus endDatum berechnen (Kalendertage)
+  const end = task.endDatum ? new Date(task.endDatum) : null;
+  if (!end || isNaN(end.getTime())) return "";
+
+  const today = new Date();
+  const toMidnight = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diffDays = Math.floor(
+    (toMidnight(end).getTime() - toMidnight(today).getTime()) / (1000 * 60 * 60 * 24)
+  );
+
+  let key = "";
+  if (diffDays < 0) key = "overdue";
+  else if (diffDays === 0) key = "today";
+  else if (diffDays <= 3) key = "soon";
+  else if (diffDays <= 7) key = "week";
+  else key = "future";
+
+  return `due-${key}`;
+}
+
+
+
 
 function statusKey(raw) {
   const s = String(raw || "").toUpperCase().replaceAll("-", "_").replaceAll(" ", "_");
@@ -317,7 +363,10 @@ export default function TaskItem({ task, openAttachmentsModal }) {
 
   const key = statusKey(task?.status);
   const pillClass = `pill st-${key.toLowerCase()}`;
-  const dueCls = endDatum ? dueClassForDate(endDatum) : "due-future";
+  
+  const dueKey = keyFromTask(task);                  // z. B. "overdue" | "today" | "custom-1"
+  const dueCls = dueKey ? `due-${dueKey}` : "";      // z. B. "due-custom-1"
+  const dueColorStyle = dueKey ? { color: `var(--due-${dueKey})` } : {};
 
   const attachCount = Number.isFinite(task?.attachmentCount)
     ? task.attachmentCount
@@ -402,8 +451,8 @@ export default function TaskItem({ task, openAttachmentsModal }) {
         {/* Datum links | rechts Zusatz + Status */}
         <div className="row">
           {endDatum ? (
-            <div className={`meta date ${dueCls}`} title={formatDate(endDatum)}>
-              <IconCalendar />
+			<div className="meta date" title={`${formatDate(endDatum)} (${dueKey || "n/a"})`} style={dueColorStyle}>
+              <IconCalendar style={dueColorStyle} />
               <span className="date-text">{formatDate(endDatum)}</span>
             </div>
           ) : <div />}
