@@ -2,6 +2,8 @@ package com.pp.taskmanagementbackend.controller;
 
 import com.pp.taskmanagementbackend.model.Task;
 import com.pp.taskmanagementbackend.repository.TaskRepository;
+import com.pp.taskmanagementbackend.repository.TaskStatusRepository;
+import com.pp.taskmanagementbackend.repository.AdditionalWorkRepository;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -13,21 +15,28 @@ import java.util.stream.Collectors;
 
 /**
  * /api/dashboard/backlog
- * Rückstandsliste für Druck/CSV:
- *  - zeigt alle NICHT FERTIGEN Tasks, deren endDatum <= to liegt
- *  - optional: Tasks ohne Datum, wenn includeNoDate=true
+ * Rückstandsliste:
+ *  - alle NICHT FERTIGEN Tasks mit endDatum <= to
+ *  - optional: Tasks ohne Datum (includeNoDate=true)
  *  - optional: Filter nach Station
+ *  - liefert: statusLabel, zusatzarbeiten (Labels), stueckzahl
  *
- * GET /api/dashboard/backlog?from=YYYY-MM-DD&to=YYYY-MM-DD&station=Grob%20G350&includeNoDate=false
+ * Robust gegenüber unterschiedlichen Getter-Namen/Typen (Reflexion).
  */
 @RestController
 @RequestMapping("/api/dashboard")
 public class DashboardBacklogController {
 
     private final TaskRepository taskRepository;
+    private final TaskStatusRepository taskStatusRepository;
+    private final AdditionalWorkRepository additionalWorkRepository;
 
-    public DashboardBacklogController(TaskRepository taskRepository) {
+    public DashboardBacklogController(TaskRepository taskRepository,
+                                      TaskStatusRepository taskStatusRepository,
+                                      AdditionalWorkRepository additionalWorkRepository) {
         this.taskRepository = taskRepository;
+        this.taskStatusRepository = taskStatusRepository;
+        this.additionalWorkRepository = additionalWorkRepository;
     }
 
     @GetMapping("/backlog")
@@ -42,23 +51,27 @@ public class DashboardBacklogController {
         LocalDate today = LocalDate.now();
         if (from == null) from = today.minusDays(14);
         if (to == null) to = today.plusDays(30);
-        if (to.isBefore(from)) {
-            LocalDate tmp = from; from = to; to = tmp;
-        }
+        if (to.isBefore(from)) { LocalDate tmp = from; from = to; to = tmp; }
 
-        // Für Lambdas: final Kopien
         final LocalDate toF = to;
         final String stationFilter = (station == null) ? null : station.trim();
         final boolean includeNoDateF = includeNoDate;
 
-        // Alle Tasks (v0.8 pragmatisch)
-        List<Task> all = taskRepository.findAll();
+        // --- Lookups (robust, per Reflexion) ------------------------------------
+        final Map<String, String> statusLabelByCode = buildCodeToLabelMap(
+                taskStatusRepository.findAll(),
+                new String[]{"getCode", "getStatusCode", "getId"},
+                new String[]{"getBezeichnung", "getName", "getLabel", "getDisplayName", "getBeschreibung"}
+        );
 
-        // Filterlogik:
-        // - exclude FINISHED
-        // - if end==null -> nur bei includeNoDate
-        // - sonst end <= to
-        List<Task> filtered = all.stream()
+        final Map<String, String> addWorkLabelByCode = buildCodeToLabelMap(
+                additionalWorkRepository.findAll(),
+                new String[]{"getCode", "getId"},
+                new String[]{"getBezeichnung", "getName", "getLabel", "getDisplayName", "getBeschreibung"}
+        );
+
+        // --- Tasks laden & filtern ----------------------------------------------
+        List<Task> filtered = taskRepository.findAll().stream()
                 .filter(t -> !isFinished(t))
                 .filter(t -> {
                     if (stationFilter != null && !stationFilter.isBlank()) {
@@ -71,9 +84,9 @@ public class DashboardBacklogController {
                 })
                 .collect(Collectors.toList());
 
-        // DTOs + Sortierung (station, datum asc, bezeichnung)
+        // --- DTOs bilden & sortieren --------------------------------------------
         List<TaskBacklogDto> dtos = filtered.stream()
-                .map(DashboardBacklogController::toDto)
+                .map(t -> toDto(t, statusLabelByCode, addWorkLabelByCode))
                 .sorted(Comparator
                         .comparing(TaskBacklogDto::getStation, Comparator.nullsLast(String::compareToIgnoreCase))
                         .thenComparing(TaskBacklogDto::getEndDatum, Comparator.nullsLast(LocalDate::compareTo))
@@ -83,7 +96,7 @@ public class DashboardBacklogController {
         return ResponseEntity.ok(dtos);
     }
 
-    /* ---------------------------- Helpers ---------------------------- */
+    /* ============================ Helpers ============================ */
 
     private static boolean isFinished(Task t) {
         String code = t.getStatusCode();
@@ -100,20 +113,184 @@ public class DashboardBacklogController {
         return (s == null) ? "" : s;
     }
 
-    private static String extractAdditionalWorks(Task t) {
-        // Robust gegen unterschiedliche Feldnamen/Refactors
-        try {
-            Method m = t.getClass().getMethod("getAdditionalWorks");
-            Object val = m.invoke(t);
-            if (val instanceof Collection<?>) {
-                Collection<?> col = (Collection<?>) val;
-                return col.stream().map(String::valueOf).collect(Collectors.joining(", "));
-            }
-        } catch (ReflectiveOperationException ignore) { }
+    private static String nullSafeUpper(String s) {
+        return (s == null) ? "" : s.trim().toUpperCase(Locale.ROOT);
+    }
+
+    /**
+     * Baut eine Map<code,label> aus einer beliebigen Liste (Status, Zusatzarbeiten).
+     * Getter-Namen werden per Reflexion versucht.
+     */
+    private static Map<String, String> buildCodeToLabelMap(List<?> list, String[] codeGetters, String[] labelGetters) {
+        Map<String, String> map = new HashMap<>();
+        if (list == null) return map;
+        for (Object o : list) {
+            if (o == null) continue;
+            String code = readString(o, codeGetters);
+            if (code == null || code.isBlank()) continue;
+            String label = readString(o, labelGetters);
+            map.put(nullSafeUpper(code), (label == null || label.isBlank()) ? code : label);
+        }
+        return map;
+    }
+
+    /**
+     * Liest den ersten nicht-leeren String aus den angegebenen Getter-Namen.
+     */
+    private static String readString(Object target, String... getterNames) {
+        if (target == null || getterNames == null) return null;
+        for (String name : getterNames) {
+            try {
+                Method m = target.getClass().getMethod(name);
+                Object v = m.invoke(target);
+                if (v != null) {
+                    String s = String.valueOf(v).trim();
+                    if (!s.isEmpty()) return s;
+                }
+            } catch (ReflectiveOperationException ignore) {}
+        }
+        return null;
+    }
+
+    private static Integer extractStueckzahl(Task t) {
+        for (String mName : new String[]{
+                "getStk", "getStueckzahl", "getMenge", "getQuantity", "getStueck"
+        }) {
+            try {
+                Method m = t.getClass().getMethod(mName);
+                Object val = m.invoke(t);
+                if (val instanceof Number) {
+                    int n = ((Number) val).intValue();
+                    if (n >= 0) return n;
+                }
+            } catch (ReflectiveOperationException ignore) {}
+        }
+        return null;
+    }
+
+    private static String buildStatusLabel(Task t, Map<String, String> statusLabelByCode) {
+        String direct = readString(t, "getStatusLabel", "getStatusName", "getStatusBezeichnung");
+        if (direct != null && !direct.isBlank()) return direct;
+        String code = nullSafeUpper(t.getStatusCode());
+        String lbl = statusLabelByCode.get(code);
+        return (lbl != null && !lbl.isBlank()) ? lbl : safe(t.getStatusCode());
+    }
+
+    /** Ein einzelnes AdditionalWork-Element (Entity oder String) in Label auflösen. */
+    private static String resolveAwLabel(Object x, Map<String, String> addWorkLabelByCode) {
+        if (x == null) return null;
+
+        // 1) Label-Getter auf Entität versuchen
+        String lbl = readString(x, "getBezeichnung", "getName", "getLabel", "getDisplayName", "getBeschreibung");
+        if (lbl != null && !lbl.isBlank()) return lbl;
+
+        // 2) Code an der Entität lesen -> Map
+        String code = readString(x, "getCode", "getId");
+        if (code != null && !code.isBlank()) {
+            String mapped = addWorkLabelByCode.get(nullSafeUpper(code));
+            if (mapped != null && !mapped.isBlank()) return mapped;
+            return code;
+        }
+
+        // 3) Fallback: toString() und gegen Map prüfen
+        String s = String.valueOf(x).trim();
+        if (!s.isEmpty()) {
+            String mapped = addWorkLabelByCode.get(nullSafeUpper(s));
+            return (mapped != null && !mapped.isBlank()) ? mapped : s;
+        }
+        return null;
+    }
+
+    /**
+     * Zusatzarbeiten als Labels bauen.
+     * Unterstützt:
+     *  - Collection von Entities/Strings
+     *  - Komma-/Semikolon-String
+     *  - JSON-ähnliche Arrays wie ["fai","qs"]
+     */
+    private static String buildAdditionalWorksLabel(Task t, Map<String, String> addWorkLabelByCode) {
+        // 1) Versuche Collection-getter per Reflexion
+        for (String mName : new String[]{
+                "getAdditionalWorks", "getZusatzarbeiten", "getAdditionalWorkObjects", "getAdditionalWorkList"
+        }) {
+            try {
+                Method m = t.getClass().getMethod(mName);
+                Object val = m.invoke(t);
+                if (val instanceof Collection<?>) {
+                    Collection<?> col = (Collection<?>) val;
+                    if (!col.isEmpty()) {
+                        return col.stream()
+                                .map(x -> resolveAwLabel(x, addWorkLabelByCode))
+                                .filter(s -> s != null && !s.isBlank())
+                                .collect(Collectors.joining(", "));
+                    }
+                } else if (val instanceof String) {
+                    List<String> tokens = parseListishString((String) val);
+                    return tokens.stream()
+                            .map(it -> {
+                                String mapped = addWorkLabelByCode.get(nullSafeUpper(it));
+                                return (mapped != null && !mapped.isBlank()) ? mapped : it;
+                            })
+                            .collect(Collectors.joining(", "));
+                }
+            } catch (ReflectiveOperationException ignore) {}
+        }
+
+        // 2) Alternative reine String-Getter (bereits gelabelt oder kommagetrennt)
+        for (String mName : new String[]{ "getAdditionalWorkLabels", "getAdditionalWorkCodes" }) {
+            try {
+                Method m = t.getClass().getMethod(mName);
+                Object val = m.invoke(t);
+                if (val instanceof String) {
+                    List<String> tokens = parseListishString((String) val);
+                    return tokens.stream()
+                            .map(it -> {
+                                String mapped = addWorkLabelByCode.get(nullSafeUpper(it));
+                                return (mapped != null && !mapped.isBlank()) ? mapped : it;
+                            })
+                            .collect(Collectors.joining(", "));
+                } else if (val instanceof Collection<?>) {
+                    Collection<?> col = (Collection<?>) val;
+                    if (!col.isEmpty()) {
+                        return col.stream()
+                                .map(x -> {
+                                    String s = (x == null) ? "" : String.valueOf(x).trim();
+                                    String mapped = addWorkLabelByCode.get(nullSafeUpper(s));
+                                    return (mapped != null && !mapped.isBlank()) ? mapped : s;
+                                })
+                                .filter(s -> !s.isBlank())
+                                .collect(Collectors.joining(", "));
+                    }
+                }
+            } catch (ReflectiveOperationException ignore) {}
+        }
+
         return "";
     }
 
-    private static TaskBacklogDto toDto(Task t) {
+    /** Zerlegt JSON-ähnliche Arrays (["fai","qs"]) ODER Komma-/Semikolon-Strings in Tokens ohne Quotes/Klammern. */
+    private static List<String> parseListishString(String raw) {
+        if (raw == null) return Collections.emptyList();
+        String s = raw.trim();
+        if (s.startsWith("[") && s.endsWith("]")) {
+            s = s.substring(1, s.length() - 1); // Klammern ab
+        }
+        if (s.isEmpty()) return Collections.emptyList();
+        String[] parts = s.split("[,;]");
+        List<String> out = new ArrayList<>(parts.length);
+        for (String p : parts) {
+            String t = p.trim();
+            if ((t.startsWith("\"") && t.endsWith("\"")) || (t.startsWith("'") && t.endsWith("'"))) {
+                t = t.substring(1, t.length() - 1).trim();
+            }
+            if (!t.isEmpty()) out.add(t);
+        }
+        return out;
+    }
+
+    private static TaskBacklogDto toDto(Task t,
+                                        Map<String, String> statusLabelByCode,
+                                        Map<String, String> addWorkLabelByCode) {
         return new TaskBacklogDto(
                 normalizeStation(t.getArbeitsstation()),
                 safe(t.getBezeichnung()),
@@ -121,12 +298,14 @@ public class DashboardBacklogController {
                 safe(t.getTeilenummer()),
                 t.getEndDatum(),
                 safe(t.getStatusCode()),
+                buildStatusLabel(t, statusLabelByCode),
                 t.getAufwandStunden() != null ? t.getAufwandStunden() : 0.0,
-                extractAdditionalWorks(t)
+                buildAdditionalWorksLabel(t, addWorkLabelByCode),
+                extractStueckzahl(t)
         );
     }
 
-    /* ----------------------------- DTO ------------------------------ */
+    /* ============================== DTO ============================== */
 
     public static class TaskBacklogDto {
         private String station;
@@ -135,20 +314,24 @@ public class DashboardBacklogController {
         private String teilenummer;
         private LocalDate endDatum;
         private String statusCode;
+        private String statusLabel;     // Bezeichnung
         private double aufwandStunden;
-        private String zusatzarbeiten;
+        private String zusatzarbeiten;  // kommagetrennte Labels
+        private Integer stueckzahl;     // Stk.
 
         public TaskBacklogDto(String station, String bezeichnung, String kunde, String teilenummer,
-                              LocalDate endDatum, String statusCode,
-                              double aufwandStunden, String zusatzarbeiten) {
+                              LocalDate endDatum, String statusCode, String statusLabel,
+                              double aufwandStunden, String zusatzarbeiten, Integer stueckzahl) {
             this.station = station;
             this.bezeichnung = bezeichnung;
             this.kunde = kunde;
             this.teilenummer = teilenummer;
             this.endDatum = endDatum;
             this.statusCode = statusCode;
+            this.statusLabel = statusLabel;
             this.aufwandStunden = aufwandStunden;
             this.zusatzarbeiten = zusatzarbeiten;
+            this.stueckzahl = stueckzahl;
         }
 
         public String getStation() { return station; }
@@ -157,7 +340,9 @@ public class DashboardBacklogController {
         public String getTeilenummer() { return teilenummer; }
         public LocalDate getEndDatum() { return endDatum; }
         public String getStatusCode() { return statusCode; }
+        public String getStatusLabel() { return statusLabel; }
         public double getAufwandStunden() { return aufwandStunden; }
         public String getZusatzarbeiten() { return zusatzarbeiten; }
+        public Integer getStueckzahl() { return stueckzahl; }
     }
 }

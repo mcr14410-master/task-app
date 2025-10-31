@@ -6,9 +6,9 @@ import React, { useEffect, useMemo, useState } from "react";
  * - Datenquelle: GET /api/dashboard/backlog?from&to&station&includeNoDate
  * - Stationen für Filter: GET /api/arbeitsstationen
  * - Gruppiert nach Arbeitsstation, sortiert nach Fällig (älteste zuerst)
- * - Spalten: Bezeichnung, Kunde, Teilenummer, Fällig am, Aufwand (h), Status, Zusatzarbeiten
+ * - Spalten: Bezeichnung, Kunde, Teilenummer, Fällig am, Aufwand (h), Stk., Status(=Label), Zusatzarbeiten
  * - Summen je Station + Gesamtsumme
- * - Druck-Button (Browser) + **neue** separate PDF/Druckansicht in neuem Fenster (hell, ohne Dark-Chrome)
+ * - Browser-Druck + helle PDF-/Druckansicht (Portrait/Landscape wählbar)
  */
 
 export default function PrintableBacklog() {
@@ -21,6 +21,7 @@ export default function PrintableBacklog() {
   const [stations, setStations] = useState([]);
   const [station, setStation] = useState(""); // leer = alle
   const [includeNoDate, setIncludeNoDate] = useState(false);
+  const [orientation, setOrientation] = useState("portrait"); // NEU: portrait | landscape
 
   // Daten
   const [rows, setRows] = useState([]); // TaskBacklogDto[]
@@ -92,7 +93,7 @@ export default function PrintableBacklog() {
     return { perStation, overall: round2(overall) };
   }, [grouped]);
 
-  // --- NEU: Helle Druck-/PDF-Ansicht in neuem Fenster ---
+  // NEU: Helle Druck-/PDF-Ansicht in neuem Fenster mit Orientation
   const openPrintWindow = () => {
     const title = "Rückstandsliste";
     const meta = [
@@ -101,7 +102,6 @@ export default function PrintableBacklog() {
       includeNoDate ? "inkl. ohne Datum" : ""
     ].filter(Boolean).join(" · ");
 
-    // Daten für das Fenster vorbereiten
     const blocks = Array.from(grouped).map(([stName, arr]) => ({
       station: stName,
       sum: round2(arr.reduce((a,r)=>a+toNumber(r.aufwandStunden),0)),
@@ -109,13 +109,12 @@ export default function PrintableBacklog() {
     }));
     const overall = round2(blocks.reduce((a,b)=>a+b.sum,0));
 
-    const html = buildPrintHtml({ title, meta, blocks, overall });
+    const html = buildPrintHtml({ title, meta, blocks, overall, orientation });
     const w = window.open("", "_blank");
     if (!w) return;
     w.document.open();
     w.document.write(html);
     w.document.close();
-    // Auto-Print, kleiner Delay für Rendering
     setTimeout(() => { try { w.focus(); w.print(); } catch {} }, 50);
   };
 
@@ -150,6 +149,15 @@ export default function PrintableBacklog() {
               onChange={(e) => setIncludeNoDate(e.target.checked)}
             />
             <label htmlFor="inod" style={S.lbl}>Ohne Fälligkeitsdatum einbeziehen</label>
+          </div>
+
+          {/* NEU: Orientierung für PDF-Ansicht */}
+          <div style={S.group}>
+            <label style={S.lbl}>Ausrichtung</label>
+            <select value={orientation} onChange={(e) => setOrientation(e.target.value)} style={S.selectSmall}>
+              <option value="portrait">Hochformat</option>
+              <option value="landscape">Querformat</option>
+            </select>
           </div>
 
           <button style={S.btn} onClick={() => window.print()}>Browser-Druck</button>
@@ -188,13 +196,14 @@ export default function PrintableBacklog() {
               <table style={S.table}>
                 <thead>
                   <tr>
-                    <th style={{...S.th, minWidth: 200, textAlign: 'left'}}>Bezeichnung</th>
-                    <th style={{...S.th, minWidth: 150, textAlign: 'left'}}>Kunde</th>
-                    <th style={{...S.th, minWidth: 130, textAlign: 'left'}}>Teilenummer</th>
-                    <th style={{...S.th, minWidth: 110}}>Fällig am</th>
-                    <th style={{...S.th, minWidth: 90}}>Aufwand (h)</th>
+                    <th style={{...S.th, minWidth: 180, textAlign: 'left'}}>Bezeichnung</th>
+                    <th style={{...S.th, minWidth: 130, textAlign: 'left'}}>Kunde</th>
+                    <th style={{...S.th, minWidth: 120, textAlign: 'left'}}>Teilenummer</th>
+                    <th style={{...S.th, minWidth: 95}}>Fällig</th>
+                    <th style={{...S.th, minWidth: 70}}>Aufw. (h)</th>
+                    <th style={{...S.th, minWidth: 55}}>Stk.</th>
                     <th style={{...S.th, minWidth: 120}}>Status</th>
-                    <th style={{...S.th, minWidth: 180, textAlign: 'left'}}>Zusatzarbeiten</th>
+                    <th style={{...S.th, minWidth: 160, textAlign: 'left'}}>Zusatzarbeiten</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -205,7 +214,8 @@ export default function PrintableBacklog() {
                       <td style={{...S.td, textAlign: 'left'}}>{r.teilenummer || "—"}</td>
                       <td style={S.td}>{r.endDatum ? formatDate(r.endDatum) : "—"}</td>
                       <td style={S.tdMono}>{round1(r.aufwandStunden)}</td>
-                      <td style={S.td}>{r.statusCode || "—"}</td>
+                      <td style={S.td}>{r.stueckzahl ?? "—"}</td>
+                      <td style={S.td}>{r.statusLabel || r.statusCode || "—"}</td>
                       <td style={{...S.td, textAlign: 'left'}}>{r.zusatzarbeiten || ""}</td>
                     </tr>
                   ))}
@@ -225,7 +235,7 @@ export default function PrintableBacklog() {
 
 /* ------------------------ Print-HTML-Builder (neu) ------------------------ */
 
-function buildPrintHtml({ title, meta, blocks, overall }) {
+function buildPrintHtml({ title, meta, blocks, overall, orientation }) {
   const esc = (s) => String(s ?? "").replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
   const fmtDate = (s) => s ? new Date(s + "T00:00:00").toLocaleDateString("de-DE") : "—";
 
@@ -241,8 +251,9 @@ function buildPrintHtml({ title, meta, blocks, overall }) {
             <th>Bezeichnung</th>
             <th>Kunde</th>
             <th>Teilenummer</th>
-            <th>Fällig am</th>
-            <th>Aufwand (h)</th>
+            <th>Fällig</th>
+            <th>Aufw. (h)</th>
+            <th>Stk.</th>
             <th>Status</th>
             <th>Zusatzarbeiten</th>
           </tr>
@@ -255,7 +266,8 @@ function buildPrintHtml({ title, meta, blocks, overall }) {
               <td>${esc(r.teilenummer || "—")}</td>
               <td class="tc">${esc(r.endDatum ? fmtDate(r.endDatum) : "—")}</td>
               <td class="mono">${esc(round1(r.aufwandStunden))}</td>
-              <td class="tc">${esc(r.statusCode || "—")}</td>
+              <td class="tc">${esc(r.stueckzahl ?? "—")}</td>
+              <td class="tc">${esc(r.statusLabel || r.statusCode || "—")}</td>
               <td>${esc(r.zusatzarbeiten || "")}</td>
             </tr>
           `).join("")}
@@ -274,24 +286,22 @@ function buildPrintHtml({ title, meta, blocks, overall }) {
 <style>
   :root { --ink:#111; --muted:#4b5563; --line:#d1d5db; --bg:#fff; }
   * { box-sizing: border-box; }
-  body { font: 12pt/1.35 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: var(--ink); background: var(--bg); margin: 12mm; }
-  header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8mm; }
-  h1 { margin: 0; font-size: 18pt; }
-  .meta { color: var(--muted); font-size: 10pt; }
-  .total { margin: 2mm 0 6mm; font-weight: 700; }
-  .block { break-inside: avoid; page-break-inside: avoid; margin: 0 0 8mm; }
+  body { font: 11pt/1.35 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: var(--ink); background: var(--bg); margin: 10mm; }
+  header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6mm; }
+  h1 { margin: 0; font-size: 16pt; }
+  .meta { color: var(--muted); font-size: 9pt; }
+  .total { margin: 2mm 0 5mm; font-weight: 700; }
+  .block { break-inside: avoid; page-break-inside: avoid; margin: 0 0 6mm; }
   .head { display:flex; justify-content: space-between; align-items: baseline; margin-bottom: 2mm; }
-  .head h2 { margin:0; font-size: 13pt; }
-  .sum { border:1px solid var(--line); padding: 2mm 3mm; border-radius: 4px; font-weight:700; }
+  .head h2 { margin:0; font-size: 12pt; }
+  .sum { border:1px solid var(--line); padding: 1.2mm 2mm; border-radius: 4px; font-weight:700; }
   table.tbl { width: 100%; border-collapse: collapse; }
-  .tbl th, .tbl td { border: 1px solid var(--line); padding: 2.5mm; vertical-align: top; font-size: 10pt; }
+  .tbl th, .tbl td { border: 1px solid var(--line); padding: 1.8mm; vertical-align: top; font-size: 9pt; }
   .tbl th { background: #f3f4f6; }
   .tbl td.tc { text-align: center; }
   .tbl td.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; text-align: right; }
-  @page { size: A4 portrait; margin: 12mm; }
-  @media print {
-    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  }
+  @page { size: A4 ${orientation}; margin: 10mm; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style>
 </head>
 <body>
@@ -314,7 +324,7 @@ function PrintStyles() {
       {`
       @media screen { .only-print { display: none !important; } }
       @media print {
-        @page { size: A4 portrait; margin: 12mm; }
+        @page { size: A4 portrait; margin: 10mm; }
         body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: #fff !important; }
         .no-print { display: none !important; }
         .only-print { display: block !important; }
@@ -331,7 +341,7 @@ function PrintStyles() {
 
 const S = {
   wrap: { padding: 12, color: "#e5e7eb", background: "#0b0c10", minHeight: "100%" },
-  header: { display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
+  header: { display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
   h2: { margin: 0, color: "#fff", fontSize: 20 },
   tools: { display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" },
   group: { display: "flex", alignItems: "center", gap: 6 },
@@ -339,25 +349,26 @@ const S = {
   lbl: { color: "#9ca3af", fontSize: 12 },
   input: { padding: "6px 8px", borderRadius: 8, border: "1px solid #2f3540", background: "#111318", color: "#e5e7eb" },
   select: { padding: "6px 8px", borderRadius: 8, border: "1px solid #2f3540", background: "#111318", color: "#e5e7eb", minWidth: 160 },
+  selectSmall: { padding: "6px 8px", borderRadius: 8, border: "1px solid #2f3540", background: "#111318", color: "#e5e7eb", minWidth: 130 },
   btn: { padding: "6px 10px", borderRadius: 8, border: "1px solid #ffffff22", background: "#1a1d23", color: "#e5e7eb", cursor: "pointer" },
   btnPrimary: { padding: "8px 12px", borderRadius: 8, border: "1px solid #2563eb", background: "#3b82f6", color: "#fff", cursor: "pointer", fontWeight: 700 },
-  error: { marginBottom: 10, padding: 10, borderRadius: 8, background: "rgba(239,68,68,0.10)", border: "1px solid rgba(239,68,68,0.35)", color: "#fecaca" },
+  error: { marginBottom: 8, padding: 8, borderRadius: 8, background: "rgba(239,68,68,0.10)", border: "1px solid rgba(239,68,68,0.35)", color: "#fecaca" },
 
-  printHeader: { marginBottom: 8, borderBottom: "1px solid #ddd", paddingBottom: 6, color: "#000" },
+  printHeader: { marginBottom: 6, borderBottom: "1px solid #ddd", paddingBottom: 6, color: "#000" },
 
-  // Cards/Tables
-  card: { background: "#0b0c10", border: "1px solid #1f2430", borderRadius: 12, padding: 12, marginBottom: 12 },
-  cardHead: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
+  // Cards/Tables (kompakter)
+  card: { background: "#0b0c10", border: "1px solid #1f2430", borderRadius: 12, padding: 10, marginBottom: 10 },
+  cardHead: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 },
   h3: { margin: 0, color: "#e5e7eb", fontSize: 16 },
-  badge: { padding: "4px 8px", borderRadius: 8, border: "1px solid #ffffff22", color: "#e5e7eb", fontWeight: 700 },
+  badge: { padding: "3px 6px", borderRadius: 8, border: "1px solid #ffffff22", color: "#e5e7eb", fontWeight: 700, fontSize: 12 },
 
   table: { width: "100%", borderCollapse: "separate", borderSpacing: 0 },
   th: { color: "#9ca3af", textAlign: "center", fontWeight: 600, fontSize: 12, padding: 6, borderBottom: "1px solid #273042" },
-  td: { color: "#e5e7eb", fontSize: 13, padding: 6, textAlign: "center", borderBottom: "1px solid #111318" },
-  tdMono: { color: "#e5e7eb", fontSize: 13, padding: 6, textAlign: "center", borderBottom: "1px solid #111318", fontFamily: "monospace" },
+  td: { color: "#e5e7eb", fontSize: 12, padding: 6, textAlign: "center", borderBottom: "1px solid #111318" },
+  tdMono: { color: "#e5e7eb", fontSize: 12, padding: 6, textAlign: "right", borderBottom: "1px solid #111318", fontFamily: "monospace" },
 
   muted: { color: "#9ca3af" },
-  summary: { color: "#9ca3af", margin: "6px 0 8px" },
+  summary: { color: "#9ca3af", margin: "4px 0 8px" },
 };
 
 /* ----------------------------- Presets ----------------------------- */
