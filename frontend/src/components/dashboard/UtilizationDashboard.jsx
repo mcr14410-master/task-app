@@ -2,14 +2,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 
 /**
- * UtilizationDashboard
+ * UtilizationDashboard – Balken + Heatmap (v2)
  * - Zeitraum-Presets (Woche/Monat) + freie Datumsauswahl
  * - Fetch: /api/dashboard/utilization?from=YYYY-MM-DD&to=YYYY-MM-DD
  * - Charts:
  *    1) Balken je Station: Sum(h) vs. Kapazität (dailyCapacityHours * Tage)
- *    2) Heatmap: Station × Tag, Farbe = Auslastung %
- * - Dark-UI
- * - Hinweis: Überfällige, nicht fertige Tasks (endDatum < from) werden als Carry-In auf "from" gebucht.
+ *    2) Heatmap v2: Station × Tag, Farbe = Auslastung %, Zellen (h / %), Summen, Wochenende-Markierung
+ * - Hinweis: Überfällige (end < from) werden als Carry-In auf „from“ gebucht.
  */
 
 export default function UtilizationDashboard() {
@@ -27,9 +26,7 @@ export default function UtilizationDashboard() {
   const days = useMemo(() => enumerateDays(from, to), [from, to]);           // ["YYYY-MM-DD", ...]
   const numDays = days.length;
 
-  const stations = useMemo(() => {
-    return Array.isArray(data) ? data : [];
-  }, [data]);
+  const stations = useMemo(() => Array.isArray(data) ? data : [], [data]);
 
   const bars = useMemo(() => {
     return stations.map(s => {
@@ -77,7 +74,6 @@ export default function UtilizationDashboard() {
     return () => { alive = false; };
   }, [from, to]);
 
-  // ---- Render --------------------------------------------------------------
   return (
     <section style={S.wrap}>
       <header style={S.header}>
@@ -95,7 +91,7 @@ export default function UtilizationDashboard() {
         </div>
       </header>
 
-      {/* NEU: Hinweis zur Einbeziehung Überfälliger / Carry-In */}
+      {/* Hinweis zu Carry-In */}
       <div style={S.info}>
         <span style={S.infoDot} />
         Anzeige umfasst <strong>alle nicht fertigen</strong> Tasks mit <code>endDatum ≤ „bis“</code>.
@@ -120,7 +116,13 @@ export default function UtilizationDashboard() {
             <h3 style={S.h3}>Heatmap: Station × Tag</h3>
             <HeatLegend />
           </div>
-          {loading ? <Loader /> : <Heatmap stations={stations} days={days} />}
+          {loading ? <Loader /> : (
+            <Heatmap
+              stations={stations}
+              days={days}
+              onCellClick={(stationName, dayIso) => openBacklog(stationName, dayIso)}
+            />
+          )}
         </div>
       </div>
     </section>
@@ -198,46 +200,113 @@ function HeatLegend() {
   );
 }
 
-function Heatmap({ stations, days }) {
+function Heatmap({ stations, days, onCellClick }) {
   if (!stations || stations.length === 0) {
     return <div style={S.muted}>Keine Stationen.</div>;
   }
   if (!days || days.length === 0) {
     return <div style={S.muted}>Kein Zeitraum gewählt.</div>;
   }
+
+  // Helper: schneller Zugriff auf Tag -> Wert
+  const indexByDate = (daysArr) => {
+    const map = {};
+    for (const d of (daysArr || [])) map[d.date] = d;
+    return map;
+  };
+
+  // Summen je Tag (Spaltensumme)
+  const dayTotals = days.map(d => 0);
+
   return (
     <div style={{ overflowX: "auto" }}>
       <table style={S.table}>
         <thead>
           <tr>
-            <th style={{ ...S.th, minWidth: 160, position: "sticky", left: 0, zIndex: 2, background: "#0b0c10" }}>Station</th>
-            {days.map(d => (
-              <th key={d} style={{ ...S.th, textAlign: "center" }}>{formatDayShort(d)}</th>
-            ))}
+            <th style={{ ...S.th, minWidth: 180, position: "sticky", left: 0, zIndex: 2, background: "#0b0c10", textAlign: "left" }}>Station</th>
+            {days.map(d => {
+              const wday = new Date(d + "T00:00:00").getDay(); // 0=So,6=Sa
+              const isWE = (wday === 0 || wday === 6);
+              return (
+                <th
+                  key={d}
+                  style={{
+                    ...S.th, textAlign: "center",
+                    background: isWE ? "#0d1117" : "#0b0c10",
+                    borderBottom: isWE ? "1px dashed #263142" : S.th.borderBottom
+                  }}
+                  title={formatDayLong(d)}
+                >
+                  {formatDayShort(d)}
+                </th>
+              );
+            })}
+            <th style={{ ...S.th, minWidth: 68 }}>Σ</th>
           </tr>
         </thead>
         <tbody>
           {stations.map(s => {
             const cap = toNumber(s.dailyCapacityHours, 8.0);
             const cells = indexByDate(s.days || []);
+            let rowSum = 0;
+
             return (
               <tr key={s.station}>
-                <td style={{ ...S.tdSticky }}>{s.station || "nicht zugeordnet"}</td>
-                {days.map(d => {
+                <td style={{ ...S.tdSticky, textAlign: "left" }}>{s.station || "nicht zugeordnet"}</td>
+                {days.map((d, i) => {
                   const val = cells[d]?.hoursPlanned || 0;
+                  rowSum += val;
+                  dayTotals[i] += val;
                   const pct = cap > 0 ? (val / cap) : 0;
                   const bg = heatColor(pct);
                   const color = "#e5e7eb";
+                  const label = val ? `${round1(val)}h · ${Math.round(pct*100)}%` : "";
+                  const wday = new Date(d + "T00:00:00").getDay();
+                  const isWE = (wday === 0 || wday === 6);
+
                   return (
-                    <td key={d} style={{ ...S.td, background: bg, color }} title={`${formatISO(d)} · ${round2(val)}h / ${round2(cap)}h`}>
-                      {val ? round1(val) : ""}
+                    <td
+                      key={d}
+                      style={{
+                        ...S.td,
+                        background: bg,
+                        color,
+                        outline: isWE ? "1px dashed rgba(255,255,255,0.08)" : "none",
+                        cursor: "pointer"
+                      }}
+                      title={`${formatISO(d)} · ${round2(val)}h / ${round2(cap)}h`}
+                      onClick={() => onCellClick && onCellClick(s.station || "nicht zugeordnet", d)}
+                    >
+                      {label}
                     </td>
                   );
                 })}
+                <td style={{ ...S.td, fontWeight: 700 }}>{rowSum ? round1(rowSum) : ""}</td>
               </tr>
             );
           })}
         </tbody>
+        <tfoot>
+          <tr>
+            <td style={{ ...S.tdSticky, fontWeight: 700, textAlign: "left", background: "#0b0c10" }}>Σ Tag</td>
+            {days.map((d, i) => {
+              // Spaltensumme (nur Stunden)
+              const wday = new Date(d + "T00:00:00").getDay();
+              const isWE = (wday === 0 || wday === 6);
+              return (
+                <td key={`sum-${d}`} style={{
+                  ...S.td, fontWeight: 700,
+                  background: isWE ? "#0d1117" : "#0b0c10"
+                }}>
+                  {dayTotals[i] ? round1(dayTotals[i]) : ""}
+                </td>
+              );
+            })}
+            <td style={{ ...S.td, fontWeight: 800 }}>
+              {round1(dayTotals.reduce((a, b) => a + b, 0))}
+            </td>
+          </tr>
+        </tfoot>
       </table>
     </div>
   );
@@ -281,7 +350,7 @@ const S = {
     padding: "4px 8px", borderRadius: 8, border: "1px solid", fontWeight: 700, background: "#15171b"
   },
 
-  // Info-Hinweis (neu)
+  // Info-Hinweis
   info: {
     display: "flex",
     alignItems: "center",
@@ -294,9 +363,7 @@ const S = {
     color: "#cbd5e1",
     fontSize: 13
   },
-  infoDot: {
-    width: 8, height: 8, borderRadius: 9999, background: "#3b82f6", display: "inline-block"
-  },
+  infoDot: { width: 8, height: 8, borderRadius: 9999, background: "#3b82f6", display: "inline-block" },
 
   // Bars
   barRow: { display: "grid", gridTemplateColumns: "220px 1fr 120px", alignItems: "center", gap: 10 },
@@ -308,8 +375,8 @@ const S = {
 
   // Heatmap
   table: { width: "100%", borderCollapse: "separate", borderSpacing: 2, tableLayout: "fixed" },
-  th: { color: "#9ca3af", fontWeight: 600, fontSize: 12, padding: 6, position: "relative", top: 0, background: "#0b0c10" },
-  td: { color: "#e5e7eb", fontSize: 12, padding: 6, textAlign: "center", borderRadius: 6, border: "1px solid #0f1116", minWidth: 42 },
+  th: { color: "#9ca3af", fontWeight: 600, fontSize: 12, padding: 6, position: "relative", top: 0, background: "#0b0c10", borderBottom: "1px solid #273042" },
+  td: { color: "#e5e7eb", fontSize: 12, padding: 6, textAlign: "center", borderRadius: 6, border: "1px solid #0f1116", minWidth: 60 },
   tdSticky: {
     color: "#e5e7eb", fontSize: 13, padding: 6, position: "sticky", left: 0, zIndex: 1,
     background: "#0b0c10", borderRight: "1px solid #1f2430", whiteSpace: "nowrap"
@@ -336,20 +403,16 @@ function formatISO(d) {
   const dd = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${dd}`;
 }
-
 function formatDayShort(dateStr) {
   const d = new Date(dateStr + "T00:00:00");
   const wd = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"][d.getDay()];
   const day = String(d.getDate()).padStart(2, "0");
   return `${wd} ${day}`;
 }
-
-function indexByDate(daysArr) {
-  const map = {};
-  for (const d of daysArr) map[d.date] = d;
-  return map;
+function formatDayLong(dateStr) {
+  const d = new Date(dateStr + "T00:00:00");
+  return d.toLocaleDateString("de-DE", { weekday: "long", day: "2-digit", month: "2-digit" });
 }
-
 function round2(n) { return Math.round((Number(n) || 0) * 100) / 100; }
 function round1(n) { return Math.round((Number(n) || 0) * 10) / 10; }
 function toNumber(v, def = 0) {
@@ -365,7 +428,7 @@ function heatColor(pct) {
   if (pct < 0.8) return "#10b981";   // grün
   if (pct < 1.0) return "#f59e0b";   // gelb
   if (pct < 1.5) return "#ef4444";   // rot
-  return "#991b1b";                  // dunkelrot (krass überbucht)
+  return "#991b1b";                  // dunkelrot
 }
 
 /* ----------------------------- Presets ----------------------------- */
@@ -391,7 +454,6 @@ function weekRangeFromDate(d) {
   end.setDate(start.getDate() + 6);
   return { from: formatISO(start), to: formatISO(end) };
 }
-
 function presetThisMonth() {
   const now = new Date();
   const y = now.getFullYear();
@@ -407,4 +469,19 @@ function presetNextMonth() {
   const from = new Date(y, m, 1);
   const to = new Date(y, m + 1, 0);
   return { from: formatISO(from), to: formatISO(to) };
+}
+
+/* ----------------------------- Navigation ----------------------------- */
+
+/** Öffnet die Rückstandsliste mit gesetzten Filtern (Station, Tag). */
+function openBacklog(stationName, dayIso) {
+  const qs = `from=${encodeURIComponent(dayIso)}&to=${encodeURIComponent(dayIso)}&station=${encodeURIComponent(stationName)}`;
+  // Falls du BrowserRouter nutzt, nimm "/dashboard/backlog"
+  const candidates = [
+    "/#/dashboard/backlog",
+    "/dashboard/backlog",
+    "/backlog"
+  ];
+  const url = `${candidates[0]}?${qs}`;
+  window.open(url, "_blank");
 }
