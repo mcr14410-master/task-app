@@ -23,6 +23,15 @@ export default function InfoTab({
   newsItems
 }) {
   const fallbackChangelog = useMemo(() => ([
+
+	{
+	  version: "v0.8.2",
+	  date: "2026-01-15",
+	  changes: [
+	    { type: "ui",  text: "Anzeige der Stückzahl in die 3. Zeile verschoben" },
+
+	  ]
+	},
 	
 	{
 	  version: "v0.8.0",

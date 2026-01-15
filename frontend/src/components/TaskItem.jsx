@@ -35,6 +35,9 @@ const IconBriefcase = (p) => (
 const IconFolderOpen = (p) => (
   <Icon {...p} path={<g><path d="M3 7h5l2 2h11v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 7v10"/><path d="M21 9H10L8 7H3"/></g>} />
 );
+const IconBox = (p) => (
+  <Icon {...p} path={<g><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></g>} />
+);
 
 function formatDate(d) {
   if (!d) return null;
@@ -428,7 +431,6 @@ export default function TaskItem({ task, openAttachmentsModal }) {
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {teilenummer || "-"}
               {task?.fa ? <span className="badge" style={{ marginLeft: 8 }}>FA: {task.fa}</span> : null}
-              {(Number.isFinite(task?.stk) && task.stk > 0) ? <span className="badge" style={{ marginLeft: 8 }}>Stk × {task.stk}</span> : null}
             </span>
           </div>
           <div className="meta" title={kunde || "-"} style={{ justifyContent: "flex-end" }}>
@@ -442,6 +444,12 @@ export default function TaskItem({ task, openAttachmentsModal }) {
             <IconUser />
             <span>{zuständig || "offen"}</span>
           </div>
+          {(Number.isFinite(task?.stk) && task.stk > 0) && (
+            <div className="meta" title={`${task.stk} Stk`} style={{ marginLeft: "auto" }}>
+              <IconBox />
+              <span>{task.stk} Stk</span>
+            </div>
+          )}
           <div className="meta" title={`${aufwandStunden || 0}h`}>
             <IconClock />
             <span>{aufwandStunden ? `${aufwandStunden}h` : "0h"}</span>
