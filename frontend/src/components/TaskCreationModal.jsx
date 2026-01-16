@@ -12,6 +12,7 @@ import { fetchStatuses } from "@/api/statuses";
 import { fetchCustomers } from "@/api/customers";
 import { fetchAssignees } from "@/api/assignees";
 import { fetchAdditionalWorks } from "@/api/additionalWorks";
+import { parsePdfToTask } from "@/utils/pdfTaskParser";
 
 
 /** Farb-Utils */
@@ -96,6 +97,8 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
   const [createdTaskId, setCreatedTaskId] = useState(null);
   const [showFolderPicker, setShowFolderPicker] = useState(false);
   const [baseLabel, setBaseLabel] = useState("");
+  const pdfInputRef = useRef(null);
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -260,6 +263,50 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // PDF Import Handler - nach customers/kundeMode/kundeSelect definiert
+  const handlePdfImport = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setImporting(true);
+    try {
+      const data = await parsePdfToTask(file);
+      
+      // Kunde im Dropdown suchen
+      if (data.kunde && customers.length) {
+        const hit = customers.find(c => 
+          c.name === data.kunde || 
+          c.code === data.kunde ||
+          String(c.name).includes(data.kunde)
+        );
+        if (hit) {
+          setKundeSelect(hit.name);
+          setKundeMode("select");
+          data.kunde = hit.name;
+        } else {
+          // Kunde nicht in Liste - Custom-Modus
+          setKundeMode("custom");
+        }
+      }
+      
+      setForm(prev => ({
+        ...prev,
+        bezeichnung: data.bezeichnung || prev.bezeichnung,
+        teilenummer: data.teilenummer || prev.teilenummer,
+        kunde: data.kunde || prev.kunde,
+        endDatum: data.endDatum || prev.endDatum,
+        fa: data.fa || prev.fa,
+        stk: data.stk ?? prev.stk,
+      }));
+      toast.success("PDF importiert");
+    } catch (err) {
+      toast.error(err.message || "PDF-Import fehlgeschlagen");
+    } finally {
+      setImporting(false);
+      if (pdfInputRef.current) pdfInputRef.current.value = "";
+    }
+  };
 
   /** Assignees (Hybrid) */
   const [assignees, setAssignees] = useState([]);
@@ -737,7 +784,25 @@ export default function TaskCreationModal({ stations = [], onTaskCreated, onClos
       <div style={styles.modal} onClick={(e)=>e.stopPropagation()}>
         <div style={styles.header}>
           <h2 style={styles.title}>Aufgabe erstellen</h2>
-          <button style={styles.closeBtn} onClick={onClose} aria-label="Schließen">✕</button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input
+              type="file"
+              accept="application/pdf"
+              ref={pdfInputRef}
+              onChange={handlePdfImport}
+              style={{ display: 'none' }}
+            />
+            <button
+              type="button"
+              style={styles.btnSecondary}
+              onClick={() => pdfInputRef.current?.click()}
+              disabled={importing || submitting}
+              title="Daten aus Fertigungsauftrag-PDF importieren"
+            >
+              {importing ? 'Importiere…' : 'PDF Import'}
+            </button>
+            <button style={styles.closeBtn} onClick={onClose} aria-label="Schließen">✕</button>
+          </div>
         </div>
 
         {tabs}

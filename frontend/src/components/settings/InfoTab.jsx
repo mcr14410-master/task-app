@@ -25,6 +25,14 @@ export default function InfoTab({
   const fallbackChangelog = useMemo(() => ([
 
 	{
+	  version: "v0.8.3",
+	  date: "2026-01-16",
+	  changes: [
+	    { type: "feat",  text: "PDF-Import für Aufgabenerstellung" },
+
+	  ]
+	},
+	{
 	  version: "v0.8.2",
 	  date: "2026-01-15",
 	  changes: [
@@ -70,7 +78,20 @@ export default function InfoTab({
   ]), []);
 
   const fallbackNews = useMemo(() => ([
-    {
+	{
+	  title: "Import",
+	  date: "2026-01-16",
+	  body: 	  [
+		"PDF-Import für Aufgabenerstellung + Stk-Anzeige angepasst",
+		"- PDF-Import aus ERP-Fertigungsaufträgen (FA, Teilenr, Bezeichnung, Kunde, Stk, Liefertermin)",
+		"- Neuer Button [PDF Import] im TaskCreationModal",
+		"- pdfjs-dist Dependency hinzugefügt",
+		"- Stückzahl in TaskItem von Zeile 2 nach Zeile 3 verschoben (mit Box-Icon, rechtsbündig)",
+	        ],
+	  tags: ["product"]
+	},
+	
+	{
       title: "Info-Tab",
       date: "2025-10-24",
       body: 	  [
