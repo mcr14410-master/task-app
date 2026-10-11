@@ -2,10 +2,10 @@
 // Extrahiert Task-Daten aus Fertigungsauftrag-PDFs (ERP Auftragskarte)
 
 import * as pdfjsLib from "pdfjs-dist";
+import pdfjsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
-// Worker von CDN laden
-pdfjsLib.GlobalWorkerOptions.workerSrc = 
-  "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.10.38/pdf.worker.min.mjs";
+// Worker lokal bundlen (keine externe CDN-Abhängigkeit)
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 /**
  * Extrahiert Text aus der ersten Seite eines PDFs
