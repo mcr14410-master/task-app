@@ -52,6 +52,10 @@ public class ArbeitsstationController {
         Arbeitsstation existing = arbeitsstationService.findById(id);
         existing.setName(stationDetails.getName());
         existing.setSortOrder(stationDetails.getSortOrder());
+        // Abteilung nur übernehmen, wenn mitgeschickt ("" = Zuordnung entfernen)
+        if (stationDetails.getAbteilung() != null) {
+            existing.setAbteilung(stationDetails.getAbteilung());
+        }
 
         Arbeitsstation updated = arbeitsstationService.save(existing);
         return ResponseEntity.ok(updated);

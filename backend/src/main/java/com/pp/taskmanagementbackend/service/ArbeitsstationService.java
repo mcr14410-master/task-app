@@ -41,6 +41,7 @@ public class ArbeitsstationService {
     public Arbeitsstation save(Arbeitsstation station) {
         // Tageskapazität defensiv normalisieren (Default 8.00, clamp 0..24, 2 Nachkommastellen)
         station.setDailyCapacityHours(normalizeCapacity(station.getDailyCapacityHours()));
+        station.setAbteilung(normalizeAbteilung(station.getAbteilung()));
         return arbeitsstationRepository.save(station);
     }
 
@@ -81,6 +82,11 @@ public class ArbeitsstationService {
                 existing.setDailyCapacityHours(normalizeCapacity(req.getDailyCapacityHours()));
             }
 
+            // Abteilung nur übernehmen, wenn mitgeschickt ("" = Zuordnung entfernen)
+            if (req.getAbteilung() != null) {
+                existing.setAbteilung(normalizeAbteilung(req.getAbteilung()));
+            }
+
             arbeitsstationRepository.save(existing);
         }
     }
@@ -91,5 +97,13 @@ public class ArbeitsstationService {
         if (cap.compareTo(BigDecimal.ZERO) < 0) cap = BigDecimal.ZERO;
         if (cap.compareTo(new BigDecimal("24.00")) > 0) cap = new BigDecimal("24.00");
         return cap.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    // --- Helper: Abteilung normalisieren (trim, leer -> null, max. 50 Zeichen) ---
+    public static String normalizeAbteilung(String abteilung) {
+        if (abteilung == null) return null;
+        String trimmed = abteilung.trim();
+        if (trimmed.isEmpty()) return null;
+        return trimmed.length() > 50 ? trimmed.substring(0, 50) : trimmed;
     }
 }

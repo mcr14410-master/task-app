@@ -22,6 +22,10 @@ public class Arbeitsstation {
     
     private int sortOrder;
 
+    // Abteilung (z. B. "Fräsen", "Drehen"); null = keiner Abteilung zugeordnet
+    @Column(name = "abteilung", length = 50)
+    private String abteilung;
+
     // Standard-Konstruktor (für JPA/Hibernate benötigt)
     public Arbeitsstation() {
     }
@@ -65,6 +69,14 @@ public class Arbeitsstation {
 
     public void setDailyCapacityHours(BigDecimal dailyCapacityHours) {
         this.dailyCapacityHours = (dailyCapacityHours != null) ? dailyCapacityHours : new BigDecimal("8.00");
+    }
+
+    public String getAbteilung() {
+        return abteilung;
+    }
+
+    public void setAbteilung(String abteilung) {
+        this.abteilung = abteilung;
     }
 
 }

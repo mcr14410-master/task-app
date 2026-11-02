@@ -6,7 +6,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 FRONTEND_DIR="$REPO_ROOT/frontend"
-BACKEND_DIR="$REPO_ROOT/task-management-backend"
+BACKEND_DIR="$REPO_ROOT/backend"
 NPM_CACHE_DIR="$REPO_ROOT/.cache/npm"
 
 echo "[deploy] repo root:  $REPO_ROOT"
@@ -87,9 +87,9 @@ docker compose ps
 
 echo "[deploy] health:"
 if command -v jq >/dev/null 2>&1; then
-  curl -s http://localhost/api/ts/health | jq . || true
+  curl -s http://localhost/api/fs/health | jq . || true
 else
-  curl -s http://localhost/api/ts/health || true
+  curl -s http://localhost/api/fs/health || true
 fi
 
 echo "[deploy] done."
