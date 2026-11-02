@@ -83,6 +83,15 @@ const styles = {
     textAlign: 'right',
   }),
   capSuffix: { fontSize: 12, color: '#9aa3af' },
+  abteilungInput: {
+    width: 120,
+    padding: '8px 10px',
+    borderRadius: 8,
+    border: '1px solid #444',
+    backgroundColor: '#15171b',
+    color: '#e5e7eb',
+    outline: 'none',
+  },
   posBadge: {
     fontSize: '0.75rem',
     color: '#9aa3af',
@@ -192,6 +201,8 @@ const StationManagementContent = ({ stations: initialStations, onUpdate }) => {
       name: s.name,
       // NEU: Kapazität mitsenden (Backend wird im nächsten Step erweitert)
       dailyCapacityHours: s.dailyCapacityHours ?? 8.0,
+      // Abteilung immer mitsenden ("" = keine Abteilung)
+      abteilung: (s.abteilung ?? '').trim(),
     }));
 
     try {
@@ -276,6 +287,21 @@ const StationManagementContent = ({ stations: initialStations, onUpdate }) => {
     setError(null);
   };
 
+  // Inline-Change für Abteilung (Persistenz beim Speichern)
+  const handleAbteilungChange = (idx, value) => {
+    setLocalStations((prev) => {
+      const next = [...prev];
+      next[idx] = { ...(next[idx] || {}), abteilung: value };
+      return next;
+    });
+    setError(null);
+  };
+
+  // Vorschläge für das Abteilungsfeld: bereits vergebene Abteilungen
+  const abteilungVorschlaege = [
+    ...new Set(localStations.map((s) => (s?.abteilung ?? '').trim()).filter(Boolean)),
+  ].sort((a, b) => a.localeCompare(b, 'de'));
+
   // einfache Validierung pro Zeile (rot markiert)
   const isRowInvalid = (s) => {
     const v = toNumberOrNull(s?.dailyCapacityHours);
@@ -314,7 +340,15 @@ const StationManagementContent = ({ stations: initialStations, onUpdate }) => {
       <p style={{ color: '#9aa3af', fontSize: '0.9em', marginBottom: '14px' }}>
         Ziehen Sie die Stationen über <span style={{ opacity: 0.8 }}>⠿</span>, um die Reihenfolge zu ändern.
         Passen Sie pro Station die <strong>Tageskapazität</strong> an.
+        Über die <strong>Abteilung</strong> erscheint die Station in der Abteilungsansicht
+        (z. B. <code>/?abteilung=fraesen</code>).
       </p>
+
+      <datalist id="abteilung-vorschlaege">
+        {abteilungVorschlaege.map((a) => (
+          <option key={a} value={a} />
+        ))}
+      </datalist>
 
       {error && (
         <div style={styles.errorBox}>
@@ -349,6 +383,18 @@ const StationManagementContent = ({ stations: initialStations, onUpdate }) => {
 
                         {/* Station Name */}
                         <div style={styles.name}>{station.name}</div>
+
+                        {/* Abteilung */}
+                        <input
+                          type="text"
+                          list="abteilung-vorschlaege"
+                          maxLength={50}
+                          value={station?.abteilung ?? ''}
+                          onChange={(e) => handleAbteilungChange(index, e.target.value)}
+                          style={styles.abteilungInput}
+                          placeholder="Abteilung"
+                          title="Abteilung (leer = keiner Abteilung zugeordnet)"
+                        />
 
                         {/* Tageskapazität (h) */}
                         <div style={styles.capWrap} title="Kapazität pro Tag">
@@ -401,7 +447,7 @@ const StationManagementContent = ({ stations: initialStations, onUpdate }) => {
           onClick={() => handleSaveOrder(localStations)}
           style={styles.buttonPrimary}
           disabled={isSaving || localStations.length === 0}
-          title="Reihenfolge und Kapazitäten speichern"
+          title="Reihenfolge, Abteilungen und Kapazitäten speichern"
         >
           {isSaving ? 'Speichere…' : 'Speichern'}
         </button>

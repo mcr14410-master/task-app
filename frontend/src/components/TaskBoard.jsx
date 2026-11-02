@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState, useRef } from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import SettingsModal from '@/components/settings/SettingsModal';
+import { normalizeAbteilung } from '@/utils/abteilung';
 import TaskCreationModal from "./TaskCreationModal";
 import TaskEditModal from "./TaskEditModal";
 import TaskItem from "./TaskItem";
@@ -178,8 +179,10 @@ function Modal({ open, onClose, title, children, width = 760 }) {
 }
 
 /** ====================== Component ====================== */
-export default function TaskBoard({ showDashboard = false, onToggleDashboard = () => {} }) {
+export default function TaskBoard({ showDashboard = false, onToggleDashboard = () => {}, abteilung = null }) {
   const toast = useToast();
+  // Abteilungsansicht (Kiosk): nur Stationen dieser Abteilung, reine Anzeige
+  const readOnly = Boolean(abteilung);
   const [stations, setStations] = useState([]);              // [{id, name, sort_order}]
   const [idToLabel, setIdToLabel] = useState({});           // {id: name}
   const [orderIds, setOrderIds] = useState([]);             // [id, id, ...]
@@ -339,6 +342,13 @@ export default function TaskBoard({ showDashboard = false, onToggleDashboard = (
     return () => { if (t) clearTimeout(t); es.close(); };
   }, [fetchAll]);
 
+  // Kiosk: zusätzlich regelmäßig neu laden (verpasste SSE-Events, Backend nach Neustart noch nicht da)
+  useEffect(() => {
+    if (!readOnly) return;
+    const iv = setInterval(() => fetchAll({ mode: "soft" }), 60_000);
+    return () => clearInterval(iv);
+  }, [readOnly, fetchAll]);
+
 
   useEffect(() => {
     const el = vpRef.current;
@@ -435,9 +445,20 @@ export default function TaskBoard({ showDashboard = false, onToggleDashboard = (
   };
 
 
-  // Search helpers
-  const q = (query || "").trim().toLowerCase();
+  // Search helpers (Abteilungsansicht ignoriert eine evtl. im Browser gespeicherte Suche)
+  const q = readOnly ? "" : (query || "").trim().toLowerCase();
   const queryActive = q.length > 0;
+
+  // Abteilungsansicht: nur Spalten der Stationen dieser Abteilung
+  const abteilungKey = normalizeAbteilung(abteilung);
+  const abteilungStations = readOnly
+    ? stations.filter((s) => normalizeAbteilung(s?.abteilung) === abteilungKey)
+    : [];
+  const visibleOrderIds = readOnly
+    ? orderIds.filter((id) => abteilungStations.some((s) => String(pickStationId(s)) === id))
+    : orderIds;
+  // Anzeigename wie in den Settings gepflegt (z. B. "Fräsen"), sonst wie in der URL
+  const abteilungLabel = abteilungStations[0]?.abteilung?.trim() || abteilung;
 
   // Toolbar helpers
   const clearQuery = () => {
@@ -557,7 +578,19 @@ export default function TaskBoard({ showDashboard = false, onToggleDashboard = (
 	  
 	  
 
+	  {/* Abteilungsansicht: nur Überschrift statt Toolbar */}
+	  {readOnly && (
+	    <div
+	      className="board-toolbar"
+	      style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 0, marginTop: 5, marginLeft: 10 }}
+	    >
+	      <h1 style={{ margin: 0, color: "var(--text)", fontSize: 22 }}>{abteilungLabel}</h1>
+	      {loadingSoft && <span className="soft-spinner" aria-label="Aktualisieren…" />}
+	    </div>
+	  )}
+
 	  {/* Toolbar */}
+	  {!readOnly && (
 	  <div
 	    className="board-toolbar"
 	    style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 0, marginTop: 5 }}
@@ -649,19 +682,25 @@ export default function TaskBoard({ showDashboard = false, onToggleDashboard = (
 		>
 		  ⚙ Einstellungen
 		</button>
-		
-		
-		
+
+
+
 	    </div>
 	  </div>
+	  )}
 
-
+	  {readOnly && visibleOrderIds.length === 0 && (
+	    <div style={{ padding: 24, color: "var(--muted)", fontSize: 16 }}>
+	      Der Abteilung „{abteilung}“ sind keine Stationen zugeordnet.
+	      Zuordnung in der Admin-Ansicht unter Einstellungen → Stationen.
+	    </div>
+	  )}
 
 
       {/* Columns */}
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="columns-wrap" style={{ alignItems: "flex-start", paddingBottom: 8 }}>
-          {orderIds.map((colId) => {
+          {visibleOrderIds.map((colId) => {
             const title = idToLabel[colId] || colId;
             const list = Array.isArray(columnsById[colId]) ? columnsById[colId] : [];
             const matches = queryActive ? list.filter((t) => matchesQuery(t, q)) : list;
@@ -670,7 +709,7 @@ export default function TaskBoard({ showDashboard = false, onToggleDashboard = (
             const totalEffortMins = matches.reduce((sum, t) => sum + getEffortMinutes(t), 0);
 
             return (
-              <Droppable droppableId={String(colId)} key={String(colId)} isDropDisabled={hardFilter && queryActive}>
+              <Droppable droppableId={String(colId)} key={String(colId)} isDropDisabled={readOnly || (hardFilter && queryActive)}>
                 {(provided) => (
                   <div
                     ref={provided.innerRef}
@@ -695,7 +734,7 @@ export default function TaskBoard({ showDashboard = false, onToggleDashboard = (
                           draggableId={String(t.id)}
                           index={index}
                           key={t.id}
-                          isDragDisabled={hardFilter && queryActive}
+                          isDragDisabled={readOnly || (hardFilter && queryActive)}
                         >
                           {(dProvided, snapshot) => {
                             const base = dProvided.draggableProps.style || {};
@@ -711,12 +750,15 @@ export default function TaskBoard({ showDashboard = false, onToggleDashboard = (
                                   boxShadow: snapshot.isDragging
                                     ? "0 18px 40px rgba(0,0,0,.35), 0 2px 8px rgba(0,0,0,.25)"
                                     : "0 4px 16px var(--shadow)",
-                                  cursor: (hardFilter && queryActive) ? "default" : (snapshot.isDragging ? "grabbing" : "grab"),
+                                  cursor: (readOnly || (hardFilter && queryActive)) ? "default" : (snapshot.isDragging ? "grabbing" : "grab"),
                                   marginBottom: 10,
                                 }}
-                                onDoubleClick={() => openEditModal(t, "details")}
+                                onDoubleClick={readOnly ? undefined : () => openEditModal(t, "details")}
                               >
-                                <TaskItem task={t} openAttachmentsModal={(task) => openEditModal(task, "attachments")} />
+                                {/* Abteilungsansicht: Status-Pill, Anhänge usw. nicht klickbar */}
+                                <div style={readOnly ? { pointerEvents: "none" } : undefined}>
+                                  <TaskItem task={t} openAttachmentsModal={(task) => openEditModal(task, "attachments")} />
+                                </div>
                               </div>
                             );
                           }}

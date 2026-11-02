@@ -25,6 +25,14 @@ export default function InfoTab({
   const fallbackChangelog = useMemo(() => ([
 
 	{
+	  version: "v0.9.0",
+	  date: "2026-11-02",
+	  changes: [
+	    { type: "feat",  text: "Abteilungsansicht für Kiosk (/?abteilung=fraesen): nur Stationen der Abteilung, reine Anzeige" },
+	    { type: "feat",  text: "Stationen: Abteilung in den Einstellungen zuordnen" },
+	  ]
+	},
+	{
 	  version: "v0.8.3",
 	  date: "2026-01-16",
 	  changes: [
