@@ -65,3 +65,6 @@ Thumbs.db
 !/.env.prod.example
 
 /docs/dev-filepath/
+
+# npm-Cache von scripts/deploy.sh
+.cache/
