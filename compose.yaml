@@ -26,7 +26,8 @@ services:
       - /srv/taskapp/files/share1:/data/files
       - /srv/taskapp/files/attachments:/data/files/attachments
     ports:
-      - "8080:8080"
+      # nur lokal (Debugging per curl); Caddy erreicht das Backend über das Docker-Netz
+      - "127.0.0.1:8080:8080"
     depends_on:
       - db
     healthcheck:
