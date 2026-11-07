@@ -61,3 +61,49 @@ Nie frontend/dist pushen; auf dem Pi immer bauen (siehe oben)
 
 .env bleibt nur lokal auf dem Pi (nicht in Git)
 
+
+## Nacht-Backup
+
+`scripts/backup.sh` erstellt nachts einen DB-Dump und prüft ihn. Lokal bleiben 7 Tage in `/srv/taskapp/backups`.
+Dump, Anhänge (`/srv/taskapp/files/attachments`) und `.env` gehen per restic aufs Netzlaufwerk
+(30 Tage täglich, 12 Monate monatlich). Das Skript nutzt das restic-Repository des MDS auf demselben Pi mit dem
+Host-Namen `taskapp`. Dessen Freigabe, Passwortdatei und `restic` müssen also eingerichtet sein. Die Windows-Freigabe
+`share1` wird nicht gesichert.
+
+### Einrichtung (einmalig)
+
+```bash
+cd ~/task-app && git pull --rebase
+sudo mkdir -p /srv/taskapp/backups && sudo chmod 700 /srv/taskapp/backups
+sudo ./scripts/backup.sh
+(sudo crontab -l; echo '15 2 * * * /home/rpi01/task-app/scripts/backup.sh >> /srv/taskapp/backups/backup.log 2>&1') | sudo crontab -
+sudo crontab -l
+```
+
+Der erste Lauf muss mit `✅ Netzlaufwerk-Sicherung fertig` enden. Die Uhrzeit liegt bewusst vor den MDS-Jobs (02:30, 02:45),
+weil sich restic-Läufe im selben Repository sonst gegenseitig sperren können.
+
+Fehlschläge stehen nur in `/srv/taskapp/backups/backup.log`, es gibt keine Anzeige in der App.
+
+### Wiederherstellen
+
+Den Dump lokal aus `/srv/taskapp/backups` nehmen oder vom Netzlaufwerk holen:
+
+```bash
+sudo mount /mnt/mds-offsite
+export RESTIC_REPOSITORY=/mnt/mds-offsite/restic RESTIC_PASSWORD_FILE=/root/.mds-restic-password
+sudo -E restic snapshots --host taskapp
+sudo -E restic restore latest --host taskapp --target /tmp/taskapp-restore
+sudo umount /mnt/mds-offsite
+```
+
+Danach in eine leere Datenbank einspielen. Das ersetzt den aktuellen Stand, also vorher einen frischen Dump ziehen:
+
+```bash
+cd ~/task-app
+docker compose stop backend
+docker compose exec -T db dropdb -U task taskapp
+docker compose exec -T db createdb -U task taskapp
+sudo sh -c 'gunzip -c <DUMP>.sql.gz' | docker compose exec -T db psql -q -U task -d taskapp
+docker compose start backend
+```

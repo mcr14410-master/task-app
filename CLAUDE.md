@@ -38,4 +38,6 @@ Kanban für die Produktionsplanung. Läuft produktiv auf einem Firmen-Pi neben d
   steuert `APP_PATH`. `URL_BASE` nicht ändern, weil der Health-Check darauf aufbaut.
   Neustart ohne Reboot: Prozesse von kiosk.sh und Chromium beenden, dann
   `setsid nohup ~/bin/kiosk.sh >/dev/null 2>&1 </dev/null &`.
+- Nacht-Backup: `scripts/backup.sh` per root-Crontab um 02:15, nutzt das restic-Repository des MDS mit Host-Namen `taskapp`.
+  Einrichtung und Wiederherstellung: `docs/deploy_main.md`.
 - Im Repo auf dem Pi liegen alte git-Stashes. Nicht ungefragt löschen.
