@@ -36,8 +36,9 @@ Kanban für die Produktionsplanung. Läuft produktiv auf einem Firmen-Pi neben d
   Version läuft.
 - Kiosk-TV: `~/bin/kiosk.sh` (liegt nicht im Repo), gestartet über den LXDE-Autostart. Die angezeigte Seite
   steuert `APP_PATH`. `URL_BASE` nicht ändern, weil der Health-Check darauf aufbaut.
-  Neustart ohne Reboot: Prozesse von kiosk.sh und Chromium beenden, dann
-  `setsid nohup ~/bin/kiosk.sh >/dev/null 2>&1 </dev/null &`.
+  Neustart ohne Reboot: `~/bin/kiosk-neustart.sh` (liegt ebenfalls nicht im Repo, auch per SSH). Es beendet
+  kiosk.sh und Chromium und startet `DISPLAY=:0 setsid nohup ~/bin/kiosk.sh` neu. Inhalt und Wiederherstellung:
+  `docs/PI-NEU-AUFSETZEN.md` im MDS-Repo, Phase C, Punkt 9.
 - Nacht-Backup: `scripts/backup.sh` per root-Crontab um 02:15, nutzt das restic-Repository des MDS mit Host-Namen `taskapp`.
   Einrichtung und Wiederherstellung: `docs/deploy_main.md`.
 - Im Repo auf dem Pi liegen alte git-Stashes. Nicht ungefragt löschen.
